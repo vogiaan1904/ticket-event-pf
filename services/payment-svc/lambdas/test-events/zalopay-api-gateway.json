@@ -1,0 +1,20 @@
+{
+  "httpMethod": "POST",
+  "path": "/webhook/zalopay",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"data\":\"{\\\"app_id\\\":2554,\\\"app_trans_id\\\":\\\"251213_TB-LTDTNL-20251213-8D39986M\\\",\\\"app_time\\\":1765606674284,\\\"app_user\\\":\\\"TicketBottle\\\",\\\"amount\\\":7200000,\\\"embed_data\\\":\\\"{\\\\\\\"redirecturl\\\\\\\":\\\\\\\"http://testtestets.com?bookingCode=TB-LTDTNL-20251213-8D39986M\\\\\\\"}\\\",\\\"item\\\":\\\"[]\\\",\\\"zp_trans_id\\\":251213000000943,\\\"server_time\\\":1765606718385,\\\"channel\\\":41,\\\"merchant_user_id\\\":\\\"4n2LtVGwMfjZhIs7wv82hA\\\",\\\"zp_user_id\\\":\\\"4n2LtVGwMfjZhIs7wv82hA\\\",\\\"user_fee_amount\\\":0,\\\"discount_amount\\\":0}\",\"mac\":\"8c062d9aef999f5810d38851247e6624fb82eefebf86154a22841770268b3fd0\",\"type\":1}",
+  "isBase64Encoded": false,
+  "requestContext": {
+    "requestId": "test-request-id",
+    "http": {
+      "method": "POST",
+      "path": "/webhook/zalopay",
+      "sourceIp": "127.0.0.1"
+    },
+    "identity": {
+      "sourceIp": "127.0.0.1"
+    }
+  }
+}

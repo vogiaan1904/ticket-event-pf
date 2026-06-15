@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package waitroom.v1;
+
+option go_package = "github.com/vogiaan1904/ticketbottle-proto/proto/waitroom";
+
+service WaitroomService {
+  rpc JoinQueue(JoinQueueRequest) returns (JoinQueueResponse);
+  rpc GetQueueStatus(GetQueueStatusRequest) returns (QueueStatusResponse);
+  rpc LeaveQueue(LeaveQueueRequest) returns (LeaveQueueResponse);
+  rpc StreamQueuePosition(StreamPositionRequest) returns (stream PositionUpdate);
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+message JoinQueueRequest {
+  string user_id = 1;
+  string event_id = 2;
+  string user_agent = 3;
+  string ip_address = 4;
+}
+
+message JoinQueueResponse {
+  string session_id = 1;
+  int64 position = 2;
+  int64 queue_length = 3;
+  string queued_at = 4;
+  string expires_at = 5;
+  string websocket_url = 6;
+}
+
+message GetQueueStatusRequest {
+  string session_id = 1;
+}
+
+message QueueStatusResponse {
+  string session_id = 1;
+  SessionStatus status = 2;
+  int64 position = 3;
+  int64 queue_length = 4;
+  string queued_at = 5;
+  string expires_at = 6;
+  string checkout_token = 7;
+  string checkout_url = 8;
+  string checkout_expires_at = 9;
+  string admitted_at = 10;
+}
+
+message LeaveQueueRequest {
+  string session_id = 1;
+}
+
+message LeaveQueueResponse {
+  string session_id = 1;
+  string message = 2;
+}
+
+message StreamPositionRequest {
+  string session_id = 1;
+}
+
+message PositionUpdate {
+  string session_id = 1;
+  int64 position = 2;
+  int64 queue_length = 3;
+  SessionStatus status = 4;
+  string updated_at = 5;
+  string checkout_token = 6;
+  string checkout_url = 7;
+}
+
+enum SessionStatus {
+  SESSION_STATUS_UNSPECIFIED = 0;
+  SESSION_STATUS_QUEUED = 1;
+  SESSION_STATUS_PROCESSING = 2;
+  SESSION_STATUS_READY = 3;
+  SESSION_STATUS_ACTIVE = 4;
+  SESSION_STATUS_COMPLETED = 5;
+  SESSION_STATUS_FAILED = 6;
+  SESSION_STATUS_EXPIRED = 7;
+  SESSION_STATUS_CANCELLED = 8;
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  string service = 2;
+  string version = 3;
+  bool kafka_enabled = 4;
+  map<string, string> components = 5;
+}
+

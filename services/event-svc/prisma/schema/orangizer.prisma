@@ -1,0 +1,12 @@
+model Organizer {
+  id          String   @id @default(uuid())
+  eventId     String?  @unique
+  event       Event?   @relation(fields: [eventId], references: [id])
+  name        String
+  description String
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("organizers")
+}

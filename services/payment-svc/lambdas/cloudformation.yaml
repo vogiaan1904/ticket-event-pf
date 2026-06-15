@@ -1,0 +1,419 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'TicketBottle Payment Service - Lambda Functions Infrastructure'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where Lambda functions will be deployed
+
+  PrivateSubnetIds:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Private subnet IDs for Lambda functions (must have RDS and Kafka access)
+
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL database connection URL
+
+  KafkaBrokers:
+    Type: String
+    Description: Kafka broker endpoints (comma-separated)
+
+  KafkaUsername:
+    Type: String
+    Default: ''
+    Description: Kafka SASL username (leave empty if not using SASL)
+
+  KafkaPassword:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Kafka SASL password (leave empty if not using SASL)
+
+  ZaloPayAppId:
+    Type: String
+    Description: ZaloPay application ID
+
+  ZaloPayKey1:
+    Type: String
+    NoEcho: true
+    Description: ZaloPay key 1 for MAC generation
+
+  ZaloPayKey2:
+    Type: String
+    NoEcho: true
+    Description: ZaloPay key 2 for MAC verification
+
+  PayOSClientId:
+    Type: String
+    Description: PayOS client ID
+
+  PayOSApiKey:
+    Type: String
+    NoEcho: true
+    Description: PayOS API key
+
+  PayOSChecksumKey:
+    Type: String
+    NoEcho: true
+    Description: PayOS checksum key
+
+Conditions:
+  IsProduction: !Equals [!Ref Environment, prod]
+
+Resources:
+  # ============================================================
+  # Lambda Execution Role
+  # ============================================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ticketbottle-payment-lambda-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: LambdaLogging
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ticketbottle-payment-*
+        - PolicyName: LambdaNetworking
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DeleteNetworkInterface
+                Resource: '*'
+
+  # ============================================================
+  # Lambda Security Group
+  # ============================================================
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ticketbottle-payment-lambda-${Environment}
+      GroupDescription: Security group for TicketBottle Payment Lambda functions
+      VpcId: !Ref VpcId
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          Description: PostgreSQL database access
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 9092
+          ToPort: 9092
+          Description: Kafka broker access
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          Description: HTTPS for payment providers
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ticketbottle-payment-lambda-${Environment}
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ============================================================
+  # Lambda Layers
+  # ============================================================
+  DependenciesLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub ticketbottle-payment-dependencies-${Environment}
+      Description: Node.js dependencies for TicketBottle Payment Lambda functions
+      Content:
+        S3Bucket: !Sub ticketbottle-lambda-artifacts-${AWS::Region}-${AWS::AccountId}
+        S3Key: !Sub ${Environment}/layers/dependencies-layer.zip
+      CompatibleRuntimes:
+        - nodejs20.x
+
+  CommonLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: !Sub ticketbottle-payment-common-${Environment}
+      Description: Common code for TicketBottle Payment Lambda functions
+      Content:
+        S3Bucket: !Sub ticketbottle-lambda-artifacts-${AWS::Region}-${AWS::AccountId}
+        S3Key: !Sub ${Environment}/layers/common-layer.zip
+      CompatibleRuntimes:
+        - nodejs20.x
+
+  # ============================================================
+  # Payment Webhook Handler Lambda
+  # ============================================================
+  PaymentWebhookHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ticketbottle-payment-webhook-handler-${Environment}
+      Description: Handles payment provider callbacks (ZaloPay, PayOS)
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Sub ticketbottle-lambda-artifacts-${AWS::Region}-${AWS::AccountId}
+        S3Key: !Sub ${Environment}/functions/payment-webhook-handler.zip
+      Layers:
+        - !Ref DependenciesLayer
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          LOG_LEVEL: !If [IsProduction, info, debug]
+          DATABASE_URL: !Ref DatabaseUrl
+          KAFKA_BROKERS: !Ref KafkaBrokers
+          KAFKA_USERNAME: !Ref KafkaUsername
+          KAFKA_PASSWORD: !Ref KafkaPassword
+          KAFKA_SSL: 'true'
+          ZALOPAY_APP_ID: !Ref ZaloPayAppId
+          ZALOPAY_KEY1: !Ref ZaloPayKey1
+          ZALOPAY_KEY2: !Ref ZaloPayKey2
+          PAYOS_CLIENT_ID: !Ref PayOSClientId
+          PAYOS_API_KEY: !Ref PayOSApiKey
+          PAYOS_CHECKSUM_KEY: !Ref PayOSChecksumKey
+      MemorySize: 512
+      Timeout: 30
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  PaymentWebhookHandlerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/ticketbottle-payment-webhook-handler-${Environment}
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  # ============================================================
+  # API Gateway for Webhook Handler
+  # ============================================================
+  WebhookApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ticketbottle-payment-webhook-${Environment}
+      Description: Payment webhook API for TicketBottle
+      ProtocolType: HTTP
+
+  WebhookApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebhookApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt PaymentWebhookHandlerFunction.Arn
+      PayloadFormatVersion: '2.0'
+      TimeoutInMillis: 30000
+
+  WebhookApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebhookApi
+      RouteKey: 'POST /webhook/{provider}'
+      Target: !Sub integrations/${WebhookApiIntegration}
+
+  WebhookApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebhookApi
+      StageName: !Ref Environment
+      AutoDeploy: true
+      AccessLogSettings:
+        DestinationArn: !GetAtt WebhookApiLogGroup.Arn
+        Format: $context.requestId $context.error.message $context.error.messageString
+
+  WebhookApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/ticketbottle-payment-webhook-${Environment}
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  WebhookApiLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PaymentWebhookHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebhookApi}/*/*
+
+  # ============================================================
+  # Outbox Processor Lambda
+  # ============================================================
+  OutboxProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ticketbottle-payment-outbox-processor-${Environment}
+      Description: Processes outbox events and publishes to Kafka
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Sub ticketbottle-lambda-artifacts-${AWS::Region}-${AWS::AccountId}
+        S3Key: !Sub ${Environment}/functions/outbox-processor.zip
+      Layers:
+        - !Ref DependenciesLayer
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          LOG_LEVEL: !If [IsProduction, info, debug]
+          DATABASE_URL: !Ref DatabaseUrl
+          KAFKA_BROKERS: !Ref KafkaBrokers
+          KAFKA_USERNAME: !Ref KafkaUsername
+          KAFKA_PASSWORD: !Ref KafkaPassword
+          KAFKA_SSL: 'true'
+          OUTBOX_BATCH_SIZE: '50'
+          OUTBOX_MAX_RETRIES: '3'
+      MemorySize: 512
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  OutboxProcessorLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/ticketbottle-payment-outbox-processor-${Environment}
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  OutboxProcessorSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ticketbottle-payment-outbox-processor-${Environment}
+      Description: Trigger outbox processor every minute
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt OutboxProcessorFunction.Arn
+          Id: OutboxProcessorTarget
+
+  OutboxProcessorSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OutboxProcessorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt OutboxProcessorSchedule.Arn
+
+  # ============================================================
+  # Outbox Cleanup Lambda
+  # ============================================================
+  OutboxCleanupFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ticketbottle-payment-outbox-cleanup-${Environment}
+      Description: Cleans up old outbox events and monitors failures
+      Runtime: nodejs20.x
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Sub ticketbottle-lambda-artifacts-${AWS::Region}-${AWS::AccountId}
+        S3Key: !Sub ${Environment}/functions/outbox-cleanup.zip
+      Layers:
+        - !Ref DependenciesLayer
+        - !Ref CommonLayer
+      Environment:
+        Variables:
+          NODE_ENV: !Ref Environment
+          LOG_LEVEL: !If [IsProduction, info, debug]
+          DATABASE_URL: !Ref DatabaseUrl
+          OUTBOX_MAX_RETRIES: '3'
+          OUTBOX_RETENTION_DAYS: !If [IsProduction, '30', '7']
+      MemorySize: 256
+      Timeout: 300
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds: !Ref PrivateSubnetIds
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  OutboxCleanupLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/ticketbottle-payment-outbox-cleanup-${Environment}
+      RetentionInDays: !If [IsProduction, 30, 7]
+
+  OutboxCleanupSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub ticketbottle-payment-outbox-cleanup-${Environment}
+      Description: Trigger outbox cleanup daily
+      ScheduleExpression: rate(1 day)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt OutboxCleanupFunction.Arn
+          Id: OutboxCleanupTarget
+
+  OutboxCleanupSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OutboxCleanupFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt OutboxCleanupSchedule.Arn
+
+Outputs:
+  WebhookApiUrl:
+    Description: Webhook API endpoint URL
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
+    Export:
+      Name: !Sub ${AWS::StackName}-WebhookApiUrl
+
+  ZaloPayWebhookUrl:
+    Description: ZaloPay webhook callback URL
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/webhook/zalopay
+
+  PayOSWebhookUrl:
+    Description: PayOS webhook callback URL
+    Value: !Sub https://${WebhookApi}.execute-api.${AWS::Region}.amazonaws.com/${Environment}/webhook/payos
+
+  PaymentWebhookHandlerArn:
+    Description: Payment webhook handler Lambda function ARN
+    Value: !GetAtt PaymentWebhookHandlerFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-PaymentWebhookHandlerArn
+
+  OutboxProcessorArn:
+    Description: Outbox processor Lambda function ARN
+    Value: !GetAtt OutboxProcessorFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-OutboxProcessorArn
+
+  OutboxCleanupArn:
+    Description: Outbox cleanup Lambda function ARN
+    Value: !GetAtt OutboxCleanupFunction.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-OutboxCleanupArn

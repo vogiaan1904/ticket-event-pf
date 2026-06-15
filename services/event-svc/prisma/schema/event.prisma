@@ -1,0 +1,102 @@
+enum EventStatus {
+  DRAFT
+  CONFIGURED
+  APPROVED
+  PUBLISHED
+  CANCELLED
+}
+
+enum EventRoleType {
+  ADMIN
+  EDITOR
+  VIEWER
+
+  @@map("event_role_types")
+}
+
+model Event {
+  id           String         @id @default(uuid())
+  name         String
+  description  String
+  startDate    DateTime
+  endDate      DateTime
+  thumbnailUrl String
+  status       EventStatus @default(DRAFT)
+  location     EventLocation?
+  config       EventConfig?
+  organizer    Organizer?
+  roles        EventRole[]
+  categories   EventCategory[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@map("events")
+}
+
+model EventConfig {
+  id                  String      @id @default(uuid())
+  eventId             String      @unique
+  ticketSaleStartDate DateTime
+  ticketSaleEndDate   DateTime
+  isFree              Boolean
+  maxAttendees        Int
+  isPublic            Boolean     @default(true)
+  requiresApproval    Boolean     @default(false)
+  allowWaitRoom       Boolean     @default(true)
+  isNewTrending       Boolean     @default(false)
+  event               Event       @relation(fields: [eventId], references: [id])
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@map("event_configs")
+}
+
+model EventLocation {
+  id        String   @id @default(uuid())
+  eventId   String   @unique
+  venue     String
+  street    String
+  city      String
+  district  String?
+  ward      String?
+  country   String
+  event     Event    @relation(fields: [eventId], references: [id])
+
+  @@map("event_locations")
+}
+
+model EventRole {
+  id        String        @id @default(uuid())
+  userId    String
+  eventId   String
+  role      EventRoleType
+  event     Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([userId, eventId])
+  @@map("event_roles")
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  events    EventCategory[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("categories")
+}
+
+model EventCategory {
+  id        String   @id @default(uuid())
+  eventId   String
+  categoryId String
+  event     Event    @relation(fields: [eventId], references: [id])
+  category  Category @relation(fields: [categoryId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([eventId, categoryId])
+  @@map("event_categories")
+}

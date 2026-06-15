@@ -1,0 +1,38 @@
+# Node & Go build artifacts
+node_modules
+dist
+build
+vendor
+
+# VCS / IDE files
+.git
+.gitignore
+.vscode
+.idea
+
+# Environment & secret files
+.env
+.env.*
+.dockerignore
+
+# Logs
+*.log
+logs
+
+# Test files
+test
+coverage
+*.spec.ts
+jest.config.js
+.eslintrc.js
+
+# Documentation
+README.md
+*.md
+
+# Docker files
+docker-compose*.yml
+Dockerfile*
+
+# Scripts (if not needed in container)
+scripts

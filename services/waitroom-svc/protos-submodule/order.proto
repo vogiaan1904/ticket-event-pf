@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package order;
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/vogiaan1904/ticketbottle-proto/proto/order";
+
+service OrderService {
+    rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+    rpc GetOrder(GetOrderRequest) returns (GetOrderResponse);
+    rpc GetManyOrders(GetManyOrdersRequest) returns (GetManyOrdersResponse);
+    rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse);
+    rpc CancelOrder(CancelOrderRequest) returns (google.protobuf.Empty);
+}
+
+enum OrderStatus {
+    ORDER_STATUS_UNSPECIFIED = 0;
+    ORDER_STATUS_PENDING = 1;
+    ORDER_STATUS_COMPLETED = 2;
+    ORDER_STATUS_CANCELED = 3;
+    ORDER_STATUS_FAILED = 4;
+}
+
+message Order {
+    string id = 10;
+    string code = 1;
+    string event_id = 2;
+    string user_id = 3;
+    string user_fullname = 12;
+    string user_email = 13;
+    string user_phone = 14;
+    int64 total_amount_cents = 4;
+    string currency = 5;
+    OrderStatus status = 6;
+    string payment_method = 15;
+    repeated OrderItem items = 7;
+    string created_at = 8;
+    string updated_at = 9;
+}
+
+
+message OrderItem {
+    string ticket_class_id = 1;
+    int32 quantity = 2;
+    int64 price_cents = 3;
+}
+
+
+message CreateOrderItem {
+    string ticket_class_id = 1;
+    int32 quantity = 2;
+}
+
+message CreateOrderRequest {
+    string event_id = 1;
+    string user_id = 2;
+    string user_fullname = 5;
+    string user_email = 6;
+    string user_phone = 7;
+    string payment_method = 8;
+    repeated CreateOrderItem items = 3;
+    string currency = 4;
+}
+
+message CreateOrderResponse {
+    Order order = 1;
+    string redirect_url = 2;
+}
+
+message PaginationInfo {
+    int32 page = 1;
+    int64 page_size = 2;
+    int64 count = 3;
+    int32 last_page = 4;
+    int64 total = 7;
+    bool has_next = 5;
+    bool has_previous = 6;
+}
+
+message GetManyOrdersRequest {
+    int32 page = 1;
+    int64 page_size = 2;
+    optional OrderFilter filter = 3;
+}
+
+message OrderFilter {
+    optional string user_id = 1;
+    optional string event_id = 2;
+    optional OrderStatus status = 3;
+}
+
+message GetManyOrdersResponse {
+    repeated Order orders = 1;
+    PaginationInfo pagination = 2;
+}
+
+message GetOrderRequest {
+    oneof find_option {
+        string code = 1;
+        string id = 2;
+    }
+}
+
+message GetOrderResponse {
+    Order order = 1;
+}
+
+message ListOrdersRequest {
+    optional OrderFilter filter = 1;
+}
+
+message ListOrdersResponse {
+    repeated Order orders = 1;
+}
+
+message CancelOrderRequest {
+    string id = 1;
+}

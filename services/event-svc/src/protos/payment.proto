@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package payment;
+
+option go_package = "github.com/vogiaan1904/ticketbottle-proto/proto/payment";
+
+service PaymentService {
+    rpc CreatePaymentIntent(CreatePaymentIntentRequest) returns (CreatePaymentIntentResponse);
+    rpc ConfirmPaymentIntent(ConfirmPaymentIntentRequest) returns (ConfirmPaymentIntentResponse);
+    rpc CancelPaymentIntent(CancelPaymentIntentRequest) returns (CancelPaymentIntentResponse);
+}
+
+enum PaymentProvider {
+    UNKNOWN = 0;
+    ZALOPAY = 1;
+    PAYOS = 2;
+    VNPAY = 3;
+}
+
+enum PaymentStatus {
+    PENDING = 0;
+    COMPLETED = 1;
+    FAILED = 2;
+    CANCELED = 3;
+}
+
+message CreatePaymentIntentRequest {
+    string order_code = 1;
+    int64 amount_cents = 2;
+    string currency = 3;
+    PaymentProvider provider = 4;
+    string idempotency_key = 5;
+    string redirect_url = 6;
+    int32 timeout_seconds = 7;
+}
+
+message CreatePaymentIntentResponse {
+    string payment_url = 2;
+}
+
+message ConfirmPaymentIntentRequest {
+    string payment_id = 1;
+}
+
+message ConfirmPaymentIntentResponse {
+    string payment_id = 1;
+    PaymentStatus status = 2;
+}
+
+message CancelPaymentIntentRequest {
+    string payment_id = 1;
+}
+
+message CancelPaymentIntentResponse {
+    string payment_id = 1;
+    PaymentStatus status = 2;
+}

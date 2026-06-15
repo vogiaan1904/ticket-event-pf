@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package user;
+import "google/protobuf/empty.proto";
+
+service UserService {
+    rpc Create(CreateUserRequest) returns (CreateUserResponse);
+    rpc Update(UpdateUserRequest) returns (UpdateUserResponse);
+    rpc FindOne(FindOneUserRequest) returns (FindOneUserResponse);
+    rpc FindAll(FindAllUserRequest) returns (FindAllUserResponse);
+    rpc Delete(DeleteUserRequest) returns (google.protobuf.Empty);
+}
+
+
+message User {
+    string id = 1;
+    string first_name = 2;
+    string last_name = 3;
+    string email = 4;
+    string password = 5;
+    string avatar = 6;
+    bool email_verified = 7;
+    string created_at = 8;
+    string updated_at = 9;
+}
+
+message CreateUserRequest {
+    string first_name = 1;
+    string last_name = 2;
+    string email = 3;
+    string password = 4;
+    string avatar = 5;
+}
+
+message CreateUserResponse {
+    User user = 1;
+}
+
+message UpdateUserRequest {
+    string id = 1;
+    optional string avatar = 2;
+    optional string first_name = 3;
+    optional string last_name = 4;
+    optional string password = 5;
+}
+
+message UpdateUserResponse {
+    User user = 1;
+}
+
+message FindOneUserRequest {
+  oneof find_option {
+    string id = 1;
+    string email = 2;
+  }
+}
+
+message FindOneUserResponse {
+    User user = 1;
+}
+
+message FindAllUserRequest {
+    repeated string ids = 1;
+    repeated string emails = 2;
+    string name = 3;
+}
+
+message FindAllUserResponse {
+    repeated User users = 1;
+}
+
+message DeleteUserRequest {
+    string id = 1;
+}
+

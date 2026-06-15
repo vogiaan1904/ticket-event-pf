@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  localstack:
+    image: localstack/localstack:latest
+    container_name: ticketbottle-localstack
+    ports:
+      - "4566:4566"            # LocalStack Gateway
+      - "4510-4559:4510-4559"  # External services port range
+    environment:
+      # Core LocalStack configuration
+      - SERVICES=lambda,apigateway,events,s3,iam,sts,logs
+      - DEBUG=1
+      - LAMBDA_EXECUTOR=docker-reuse
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_DOCKER_NETWORK=ticketbottle-network
+
+      # Enable Lambda layers support
+      - LAMBDA_LAYERS_SUPPORT=1
+
+      # Persistence (optional - keeps data between restarts)
+      - PERSISTENCE=1
+      - DATA_DIR=/tmp/localstack/data
+
+      # Lambda configuration
+      - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
+      - LAMBDA_INIT_POST_INVOKE_WAIT=100
+
+      # Logging
+      - LS_LOG=debug
+
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "./build:/build"  # Mount build directory with Lambda packages
+      - "./test-data:/tmp/localstack/data"  # Persistence volume
+    networks:
+      - ticketbottle-network
+
+  # Local PostgreSQL for testing
+  postgres:
+    image: postgres:15-alpine
+    container_name: ticketbottle-postgres-test
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: payment_test
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - ticketbottle-network
+
+  # Local Kafka for testing
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: ticketbottle-kafka-test
+    ports:
+      - "9093:9093"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka:29093,PLAINTEXT_HOST://localhost:9093'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29092'
+      KAFKA_LISTENERS: 'PLAINTEXT://kafka:29093,CONTROLLER://kafka:29092,PLAINTEXT_HOST://0.0.0.0:9093'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    networks:
+      - ticketbottle-network
+
+networks:
+  ticketbottle-network:
+    driver: bridge
+
+volumes:
+  postgres-data:

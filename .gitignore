@@ -1,0 +1,62 @@
+# ==========================================================================
+# TicketBottle V2 monorepo .gitignore  (Go services + NestJS/TypeScript)
+# ==========================================================================
+
+# --- OS / editor ----------------------------------------------------------
+.DS_Store
+.DS_Store?
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
+
+# --- Secrets / environment ------------------------------------------------
+# Never commit real env files (development/envs/.env.* contain credentials).
+.env
+.env.*
+*.env
+# ...but keep example/templates if you add them:
+!.env.example
+!*.env.example
+!.env.*.example
+
+# --- Node / NestJS (api-gateway, user, event, payment) --------------------
+node_modules/
+dist/
+build/
+coverage/
+.npm
+*.tsbuildinfo
+.eslintcache
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Go (order, inventory, waitroom) --------------------------------------
+# Vendored deps are restored with `go mod download`; keep them out of the repo.
+vendor/
+# Test & build artifacts
+*.test
+*.out
+__debug_bin*
+mock_*
+# Compiled binaries (no extension) produced by `go build`
+/bin/
+ticketbottle-order/order
+ticketbottle-inventory/inventory
+ticketbottle-waitroom/waitroom
+
+# --- Generated docs (Swagger) ---------------------------------------------
+docs/
+
+# --- Local data / runtime state -------------------------------------------
+*-data/
+mongo-data/
+
+# --- Tooling local state --------------------------------------------------
+.claude/settings.local.json

@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "outDir": "./dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "strictNullChecks": false,
+    "resolveJsonModule": true,
+    "moduleResolution": "node",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "composite": true,
+    "baseUrl": ".",
+    "types": ["node", "jest", "@types/aws-lambda"],
+    "paths": {
+      "@/common/*": ["./common/*"]
+    }
+  },
+  "files": [],
+  "references": [
+    { "path": "./common" },
+    { "path": "./payment-webhook-handler" },
+    { "path": "./outbox-processor" },
+    { "path": "./outbox-cleanup" }
+  ]
+}
