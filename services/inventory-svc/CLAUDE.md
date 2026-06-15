@@ -23,7 +23,7 @@ Keyed by **order code**. A background `ReservationExpiryWorker` (`internal/worke
 ```bash
 make run          # go run cmd/api/main.go
 make protoc       # regenerate protobuf
-make update-proto # pull latest from protos-submodule then regenerate
+make update-proto # regenerate gRPC stubs from the root proto/
 go test ./...     # run tests (go test ./internal/services/... for one package)
 go build ./...
 ```

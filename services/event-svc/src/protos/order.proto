@@ -22,7 +22,6 @@ enum OrderStatus {
 }
 
 message Order {
-    string id = 10;
     string code = 1;
     string event_id = 2;
     string user_id = 3;
@@ -60,25 +59,24 @@ message CreateOrderRequest {
     string payment_method = 8;
     repeated CreateOrderItem items = 3;
     string currency = 4;
+    string checkout_token = 9;
+    string redirect_url = 10;
 }
 
 message CreateOrderResponse {
     Order order = 1;
-    string redirect_url = 2;
+    string payment_url = 2;
 }
 
 message PaginationInfo {
-    int32 page = 1;
+    string next_cursor = 1;
     int64 page_size = 2;
     int64 count = 3;
-    int32 last_page = 4;
-    int64 total = 7;
-    bool has_next = 5;
-    bool has_previous = 6;
+    bool has_next = 4;
 }
 
 message GetManyOrdersRequest {
-    int32 page = 1;
+    string cursor = 1;
     int64 page_size = 2;
     optional OrderFilter filter = 3;
 }
@@ -95,10 +93,7 @@ message GetManyOrdersResponse {
 }
 
 message GetOrderRequest {
-    oneof find_option {
         string code = 1;
-        string id = 2;
-    }
 }
 
 message GetOrderResponse {
@@ -114,5 +109,5 @@ message ListOrdersResponse {
 }
 
 message CancelOrderRequest {
-    string id = 1;
+    string code = 1;
 }

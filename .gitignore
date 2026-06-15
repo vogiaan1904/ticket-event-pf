@@ -59,4 +59,8 @@ docs/
 mongo-data/
 
 # --- Tooling local state --------------------------------------------------
-.claude/settings.local.json
+# Ignore local permission files only; commit .claude/skills (and commands/agents).
+**/.claude/settings.local.json
+
+
+# --- AI ---

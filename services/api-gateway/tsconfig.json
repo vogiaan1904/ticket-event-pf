@@ -33,7 +33,6 @@
       "@middlewares/*": ["src/common/middlewares/*"],
       "@exceptions/*": ["src/common/exceptions/*"],
       "@protogen/*": ["src/protogen/*"],
-      "@protos/*": ["src/protos/*"],
     }
   }
 }

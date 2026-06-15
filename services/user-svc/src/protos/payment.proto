@@ -8,6 +8,7 @@ service PaymentService {
     rpc CreatePaymentIntent(CreatePaymentIntentRequest) returns (CreatePaymentIntentResponse);
     rpc ConfirmPaymentIntent(ConfirmPaymentIntentRequest) returns (ConfirmPaymentIntentResponse);
     rpc CancelPaymentIntent(CancelPaymentIntentRequest) returns (CancelPaymentIntentResponse);
+    rpc GetPaymentUrlByIdempotencyKey(GetPaymentUrlByIdempotencyKeyRequest) returns (GetPaymentUrlByIdempotencyKeyResponse);
 }
 
 enum PaymentProvider {
@@ -53,5 +54,14 @@ message CancelPaymentIntentRequest {
 
 message CancelPaymentIntentResponse {
     string payment_id = 1;
+    PaymentStatus status = 2;
+}
+
+message GetPaymentUrlByIdempotencyKeyRequest {
+    string idempotency_key = 1;
+}
+
+message GetPaymentUrlByIdempotencyKeyResponse {
+    string payment_url = 1;
     PaymentStatus status = 2;
 }

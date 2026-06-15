@@ -155,8 +155,8 @@ services:
       - ./envs/.env.localstack
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
-      - "../ticketbottle-payment/lambdas/build:/build"
-      - "../ticketbottle-order/scripts/init-dynamodb.sh:/etc/localstack/init/ready.d/init-dynamodb.sh"
+      - "../services/payment-svc/lambdas/build:/build"
+      - "../services/order-svc/scripts/init-dynamodb.sh:/etc/localstack/init/ready.d/init-dynamodb.sh"
     networks:
       - ticketbottle-network
     healthcheck:
@@ -305,7 +305,7 @@ services:
   # Event Service
   event-service:
     build:
-      context: ../ticketbottle-event
+      context: ../services/event-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-event-service
     depends_on:
@@ -322,7 +322,7 @@ services:
   # Inventory Service
   inventory-service:
     build:
-      context: ../ticketbottle-inventory
+      context: ../services/inventory-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-inventory-service
     depends_on:
@@ -341,7 +341,7 @@ services:
   # Waitroom Service
   waitroom-service:
     build:
-      context: ../ticketbottle-waitroom
+      context: ../services/waitroom-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-waitroom-service
     depends_on:
@@ -420,7 +420,7 @@ services:
   # User Service
   user-service:
     build:
-      context: ../ticketbottle-user
+      context: ../services/user-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-user-service
     depends_on:
@@ -436,7 +436,7 @@ services:
   # App Gateway
   app-gateway:
     build:
-      context: ../ticketbottle-api-gateway
+      context: ../services/api-gateway
       dockerfile: Dockerfile
     container_name: ticketbottle-app-gateway
     ports:

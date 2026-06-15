@@ -296,7 +296,7 @@ services:
   # Event Service
   event-service:
     build:
-      context: ../ticketbottle-event
+      context: ../services/event-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-event-service
     depends_on:
@@ -313,7 +313,7 @@ services:
   # Inventory Service
   inventory-service:
     build:
-      context: ../ticketbottle-inventory
+      context: ../services/inventory-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-inventory-service
     depends_on:
@@ -332,7 +332,7 @@ services:
   # Waitroom Service
   waitroom-service:
     build:
-      context: ../ticketbottle-waitroom
+      context: ../services/waitroom-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-waitroom-service
     depends_on:
@@ -351,7 +351,7 @@ services:
   # Payment Service
   payment-service:
     build:
-      context: ../ticketbottle-payment
+      context: ../services/payment-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-payment-service
     depends_on:
@@ -371,7 +371,7 @@ services:
   # Order Service (MongoDB)
   order-service:
     build:
-      context: ../ticketbottle-order
+      context: ../services/order-svc
       dockerfile: cmd/api/Dockerfile
     container_name: ticketbottle-order-service
     depends_on:
@@ -398,7 +398,7 @@ services:
   # Order Consumer Service (MongoDB)
   order-consumer:
     build:
-      context: ../ticketbottle-order
+      context: ../services/order-svc
       dockerfile: cmd/consumer/Dockerfile
     container_name: ticketbottle-order-consumer
     depends_on:
@@ -417,7 +417,7 @@ services:
   # User Service
   user-service:
     build:
-      context: ../ticketbottle-user
+      context: ../services/user-svc
       dockerfile: Dockerfile
     container_name: ticketbottle-user-service
     depends_on:
@@ -433,7 +433,7 @@ services:
   # App Gateway
   app-gateway:
     build:
-      context: ../ticketbottle-api-gateway
+      context: ../services/api-gateway
       dockerfile: Dockerfile
     container_name: ticketbottle-app-gateway
     ports:

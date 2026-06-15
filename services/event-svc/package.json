@@ -22,7 +22,7 @@
     "prisma:seed": "ts-node -O '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "update:proto": "bash scripts/update-protos.sh",
     "proto:all": "npm run proto:event",
-    "proto:event": "protoc --plugin=node_modules/.bin/protoc-gen-ts_proto -I=./src/protos --ts_proto_out=src/protogen/ src/protos/event.proto --ts_proto_opt=nestJs=true --ts_proto_opt=fileSuffix=.pb"
+    "proto:event": "protoc --plugin=node_modules/.bin/protoc-gen-ts_proto -I=../../proto --ts_proto_out=src/protogen/ ../../proto/event.proto --ts_proto_opt=nestJs=true --ts_proto_opt=fileSuffix=.pb"
   },
   "dependencies": {
     "@grpc/grpc-js": "^1.14.0",

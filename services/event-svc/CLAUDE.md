@@ -36,7 +36,7 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 
 - `src/modules/events/` — `events.service.ts` (business logic + lifecycle), `repository/` (Prisma data access), `controllers/grpc/` (+ `mappers/`), `dtos/`, `entities/`.
 - `src/infra/database/` — Prisma infrastructure; `src/common/*` — gRPC exception filter + validation; `src/shared/*` — config/logger/swagger.
-- `prisma/` — schema, migrations, `seed.ts`. `src/protogen/` is generated from `src/protos/event.proto` — don't hand-edit.
+- `prisma/` — schema, migrations, `seed.ts`. `src/protogen/` is generated from `../../proto/event.proto` — don't hand-edit.
 
 ## Notes
 

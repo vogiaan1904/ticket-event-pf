@@ -20,7 +20,7 @@ The Order service has two versions with **different code**:
 **For Legacy Mode (MongoDB):**
 ```bash
 # Checkout legacy branch
-cd ../ticketbottle-order
+cd ../services/order-svc
 git checkout legacy/mongodb
 
 # Build legacy images
@@ -31,7 +31,7 @@ make build-legacy
 **For AWS Mode (DynamoDB):**
 ```bash
 # Checkout main branch (with DynamoDB code)
-cd ../ticketbottle-order
+cd ../services/order-svc
 git checkout main
 
 # Build AWS images
@@ -181,7 +181,7 @@ Built from `main` branch with:
 ### "Legacy images not found"
 ```bash
 # Build legacy images first
-cd ../ticketbottle-order
+cd ../services/order-svc
 git checkout legacy/mongodb
 cd ../development
 make build-legacy
@@ -190,7 +190,7 @@ make build-legacy
 ### "AWS images not found"
 ```bash
 # Build AWS images first
-cd ../ticketbottle-order
+cd ../services/order-svc
 git checkout main
 cd ../development
 make build-aws

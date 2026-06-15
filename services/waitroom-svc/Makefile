@@ -72,17 +72,15 @@ redis-flush: ## Flush all Redis data (dangerous!)
 dev: docker-up run ## Start development environment
 
 protoc-all:
-	$(MAKE) protoc PROTO=protos-submodule/waitroom.proto OUT_DIR=protogen/waitroom
-	$(MAKE) protoc PROTO=protos-submodule/event.proto OUT_DIR=protogen/event
+	$(MAKE) protoc PROTO=../../proto/waitroom.proto OUT_DIR=protogen/waitroom
+	$(MAKE) protoc PROTO=../../proto/event.proto OUT_DIR=protogen/event
 
 protoc:
 	protoc --go_out=$(OUT_DIR) --go_opt=paths=source_relative \
 	--go-grpc_out=$(OUT_DIR) --go-grpc_opt=paths=source_relative \
-	-I=protos-submodule $(PROTO)
+	-I=../../proto $(PROTO)
 
 update-proto:
-	@echo "Updating git submodule..."
-	git submodule update --remote --recursive protos-submodule
 
 	@echo "Regenerating proto code..."
 	make protoc-all

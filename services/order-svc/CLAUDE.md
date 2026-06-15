@@ -14,11 +14,8 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 - `CreateOrder` — check availability → reserve inventory → create order → create payment intent; **auto-compensates** on any failure (release tickets → delete order items → delete order). Workflow state tracks how far it got so rollback is exact.
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `CHECKOUT_COMPLETED`.
 
-## Two datastores / two branches (read before building!)
-- `main` branch → **DynamoDB** (`dynamodbav` tags, `internal/infra/dynamodb`).
-- `legacy/mongodb` branch → **MongoDB** (`bson` tags, `internal/infra/mongo`).
-
-These are genuinely different code. The `development/` compose modes (`make up` vs `make up-aws`) require images built from the matching branch.
+## Datastore: DynamoDB only
+This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). The MongoDB driver was removed — `internal/infra/mongo/` no longer exists, and there is no `legacy/mongodb` branch in this monorepo. Run with `make up-aws` (LocalStack provides DynamoDB); the `make up` MongoDB compose mode is legacy and non-functional for this service (see root `CLAUDE.md`).
 
 ## Commands
 
@@ -26,7 +23,7 @@ These are genuinely different code. The `development/` compose modes (`make up` 
 make run-api        # run the gRPC API binary
 make run-consumer   # run the Kafka consumer binary
 make protoc         # regenerate protobuf
-make update-proto   # pull latest protos-submodule then regenerate
+make update-proto   # regenerate gRPC stubs from the root proto/
 go test ./...       # tests
 go build ./...
 ```
@@ -50,5 +47,5 @@ go build ./...
 
 ## Layout
 
-- `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,mongo,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
-- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `mongo`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`. See `SYSTEM.md` for a deeper design write-up.
+- `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
+- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`. See `SYSTEM.md` for a deeper design write-up.

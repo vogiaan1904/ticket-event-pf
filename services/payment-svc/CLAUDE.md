@@ -45,7 +45,7 @@ sam build && sam deploy --config-env dev --guided
 
 - `src/modules/payment/` — `createPaymentIntent` / `cancelPayment` gRPC controllers, service, repository, DTOs.
 - `src/modules/outbox/` — `OutboxService` (save-event-in-transaction), enums, event types.
-- `prisma/` — schema/migrations. `src/protogen/` generated from `src/protos/payment.proto`.
+- `prisma/` — schema/migrations. `src/protogen/` generated from `../../proto/payment.proto`.
 
 ## Conventions
 
