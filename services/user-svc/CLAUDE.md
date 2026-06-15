@@ -24,7 +24,7 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 ## Layout
 
 - `src/user/` — the gRPC controller, service, and `dto/` for user operations.
-- `src/shared/{prisma,repositories,services}` — Prisma client, repository layer (data access is abstracted behind repositories), config/logger.
+- `src/shared/{prisma,services}` — Prisma client, config/logger services. (Data access lives directly in the service layer via `PrismaService` — there is no separate repository layer.)
 - `src/common/{filters,exceptions,decorators}` — `GlobalGrpcExceptionFilter` and `RpcValidationException` turn validation/business errors into gRPC statuses.
 - `prisma/` — schema and migrations. `src/protogen/` is generated from `../../proto/user.proto` — don't hand-edit.
 
