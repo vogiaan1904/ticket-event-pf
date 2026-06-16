@@ -51,8 +51,12 @@ ticketbottle-order/order
 ticketbottle-inventory/inventory
 ticketbottle-waitroom/waitroom
 
-# --- Generated docs (Swagger) ---------------------------------------------
+# --- Generated docs (Swagger, any level) ----------------------------------
 docs/
+# keep design artifacts (specs/plans) under root docs/superpowers/
+!/docs/
+/docs/*
+!/docs/superpowers/
 
 # --- Local data / runtime state -------------------------------------------
 *-data/
