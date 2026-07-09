@@ -8,7 +8,7 @@ TicketBottle V2 is a polyglot microservices platform for high-traffic ticket sal
 
 Each service has its own `CLAUDE.md` with service-specific detail — read that file when working inside a service.
 
-See `README.md` for the full prose architecture and the end-to-end purchase data flow. `aws/ARC.md` and `aws/PLAN.md` cover the AWS/Lambda deployment direction. `REVIEW.md` (repo root) is a standing architecture review with the current cleanup backlog.
+See `README.md` for the full prose architecture and the end-to-end purchase data flow. `docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md` is the **AWS deployment plan of record** — a learning-right-sized local→k3s→EKS ladder (the older `aws/ARC.md`/`aws/PLAN.md` production plan was retired in favor of it). `REVIEW.md` (repo root) is a standing architecture review with the current cleanup backlog.
 
 ## Services & ports
 

@@ -1,12 +1,12 @@
 # Affordable AWS Deployment via a Local → k3s → EKS Ladder — Design
 
-*Date: 2026-07-09. Status: approved for planning. Scope: deploying the existing TicketBottle V2 stack to AWS as a **learning side project** at minimum cost, with hands-on Kubernetes and a toggle-off-when-idle operating model. This design deliberately **replaces the target** of `aws/PLAN.md` + `aws/ARC.md` (a ~$733/mo production-grade, multi-region EKS plan) with a learning-right-sized one.*
+*Date: 2026-07-09. Status: approved for planning. Scope: deploying the existing TicketBottle V2 stack to AWS as a **learning side project** at minimum cost, with hands-on Kubernetes and a toggle-off-when-idle operating model. This design deliberately **replaces and retires** `aws/PLAN.md` + `aws/ARC.md` (a ~$733/mo production-grade, multi-region EKS plan): those files are **removed as part of this work**, and this spec becomes the single AWS plan of record (git history preserves the old plan if ever wanted).*
 
 ---
 
 ## 1. Context & motivation
 
-The repo already contains an AWS plan (`aws/ARC.md`, `aws/PLAN.md`). It is internally coherent but specs a **production** system: EKS + self-managed MSK + self-hosted Temporal + Aurora Serverless v2 + ElastiCache + WAF + multi-region active-passive, targeting **10,000 concurrent users, 99.9% uptime, RTO < 5 min**, honestly priced at **~$733/mo (~$590 with Savings Plans)**.
+The repo previously contained an AWS plan (`aws/ARC.md`, `aws/PLAN.md`) — **retired by this work** (git history preserves it). It was internally coherent but specced a **production** system: EKS + self-managed MSK + self-hosted Temporal + Aurora Serverless v2 + ElastiCache + WAF + multi-region active-passive, targeting **10,000 concurrent users, 99.9% uptime, RTO < 5 min**, honestly priced at **~$733/mo (~$590 with Savings Plans)**.
 
 That is the wrong target for the actual use case: **one person, learning, on a budget.** The gap between "10k concurrent, multi-region" and "me, learning" is ~15–40× in cost.
 
@@ -27,6 +27,7 @@ Two facts drive this design:
 2. Provide genuine **hands-on K8s** (Deployments, Services, ConfigMaps/Secrets, Ingress, StatefulSets/PVCs, HPA, Helm) plus real AWS primitives (VPC, IAM, ECR, DynamoDB, Terraform).
 3. **Minimum cost with a toggle-off model**: ~$0 local, ~$10–20/mo for the everyday cloud environment, ~$10/weekend for an optional EKS sprint.
 4. Produce **portable artifacts**: one Helm chart + Terraform, reused unchanged across three deploy targets.
+5. Establish **a single AWS plan of record** by retiring the superseded `aws/ARC.md`, `aws/PLAN.md`, and the orphan `aws/docker-compose.dev.yml` (the whole stale `aws/` dir), and repointing root `CLAUDE.md` at this spec.
 
 **Non-goals (explicitly cut from `aws/PLAN.md`; documented as "future, not built")**
 - Multi-region / active-passive / Route 53 failover.
@@ -35,7 +36,7 @@ Two facts drive this design:
 - Self-managed MSK, Aurora Serverless v2, ElastiCache, WAF, ArgoCD, provisioned concurrency.
 - Any change to application architecture or business logic.
 - Adding automated test coverage (verification is the end-to-end purchase flow — see §7).
-- Rewriting `aws/ARC.md`/`PLAN.md` (left as an aspirational "production reference"; this spec supersedes them as the *build* target and should be cross-linked, not deleted).
+- Preserving the old `aws/` production docs. They are **deleted** (not kept as a "reference"); this spec is the sole AWS plan. Their production ideas (multi-region, MSK, Aurora, WAF) remain recoverable from git history if ever wanted.
 
 ---
 
