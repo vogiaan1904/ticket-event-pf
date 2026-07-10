@@ -1,0 +1,3 @@
+# Rendered/temp artifacts
+*.tmp
+charts/*.tgz

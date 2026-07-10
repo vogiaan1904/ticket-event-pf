@@ -1,0 +1,11 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ticketbottle
+nodes:
+  - role: control-plane
+    # extraPortMappings let us reach a NodePort Service (api-gateway, added in 0B)
+    # and Temporal/Redpanda dashboards from the host without port-forward.
+    extraPortMappings:
+      - containerPort: 30000   # api-gateway NodePort (0B)
+        hostPort: 3000
+        protocol: TCP
