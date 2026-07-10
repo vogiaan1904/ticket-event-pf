@@ -1,0 +1,6 @@
+# kind overlay: smallest footprint, no resource pressure.
+target: local
+postgres:
+  storage: 1Gi
+redpanda:
+  storage: 1Gi

@@ -1,0 +1,32 @@
+# Shared defaults. Overlays (values-local/-k3s/-eks) override per target.
+namespace: ticketbottle
+
+postgres:
+  image: postgres:15-alpine
+  storage: 2Gi
+  user: root
+  password: root
+  # app databases created by the init ConfigMap (Temporal DBs are created by Temporal itself)
+  databases:
+    - ticketbottle_user
+    - ticketbottle_event
+    - ticketbottle_payment
+    - ticketbottle_inventory
+
+redis:
+  image: redis:7-alpine
+  storage: 1Gi
+
+redpanda:
+  image: redpandadata/redpanda:v24.2.7
+  storage: 2Gi
+
+dynamodb:
+  image: amazon/dynamodb-local:2.5.2
+  awsCliImage: amazon/aws-cli:2.17.0
+  tableName: ticketbottle-orders
+  region: us-east-1
+
+temporal:
+  image: temporalio/auto-setup:1.27.2
+  enableElasticsearch: false   # SQL/Postgres visibility — spec §4

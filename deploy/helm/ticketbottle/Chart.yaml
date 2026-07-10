@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ticketbottle
+description: TicketBottle V2 — portable deployment chart (infra tier + app services)
+type: application
+version: 0.1.0
+appVersion: "2.0.0"
