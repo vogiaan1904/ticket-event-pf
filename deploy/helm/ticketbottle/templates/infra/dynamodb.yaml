@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dynamodb }
+  template:
+    metadata:
+      labels: { app: dynamodb }
+    spec:
+      containers:
+        - name: dynamodb
+          image: {{ .Values.dynamodb.image }}
+          # -inMemory keeps it light; data is recreated by the init Job each install.
+          command: ["java","-jar","DynamoDBLocal.jar","-inMemory","-sharedDb"]
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  selector: { app: dynamodb }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dynamodb-init
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-table
+          image: {{ .Values.dynamodb.awsCliImage }}
+          env:
+            - { name: AWS_ACCESS_KEY_ID, value: "local" }
+            - { name: AWS_SECRET_ACCESS_KEY, value: "local" }
+            - { name: AWS_REGION, value: "{{ .Values.dynamodb.region }}" }
+            - { name: EP, value: "http://dynamodb:8000" }
+            - { name: TABLE, value: "{{ .Values.dynamodb.tableName }}" }
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until aws dynamodb list-tables --endpoint-url "$EP" >/dev/null 2>&1; do
+                echo "waiting for dynamodb..."; sleep 2; done
+              if aws dynamodb describe-table --endpoint-url "$EP" --table-name "$TABLE" >/dev/null 2>&1; then
+                echo "table $TABLE already exists"; exit 0; fi
+              aws dynamodb create-table --endpoint-url "$EP" --table-name "$TABLE" \
+                --attribute-definitions \
+                  AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S \
+                  AttributeName=GSI1PK,AttributeType=S AttributeName=GSI1SK,AttributeType=S \
+                  AttributeName=GSI2PK,AttributeType=S AttributeName=GSI2SK,AttributeType=S \
+                --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE \
+                --global-secondary-indexes \
+                  'IndexName=GSI1,KeySchema=[{AttributeName=GSI1PK,KeyType=HASH},{AttributeName=GSI1SK,KeyType=RANGE}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=5,WriteCapacityUnits=5}' \
+                  'IndexName=GSI2,KeySchema=[{AttributeName=GSI2PK,KeyType=HASH},{AttributeName=GSI2SK,KeyType=RANGE}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=5,WriteCapacityUnits=5}' \
+                --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+              aws dynamodb wait table-exists --endpoint-url "$EP" --table-name "$TABLE"
+              echo "table $TABLE created"
