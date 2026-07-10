@@ -15,3 +15,18 @@ cluster-down:          ## Delete the local kind cluster
 cluster-status:        ## Show nodes and namespaces
 	kubectl --context $(CTX) get nodes
 	kubectl --context $(CTX) get ns $(NS)
+
+CHART := helm/ticketbottle
+RELEASE := tb
+LOCAL_VALUES := $(CHART)/values-local.yaml
+
+.PHONY: infra-up infra-down smoke
+
+infra-up:              ## Install/upgrade the infra tier on the local cluster
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --wait --timeout 6m
+
+infra-down:            ## Uninstall the chart (keeps the cluster)
+	helm uninstall $(RELEASE) -n $(NS) || true
+
+smoke:                 ## Verify every infra component end-to-end
+	./scripts/smoke-infra.sh
