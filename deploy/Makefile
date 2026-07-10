@@ -30,3 +30,12 @@ infra-down:            ## Uninstall the chart (keeps the cluster)
 
 smoke:                 ## Verify every infra component end-to-end
 	./scripts/smoke-infra.sh
+
+.PHONY: apps-up smoke-apps
+
+apps-up:               ## Build+load images and deploy the app tier
+	./scripts/build-images.sh
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --wait --timeout 8m
+
+smoke-apps:            ## Verify the app tier (pods Ready + signup)
+	./scripts/smoke-apps.sh

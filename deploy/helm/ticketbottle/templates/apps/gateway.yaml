@@ -1,0 +1,1 @@
+{{ include "tb.appService" (dict "ctx" . "name" "app-gateway" "image" "ticketbottle/gateway:local" "port" 3000 "config" "gateway-config" "svcName" "app-gateway" "probe" "http" "nodePort" 30000) }}
