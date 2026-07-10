@@ -53,10 +53,11 @@ ticketbottle-waitroom/waitroom
 
 # --- Generated docs (Swagger, any level) ----------------------------------
 docs/
-# keep design artifacts (specs/plans) under root docs/superpowers/
+# keep design artifacts (specs/plans) + the architecture guide under root docs/
 !/docs/
 /docs/*
 !/docs/superpowers/
+!/docs/ARCHITECTURE.md
 
 # --- Local data / runtime state -------------------------------------------
 *-data/
