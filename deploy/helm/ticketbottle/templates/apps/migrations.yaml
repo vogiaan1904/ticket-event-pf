@@ -1,0 +1,30 @@
+{{- range $svc := list "user" "event" "payment" }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $svc }}-migrate
+  namespace: {{ include "tb.namespace" $ }}
+  labels: {{- include "tb.labels" $ | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ticketbottle/{{ $svc }}-migrate:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c","npx prisma migrate deploy"]
+          envFrom:
+            - configMapRef: { name: {{ $svc }}-config }
+      # wait for postgres before running (hook order doesn't guarantee DB readiness)
+      initContainers:
+        - name: wait-postgres
+          image: postgres:15-alpine
+          command: ["sh","-c","until pg_isready -h postgres -U root; do echo waiting for postgres; sleep 2; done"]
+{{- end }}
