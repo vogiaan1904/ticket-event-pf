@@ -1,0 +1,3 @@
+{{ include "tb.appService" (dict "ctx" . "name" "order-service" "image" "ticketbottle/order-api:local" "port" 50054 "config" "order-config" "svcName" "order-service" "probe" "tcp") }}
+---
+{{ include "tb.appService" (dict "ctx" . "name" "order-consumer" "image" "ticketbottle/order-consumer:local" "port" 0 "config" "order-config" "probe" "none") }}
