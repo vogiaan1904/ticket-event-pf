@@ -1,0 +1,1 @@
+{{ include "tb.appService" (dict "ctx" . "name" "payment-service" "image" "ticketbottle/payment:local" "port" 50055 "config" "payment-config" "svcName" "payment-service" "probe" "tcp") }}
