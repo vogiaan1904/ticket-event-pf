@@ -455,12 +455,15 @@ spec:
       containers:
         - name: redpanda
           image: {{ .Values.redpanda.image }}
-          command:
+          # Use args (NOT command): the image ENTRYPOINT is /entrypoint.sh which routes
+          # `redpanda start ...` through `rpk`. `rpk redpanda start` understands --mode/
+          # --kafka-addr; the raw `redpanda` broker binary does not. Overriding `command`
+          # bypasses the entrypoint and fails with "unrecognised option '--mode'".
+          args:
             - redpanda
             - start
             - --mode=dev-container
             - --smp=1
-            - --default-log-level=info
             # advertise the in-cluster service name so clients (0B) reach the broker
             - --kafka-addr=PLAINTEXT://0.0.0.0:9093
             - --advertise-kafka-addr=PLAINTEXT://redpanda:9093

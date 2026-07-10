@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector:
+    matchLabels: { app: redpanda }
+  template:
+    metadata:
+      labels: { app: redpanda }
+    spec:
+      containers:
+        - name: redpanda
+          image: {{ .Values.redpanda.image }}
+          # NOTE: use args (not command) so the image ENTRYPOINT (/entrypoint.sh -> rpk)
+          # is preserved. `rpk redpanda start` understands --mode/--kafka-addr; the raw
+          # `redpanda` broker binary does not. Overriding command bypasses rpk and fails.
+          args:
+            - redpanda
+            - start
+            - --mode=dev-container
+            - --smp=1
+            # advertise the in-cluster service name so clients (0B) reach the broker
+            - --kafka-addr=PLAINTEXT://0.0.0.0:9093
+            - --advertise-kafka-addr=PLAINTEXT://redpanda:9093
+          ports:
+            - { containerPort: 9093 }   # Kafka API
+            - { containerPort: 9644 }   # Admin API (health)
+          volumeMounts: [{ name: data, mountPath: /var/lib/redpanda/data }]
+          readinessProbe:
+            httpGet: { path: /v1/status/ready, port: 9644 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: "{{ .Values.redpanda.storage }}" } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  selector: { app: redpanda }
+  ports:
+    - { name: kafka, port: 9093, targetPort: 9093 }
+    - { name: admin, port: 9644, targetPort: 9644 }
