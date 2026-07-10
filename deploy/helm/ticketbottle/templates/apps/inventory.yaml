@@ -1,0 +1,1 @@
+{{ include "tb.appService" (dict "ctx" . "name" "inventory-service" "image" "ticketbottle/inventory:local" "port" 50057 "config" "inventory-config" "svcName" "inventory-service" "probe" "tcp") }}
