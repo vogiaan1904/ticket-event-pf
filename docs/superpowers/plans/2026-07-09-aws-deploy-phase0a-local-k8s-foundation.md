@@ -685,11 +685,17 @@ spec:
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
             - { name: SKIP_DB_CREATE, value: "false" }
-            - { name: TEMPORAL_ADDRESS, value: "temporal:7233" }
+            # Listen on all interfaces so the Service (and 0B clients like order-svc) can
+            # reach the frontend. auto-setup defaults to 127.0.0.1, which the Service can't
+            # route to — and do NOT set TEMPORAL_ADDRESS to the Service name (see probe note).
+            - { name: BIND_ON_IP, value: "0.0.0.0" }
           ports: [{ containerPort: 7233 }]
           readinessProbe:
             exec:
-              command: ["tctl", "--address", "temporal:7233", "cluster", "health"]
+              # Target localhost, NOT the Service name. A Service has no endpoints until its
+              # pod is Ready, so a Service-addressed probe deadlocks (never Ready). auto-setup's
+              # own namespace registration hits 127.0.0.1 by default for the same reason.
+              command: ["tctl", "--address", "127.0.0.1:7233", "cluster", "health"]
             initialDelaySeconds: 20
             periodSeconds: 10
             failureThreshold: 12

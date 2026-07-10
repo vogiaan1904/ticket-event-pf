@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: temporal }
+  template:
+    metadata:
+      labels: { app: temporal }
+    spec:
+      containers:
+        - name: temporal
+          image: {{ .Values.temporal.image }}
+          # auto-setup creates the temporal + temporal_visibility databases and schema
+          # in the shared Postgres (needs the root superuser), then registers "default".
+          env:
+            - { name: DB, value: postgres12 }
+            - { name: DB_PORT, value: "5432" }
+            - { name: POSTGRES_SEEDS, value: postgres }
+            - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }
+            - { name: POSTGRES_PWD, value: "{{ .Values.postgres.password }}" }
+            - { name: DBNAME, value: temporal }
+            - { name: VISIBILITY_DBNAME, value: temporal_visibility }
+            - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
+            - { name: SKIP_DB_CREATE, value: "false" }
+            # Listen on all interfaces so the Service (and 0B clients like order-svc) can
+            # reach the frontend. auto-setup defaults to 127.0.0.1, which the Service can't route to.
+            - { name: BIND_ON_IP, value: "0.0.0.0" }
+          ports: [{ containerPort: 7233 }]
+          readinessProbe:
+            exec:
+              # Target localhost, NOT the Service name. The Service has no endpoints until
+              # the pod is Ready, so a Service-addressed probe would deadlock (never Ready).
+              command: ["tctl", "--address", "127.0.0.1:7233", "cluster", "health"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  selector: { app: temporal }
+  ports: [{ port: 7233, targetPort: 7233 }]
