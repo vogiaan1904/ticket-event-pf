@@ -1,0 +1,168 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: user-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  ENV: development
+  HOST: "0.0.0.0"
+  PORT: "50052"
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_user
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_USERNAME: root
+  DATABASE_PASSWORD: root
+  DATABASE_NAME: ticketbottle_user
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: event-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  HOST: "0.0.0.0"
+  GRPC_PORT: "50053"
+  NAME: TicketBottle_Event
+  APP_GLOBAL_PREFIX: api
+  CORS_ORIGINS: "[]"
+  ENCRYPT_KEY: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_event
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_USERNAME: root
+  DATABASE_PASSWORD: root
+  DATABASE_NAME: ticketbottle_event
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: inventory-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50057"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  LOG_LEVEL: info
+  LOG_MODE: development
+  LOG_ENCODING: console
+  POSTGRES_URL: postgresql://root:root@postgres:5432/ticketbottle_inventory?sslmode=disable
+  POSTGRES_MAX_OPEN_CONNS: "25"
+  POSTGRES_MAX_IDLE_CONNS: "10"
+  POSTGRES_CONN_MAX_LIFETIME: 5m
+  POSTGRES_CONN_MAX_IDLE_TIME: 10m
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: waitroom-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50056"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  REDIS_ADDR: redis:6379
+  REDIS_PASSWORD: ""
+  REDIS_DB: "0"
+  REDIS_MAX_RETRIES: "3"
+  REDIS_POOL_SIZE: "10"
+  REDIS_MIN_IDLE_CONNS: "5"
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_CONSUMER_GROUP_ID: waitroom-service
+  KAFKA_PRODUCER_RETRY_MAX: "3"
+  KAFKA_PRODUCER_REQUIRED_ACKS: "1"
+  KAFKA_CONSUMER_SESSION_TIMEOUT: "10000"
+  QUEUE_DEFAULT_MAX_CONCURRENT: "100"
+  QUEUE_DEFAULT_RELEASE_RATE: "10"
+  QUEUE_PROCESS_INTERVAL: 1s
+  QUEUE_SESSION_TTL: 7200s
+  QUEUE_POSITION_UPDATE_INTERVAL: 5s
+  EVENT_SERVICE_ADDR: event-service:50053
+  JWT_SECRET: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc
+  JWT_EXPIRY: 15m
+  LOGGER_LEVEL: debug
+  LOGGER_MODE: development
+  LOGGER_ENCODING: console
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: payment-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  # HOST is hardcoded 0.0.0.0 in payment main.ts; do NOT pass the ngrok HOST from .env.payment.
+  PORT: "8085"
+  GRPC_PORT: "50055"
+  NAME: TicketBottle_Payment
+  APP_GLOBAL_PREFIX: api
+  NODE_ENV: development
+  LOG_LEVEL: debug
+  ZALOPAY_APP_ID: "2554"
+  ZALOPAY_KEY1: sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn
+  ZALOPAY_KEY2: trMrHtvjo6myautxDUiAcYsVtaeQ8nhf
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_payment
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_USERNAME: root
+  DATABASE_PASSWORD: root
+  DATABASE_NAME: ticketbottle_payment
+  KAFKA_CLIENT_ID: payment-service
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_CONSUMER_GROUP_ID: payment-consumer-group
+  KAFKA_SSL: "false"
+  OUTBOX_POLL_INTERVAL_MS: "5000"
+  OUTBOX_BATCH_SIZE: "100"
+  OUTBOX_MAX_RETRIES: "5"
+  OUTBOX_CLEANUP_DAYS: "7"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: order-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50054"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  PAYMENT_TIMEOUT_SECONDS: "600"
+  DYNAMODB_TABLE_NAME: ticketbottle-orders
+  AWS_REGION: us-east-1
+  DYNAMODB_ENDPOINT: http://dynamodb:8000
+  AWS_ACCESS_KEY_ID: local
+  AWS_SECRET_ACCESS_KEY: local
+  TEMPORAL_HOST_PORT: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  JWT_SECRET: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc
+  JWT_EXPIRY: 15m
+  LOG_LEVEL: debug
+  LOG_MODE: development
+  LOG_ENCODING: console
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_PRODUCER_RETRY_MAX: "3"
+  KAFKA_PRODUCER_REQUIRED_ACKS: "1"
+  KAFKA_ENABLED: "true"
+  KAFKA_CONSUMER_GROUP_ID: order-service
+  EVENT_SERVICE_ADDR: event-service:50053
+  INVENTORY_SERVICE_ADDR: inventory-service:50057
+  PAYMENT_SERVICE_ADDR: payment-service:50055
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: gateway-config, namespace: {{ include "tb.namespace" . }} }
+data:
+  PORT: "3000"
+  NAME: TicketBottle_Event
+  APP_GLOBAL_PREFIX: api
+  CORS_ORIGINS: '["*"]'
+  APP_INIT_ADMIN_PASSWORD: initadminpassword
+  ENCRYPT_KEY: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc
+  JWT_ACCESS_SECRET: 92387r0293uhrfio2y39r78iudjeorf2o83eryhdip23ur09
+  JWT_REFRESH_SECRET: 23789ryfh29eturfiyu2h3oqeiprdh2379erydh2ou3eiqr
+  JWT_ACCESS_EXPIRATION: 1d
+  JWT_REFRESH_EXPIRATION: 7d
+  JWT_REFRESH_SLIDING_WINDOW: 24h
+  SALT_ROUND: "10"
+  INTERNAL_KEY: 2iytufy2u3eorfyg297ry8dhiqks23ryuegriuu2yehrbdlkhp
+  USER_SERVICE: user-service:50052
+  EVENT_SERVICE: event-service:50053
+  INVENTORY_SERVICE: inventory-service:50057
+  ORDER_SERVICE: order-service:50054
+  WAITROOM_SERVICE: waitroom-service:50056
+  REDIS_URL: redis://redis:6379
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
