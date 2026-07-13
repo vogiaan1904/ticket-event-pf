@@ -320,7 +320,8 @@ func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gor
 			return result.Error
 		}
 		if result.RowsAffected == 0 {
-			s.l.Warnf(ctx, "service.reservation.Release: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
+			s.l.Errorf(ctx, "service.reservation.Release: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
+			return gorm.ErrInvalidData
 		}
 	}
 
