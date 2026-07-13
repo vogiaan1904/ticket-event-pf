@@ -273,72 +273,67 @@ func (s implReservationService) Release(ctx context.Context, oCode string) error
 }
 
 func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gorm.DB, oCode string) error {
-	// Step 1: Lock and fetch all reservations for this order
 	var rs []models.Reservation
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("order_code = ?", oCode).
-		Find(&rs).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.CancelReservation.LockReservations: %v", err)
+		Where("order_code = ?", oCode).Find(&rs).Error; err != nil {
+		s.l.Errorf(ctx, "service.reservation.Release.LockReservations: %v", err)
 		return err
 	}
-
 	if len(rs) == 0 {
-		s.l.Warnf(ctx, "service.reservation.CancelReservation: no reservations found for order_code=%s", oCode)
-		return gorm.ErrRecordNotFound
+		s.l.Infof(ctx, "service.reservation.Release: no reservations for order_code=%s, no-op", oCode)
+		return nil // idempotent: nothing to release
 	}
 
-	tcUps := make(map[int64]int) // ticket_class_id -> qty to release from reserved
-	rIDs := make([]int64, 0, len(rs))
-
-	// Step 2: Validate all reservations can be cancelled and group by ticket_class_id
+	// Idempotency: all already terminal (cancelled/expired) → no-op.
+	allReleased := true
 	for _, r := range rs {
-		// Validate reservation can be cancelled (must be ACTIVE)
-		if r.Status != models.ReservationStatusActive {
-			s.l.Warnf(ctx, "service.reservation.CancelReservation: reservation %d is not active (status=%s)", r.ID, r.Status)
-			return gorm.ErrInvalidData
+		if r.Status != models.ReservationStatusCancelled && r.Status != models.ReservationStatusExpired {
+			allReleased = false
+			break
 		}
+	}
+	if allReleased {
+		s.l.Infof(ctx, "service.reservation.Release: order_code=%s already released, no-op", oCode)
+		return nil
+	}
 
+	tcUps := make(map[int64]int)
+	rIDs := make([]int64, 0, len(rs))
+	for _, r := range rs {
+		if r.Status == models.ReservationStatusConfirmed {
+			s.l.Warnf(ctx, "service.reservation.Release: conflict, reservation %d already confirmed", r.ID)
+			return ErrStateConflict
+		}
+		if r.Status != models.ReservationStatusActive {
+			continue // already cancelled/expired; leave as-is
+		}
 		tcUps[r.TicketClassID] += r.Qty
 		rIDs = append(rIDs, r.ID)
 	}
 
-	// Step 3: Update ticket class counters (decrement reserved) grouped by ticket_class_id
 	for tcID, qty := range tcUps {
 		result := tx.Model(&models.TicketClass{}).
-			Where("id = ?", tcID).
-			Where("reserved >= ?", qty). // Safety check
+			Where("id = ? AND reserved >= ?", tcID, qty).
 			Update("reserved", gorm.Expr("reserved - ?", qty))
-
 		if result.Error != nil {
-			s.l.Errorf(ctx, "service.reservation.CancelReservation.DecrementReserved: ticket_class_id=%d, error=%v", tcID, result.Error)
+			s.l.Errorf(ctx, "service.reservation.Release.DecrementReserved: ticket_class_id=%d: %v", tcID, result.Error)
 			return result.Error
 		}
-
-		// Check if the ticket class was actually updated
 		if result.RowsAffected == 0 {
-			s.l.Errorf(ctx, "service.reservation.CancelReservation: insufficient reserved tickets for ticket_class_id=%d (needed=%d)", tcID, qty)
-			return gorm.ErrInvalidData
+			s.l.Warnf(ctx, "service.reservation.Release: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
 		}
-
-		s.l.Infof(ctx, "service.reservation.CancelReservation: released %d reserved tickets for ticket_class_id=%d", qty, tcID)
 	}
 
-	// Step 4: Update all reservation statuses to CANCELLED
-	result := tx.Model(&models.Reservation{}).
-		Where("id IN ?", rIDs).
-		Update("status", models.ReservationStatusCancelled)
-
-	if result.Error != nil {
-		s.l.Errorf(ctx, "service.reservation.CancelReservation.UpdateReservations: %v", result.Error)
-		return result.Error
+	if len(rIDs) > 0 {
+		if err := tx.Model(&models.Reservation{}).
+			Where("id IN ?", rIDs).
+			Update("status", models.ReservationStatusCancelled).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.Release.UpdateReservations: %v", err)
+			return err
+		}
 	}
 
-	// Step 5: Publish Kafka event (TODO: implement Kafka producer)
-	// TODO: Publish reservation.cancelled event
-	// Event payload: {order_code, reservation_ids, ticket_class_summary, cancelled_at, total_count}
-
-	s.l.Infof(ctx, "service.reservation.CancelReservation: successfully cancelled %d reservations for order_code=%s (total qty released: %d)",
-		len(rs), oCode, s.sumQuantities(tcUps))
+	s.l.Infof(ctx, "service.reservation.Release: cancelled %d reservations for order_code=%s", len(rIDs), oCode)
 	return nil
 }
 
