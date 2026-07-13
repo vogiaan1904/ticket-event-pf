@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +13,8 @@ import (
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
 	pkgLog "github.com/vogiaan/ticketbottle-inventory/pkg/logger"
 )
+
+var seedCounter atomic.Int64
 
 const defaultTestDSN = "postgresql://root:root@localhost:5435/ticketbottle_inventory_test?sslmode=disable"
 
@@ -49,9 +53,10 @@ func newTestLogger() pkgLog.Logger {
 
 func seedTicketClass(t *testing.T, repo *pkgGorm.Repository, total, reserved, sold int) models.TicketClass {
 	t.Helper()
+	n := seedCounter.Add(1)
 	tc := models.TicketClass{
-		EventID:    "evt-" + t.Name(),
-		Name:       "GA-" + t.Name(),
+		EventID:    fmt.Sprintf("evt-%s-%d", t.Name(), n),
+		Name:       fmt.Sprintf("GA-%s-%d", t.Name(), n),
 		PriceCents: 1000,
 		Currency:   "USD",
 		Total:      total,
