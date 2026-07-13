@@ -40,3 +40,8 @@ apps-up:               ## Build+load images and deploy the app tier
 
 smoke-apps:            ## Verify the app tier (pods Ready + signup)
 	./scripts/smoke-apps.sh
+
+.PHONY: gate1
+
+gate1:                 ## Run the full purchase-flow acceptance test (Phase 0B-2)
+	./scripts/gate1-purchase-flow.sh
