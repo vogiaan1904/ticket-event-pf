@@ -1,6 +1,11 @@
 # Shared defaults. Overlays (values-local/-k3s/-eks) override per target.
 namespace: ticketbottle
 
+apps:
+  # Set false (via --set) for an infra-only install — e.g. running a service
+  # locally against in-cluster Postgres/Kafka/Temporal instead of in-pod.
+  enabled: true
+
 postgres:
   image: postgres:15-alpine
   storage: 2Gi

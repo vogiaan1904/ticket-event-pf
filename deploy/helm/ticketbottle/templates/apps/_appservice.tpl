@@ -1,5 +1,6 @@
 {{- define "tb.appService" -}}
 {{- $ := .ctx -}}
+{{- if $.Values.apps.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -55,5 +56,6 @@ spec:
       {{- if .nodePort }}
       nodePort: {{ .nodePort }}
       {{- end }}
+{{- end }}
 {{- end }}
 {{- end -}}

@@ -22,8 +22,9 @@ LOCAL_VALUES := $(CHART)/values-local.yaml
 
 .PHONY: infra-up infra-down smoke
 
-infra-up:              ## Install/upgrade the infra tier on the local cluster
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --wait --timeout 6m
+infra-up:              ## Install/upgrade the infra tier on the local cluster (no app pods)
+	./scripts/build-migrate-images.sh
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --set apps.enabled=false --wait --timeout 6m
 
 infra-down:            ## Uninstall the chart (keeps the cluster)
 	helm uninstall $(RELEASE) -n $(NS) || true
