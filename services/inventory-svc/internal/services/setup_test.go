@@ -37,6 +37,7 @@ func newTestDB(t *testing.T) *pkgGorm.Repository {
 	if err := db.AutoMigrate(&models.TicketClass{}, &models.Reservation{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
+	db.Exec("CREATE INDEX IF NOT EXISTS idx_reservation_active_expiry ON reservation (status, expires_at) WHERE status = 'ACTIVE'")
 	t.Cleanup(func() {
 		db.Exec("TRUNCATE reservation, ticket_class RESTART IDENTITY CASCADE")
 	})

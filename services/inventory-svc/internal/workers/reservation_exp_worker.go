@@ -4,39 +4,46 @@ import (
 	"context"
 	"time"
 
-	svc "github.com/vogiaan/ticketbottle-inventory/internal/services"
 	pkgLog "github.com/vogiaan/ticketbottle-inventory/pkg/logger"
 )
+
+// reservationExpirer is the only capability the worker needs.
+type reservationExpirer interface {
+	BatchExpireReservations(ctx context.Context, batchSize int) (int, error)
+}
+
+const drainMaxIterations = 100
 
 type ReservationExpiryWorker struct {
 	l         pkgLog.Logger
 	tkr       *time.Ticker
 	interval  time.Duration
 	batchSize int
-	rSvc      svc.ReservationService
+	rSvc      reservationExpirer
 	doneCh    chan struct{}
 }
 
-func NewReservationExpiryWorker(
-	l pkgLog.Logger,
-	rSvc svc.ReservationService,
-) *ReservationExpiryWorker {
+func NewReservationExpiryWorker(l pkgLog.Logger, rSvc reservationExpirer, interval time.Duration, batchSize int) *ReservationExpiryWorker {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	if batchSize <= 0 {
+		batchSize = 500
+	}
 	return &ReservationExpiryWorker{
 		l:         l,
 		rSvc:      rSvc,
-		interval:  1 * time.Minute,
-		batchSize: 500,
+		interval:  interval,
+		batchSize: batchSize,
 		doneCh:    make(chan struct{}),
 	}
 }
 
 func (w *ReservationExpiryWorker) Start(ctx context.Context) {
 	w.tkr = time.NewTicker(w.interval)
-	w.l.Infof(ctx, "Starting ReservationExpiryWorker: interval=%v, batchSize=%d",
-		w.interval, w.batchSize)
+	w.l.Infof(ctx, "Starting ReservationExpiryWorker: interval=%v, batchSize=%d", w.interval, w.batchSize)
 
 	go w.runJob(ctx)
-
 	go func() {
 		for {
 			select {
@@ -61,21 +68,23 @@ func (w *ReservationExpiryWorker) Stop(ctx context.Context) {
 	w.l.Info(ctx, "ReservationExpiryWorker shutdown initiated")
 }
 
+// runJob drains expired reservations in batches until a batch comes back
+// smaller than batchSize (nothing left) or the safety cap is hit.
 func (w *ReservationExpiryWorker) runJob(ctx context.Context) {
-	startTime := time.Now()
-
-	w.l.Debug(ctx, "ReservationExpiryWorker: starting batch expiration job")
-
-	expCnt, err := w.rSvc.BatchExpireReservations(ctx, w.batchSize)
-	if err != nil {
-		w.l.Errorf(ctx, "ReservationExpiryWorker: batch expiration failed: %v", err)
-		return
+	start := time.Now()
+	total := 0
+	for i := 0; i < drainMaxIterations; i++ {
+		n, err := w.rSvc.BatchExpireReservations(ctx, w.batchSize)
+		if err != nil {
+			w.l.Errorf(ctx, "ReservationExpiryWorker: batch expiration failed: %v", err)
+			return
+		}
+		total += n
+		if n < w.batchSize {
+			break
+		}
 	}
-
-	duration := time.Since(startTime)
-
-	if expCnt > 0 {
-		w.l.Infof(ctx, "ReservationExpiryWorker: expired %d reservations in %v",
-			expCnt, duration)
+	if total > 0 {
+		w.l.Infof(ctx, "ReservationExpiryWorker: expired %d reservations in %v", total, time.Since(start))
 	}
 }

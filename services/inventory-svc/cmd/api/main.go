@@ -50,12 +50,18 @@ func main() {
 	}
 	l.Info(ctx, "Database tables migrated successfully")
 
+	if err := db.Exec(
+		"CREATE INDEX IF NOT EXISTS idx_reservation_active_expiry ON reservation (status, expires_at) WHERE status = 'ACTIVE'",
+	).Error; err != nil {
+		l.Fatalf(ctx, "Failed to create active-expiry index: %v", err)
+	}
+
 	repo := pkgGorm.NewRepository(db)
 
 	rsvSvc := svc.NewReservationService(l, repo)
 	tcSvc := svc.NewTicketClassService(l, repo)
 
-	rsvExpWkr := workers.NewReservationExpiryWorker(l, rsvSvc)
+	rsvExpWkr := workers.NewReservationExpiryWorker(l, rsvSvc, cfg.Worker.ExpiryInterval, cfg.Worker.ExpiryBatchSize)
 
 	wkrMng := workers.NewWorkerManager(l)
 	wkrMng.Register(rsvExpWkr)

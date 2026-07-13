@@ -356,7 +356,7 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 			Options:  "SKIP LOCKED",
 		}).
 			Select("id", "ticket_class_id", "qty", "expires_at").
-			Where("status = ? AND expires_at < ?", models.ReservationStatusActive, now).
+			Where("status = ? AND expires_at <= ?", models.ReservationStatusActive, now).
 			Order("expires_at").
 			Limit(batchSize).
 			Find(&rs).Error

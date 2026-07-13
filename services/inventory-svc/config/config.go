@@ -15,6 +15,7 @@ type Config struct {
 	Server   ServerConfig
 	Log      LogConfig
 	Postgres PostgresConfig
+	Worker   WorkerConfig
 }
 
 type ServerConfig struct {
@@ -36,6 +37,11 @@ type LogConfig struct {
 	Level    string
 	Mode     string
 	Encoding string
+}
+
+type WorkerConfig struct {
+	ExpiryInterval  time.Duration
+	ExpiryBatchSize int
 }
 
 func Load() (*Config, error) {
@@ -60,6 +66,10 @@ func Load() (*Config, error) {
 			MaxIdleConns:    getEnvAsInt("POSTGRES_MAX_IDLE_CONNS", 10),
 			ConnMaxLifetime: getEnvAsDuration("POSTGRES_CONN_MAX_LIFETIME", 5*time.Minute),
 			ConnMaxIdleTime: getEnvAsDuration("POSTGRES_CONN_MAX_IDLE_TIME", 10*time.Minute),
+		},
+		Worker: WorkerConfig{
+			ExpiryInterval:  getEnvAsDuration("WORKER_EXPIRY_INTERVAL", time.Minute),
+			ExpiryBatchSize: getEnvAsInt("WORKER_EXPIRY_BATCH_SIZE", 500),
 		},
 	}
 
