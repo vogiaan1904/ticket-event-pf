@@ -77,3 +77,12 @@ func TestHarness_Connects(t *testing.T) {
 		t.Fatal("expected a generated ticket class id")
 	}
 }
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func future() time.Time { return time.Now().UTC().Add(15 * time.Minute) }

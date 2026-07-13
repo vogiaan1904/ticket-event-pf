@@ -36,4 +36,5 @@ var (
 	ErrInternal          = NewGRPCError(codes.Internal, "internal server error")
 	ErrUnavailable       = NewGRPCError(codes.Unavailable, "service unavailable")
 	ErrInsufficientStock = NewGRPCError(codes.ResourceExhausted, "insufficient stock")
+	ErrConflict          = NewGRPCError(codes.FailedPrecondition, "reservation state conflict")
 )

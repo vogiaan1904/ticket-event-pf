@@ -200,77 +200,68 @@ func (s implReservationService) Confirm(ctx context.Context, oCode string) error
 }
 
 func (s implReservationService) confirmReservationTx(ctx context.Context, tx *gorm.DB, oCode string) error {
-	// Step 1: Lock and fetch all reservations for this order
 	var rs []models.Reservation
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("order_code = ?", oCode).
-		Find(&rs).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.ConfirmReservation.LockReservations: %v", err)
+		Where("order_code = ?", oCode).Find(&rs).Error; err != nil {
+		s.l.Errorf(ctx, "service.reservation.Confirm.LockReservations: %v", err)
 		return err
 	}
-
 	if len(rs) == 0 {
-		s.l.Warnf(ctx, "service.reservation.ConfirmReservation: no reservations found for order_code=%s", oCode)
+		s.l.Warnf(ctx, "service.reservation.Confirm: no reservations for order_code=%s", oCode)
 		return gorm.ErrRecordNotFound
 	}
 
-	now := time.Now().UTC()
-	tcUps := make(map[int64]int) // ticket_class_id -> qty to move from reserved to sold
-	rIDs := make([]int64, 0, len(rs))
-
-	// Step 2: Validate all reservations and group by ticket_class_id
+	// Idempotency: all already confirmed → no-op.
+	allConfirmed := true
 	for _, r := range rs {
-		// Validate reservation is active
-		if r.Status != models.ReservationStatusActive {
-			s.l.Warnf(ctx, "service.reservation.ConfirmReservation: reservation %d is not active (status=%s)", r.ID, r.Status)
-			return gorm.ErrInvalidData
+		if r.Status != models.ReservationStatusConfirmed {
+			allConfirmed = false
+			break
 		}
+	}
+	if allConfirmed {
+		s.l.Infof(ctx, "service.reservation.Confirm: order_code=%s already confirmed, no-op", oCode)
+		return nil
+	}
 
-		// Check if reservation has expired
-		if now.After(r.ExpiresAt) {
-			s.l.Warnf(ctx, "service.reservation.ConfirmReservation: reservation %d has expired", r.ID)
-			return gorm.ErrInvalidData
+	now := time.Now().UTC()
+	tcUps := make(map[int64]int)
+	rIDs := make([]int64, 0, len(rs))
+	for _, r := range rs {
+		if r.Status != models.ReservationStatusActive || now.After(r.ExpiresAt) {
+			s.l.Warnf(ctx, "service.reservation.Confirm: conflict for reservation %d (status=%s, timeExpired=%v)",
+				r.ID, r.Status, now.After(r.ExpiresAt))
+			return ErrStateConflict
 		}
-
 		tcUps[r.TicketClassID] += r.Qty
 		rIDs = append(rIDs, r.ID)
 	}
 
-	// Step 3: Update ticket class counters (reserved → sold) grouped by ticket_class_id
 	for tcID, qty := range tcUps {
 		result := tx.Model(&models.TicketClass{}).
-			Where("id = ?", tcID).
-			Where("reserved >= ?", qty).
+			Where("id = ? AND reserved >= ?", tcID, qty).
 			Updates(map[string]any{
 				"reserved": gorm.Expr("reserved - ?", qty),
 				"sold":     gorm.Expr("sold + ?", qty),
 			})
-
 		if result.Error != nil {
-			s.l.Errorf(ctx, "service.reservation.ConfirmReservation.UpdateTicketClass: ticket_class_id=%d, error=%v", tcID, result.Error)
+			s.l.Errorf(ctx, "service.reservation.Confirm.UpdateTicketClass: ticket_class_id=%d: %v", tcID, result.Error)
 			return result.Error
 		}
-
-		// Check if the ticket class was actually updated (reserved >= qty condition)
 		if result.RowsAffected == 0 {
-			s.l.Errorf(ctx, "service.reservation.ConfirmReservation: insufficient reserved tickets for ticket_class_id=%d (needed=%d)", tcID, qty)
+			s.l.Errorf(ctx, "service.reservation.Confirm: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
 			return gorm.ErrInvalidData
 		}
-
-		s.l.Infof(ctx, "service.reservation.ConfirmReservation: moved %d tickets from reserved to sold for ticket_class_id=%d", qty, tcID)
 	}
 
-	// Step 4: Update all reservation statuses to CONFIRMED
-	result := tx.Model(&models.Reservation{}).
+	if err := tx.Model(&models.Reservation{}).
 		Where("id IN ?", rIDs).
-		Update("status", models.ReservationStatusConfirmed)
-
-	if result.Error != nil {
-		s.l.Errorf(ctx, "service.reservation.ConfirmReservation.UpdateReservations: %v", result.Error)
-		return result.Error
+		Update("status", models.ReservationStatusConfirmed).Error; err != nil {
+		s.l.Errorf(ctx, "service.reservation.Confirm.UpdateReservations: %v", err)
+		return err
 	}
 
-	s.l.Infof(ctx, "successfully confirmed %d reservations for order_code=%s", len(rs), oCode)
+	s.l.Infof(ctx, "service.reservation.Confirm: confirmed %d reservations for order_code=%s", len(rs), oCode)
 	return nil
 }
 
