@@ -2,7 +2,7 @@ package service
 
 import (
 	"context"
-	"sync"
+	"sort"
 	"time"
 
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
@@ -25,7 +25,6 @@ type ReservationService interface {
 	UpdateStatusByOrderCode(ctx context.Context, oCode string, status models.ReservationStatus) error
 	BatchExpireReservations(ctx context.Context, batchSize int) (int, error)
 	Delete(ctx context.Context, id uint) error
-	DeleteByOrderCode(ctx context.Context, oCode string) error
 }
 
 func NewReservationService(l pkgLog.Logger, repo *pkgGorm.Repository) ReservationService {
@@ -36,93 +35,93 @@ func NewReservationService(l pkgLog.Logger, repo *pkgGorm.Repository) Reservatio
 }
 
 func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) error {
+	ids, qtyByID := aggregateDemand(in.Items)
 
-	wg := sync.WaitGroup{}
-	var wgErr error
+	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Idempotency: reservations already exist for this order → no-op.
+		var existing int64
+		if err := tx.Model(&models.Reservation{}).
+			Where("order_code = ?", in.OrderCode).Count(&existing).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.Reserve.CountExisting: %v", err)
+			return err
+		}
+		if existing > 0 {
+			s.l.Infof(ctx, "service.reservation.Reserve: reservations already exist for order_code=%s, no-op", in.OrderCode)
+			return nil
+		}
 
-	for _, item := range in.Items {
-		wg.Add(1)
-		go func(item ReserveItem) {
-			defer wg.Done()
-			_, err := s.Create(ctx, in.OrderCode, in.ExpiresAt, item)
-			if err != nil {
-				s.l.Errorf(ctx, "service.reservation.Reserve: %v", err)
-				wgErr = err
-			}
-		}(item)
-	}
-
-	wg.Wait()
-	if wgErr != nil {
-		s.l.Errorf(ctx, "service.reservation.Reserve: %v", wgErr)
-		s.DeleteByOrderCode(ctx, in.OrderCode)
-		return wgErr
-	}
-
-	return nil
-}
-
-func (s implReservationService) Create(ctx context.Context, oCode string, expAt time.Time, item ReserveItem) (models.Reservation, error) {
-	var r models.Reservation
-
-	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Step 1: Lock the ticket class row for update
-		var ticketClass models.TicketClass
+		// Lock all target ticket classes in ascending id order (deadlock-free).
+		var tcs []models.TicketClass
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			First(&ticketClass, item.TicketClassID).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.Create.LockTicketClass: %v", err)
+			Where("id IN ?", ids).Order("id").Find(&tcs).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.Reserve.LockTicketClasses: %v", err)
+			return err
+		}
+		if len(tcs) != len(ids) {
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket classes not found (want=%d got=%d)", len(ids), len(tcs))
+			return gorm.ErrRecordNotFound
+		}
+		byID := indexByID(tcs)
+
+		// Validate availability against the locked rows.
+		for _, id := range ids {
+			tc := byID[id]
+			q := qtyByID[id]
+			if tc.Total-tc.Reserved-tc.Sold < q {
+				s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
+					id, tc.Total-tc.Reserved-tc.Sold, q)
+				return gorm.ErrInvalidData
+			}
+		}
+
+		// Increment reserved counters (guarded) and build reservation rows.
+		rs := make([]models.Reservation, 0, len(ids))
+		for _, id := range ids {
+			q := qtyByID[id]
+			res := tx.Model(&models.TicketClass{}).
+				Where("id = ? AND reserved + sold + ? <= total", id, q).
+				Update("reserved", gorm.Expr("reserved + ?", q))
+			if res.Error != nil {
+				s.l.Errorf(ctx, "service.reservation.Reserve.IncrementReserved: ticket_class_id=%d: %v", id, res.Error)
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				s.l.Warnf(ctx, "service.reservation.Reserve: availability guard failed for ticket_class_id=%d", id)
+				return gorm.ErrInvalidData
+			}
+			rs = append(rs, s.buildModel(in.OrderCode, in.ExpiresAt, ReserveItem{TicketClassID: id, Qty: q}))
+		}
+
+		if err := tx.Create(&rs).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.Reserve.InsertReservations: %v", err)
 			return err
 		}
 
-		// Step 2: Check if enough stock available
-		requestedQty := item.Qty
-		availableQty := ticketClass.Total - ticketClass.Reserved - ticketClass.Sold
-
-		if availableQty < requestedQty {
-			s.l.Warnf(ctx, "service.reservation.Create: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
-				item.TicketClassID, availableQty, requestedQty)
-			return gorm.ErrInvalidData
-		}
-
-		// Alternative check: reserved + sold + qty <= total
-		if ticketClass.Reserved+ticketClass.Sold+requestedQty > ticketClass.Total {
-			s.l.Warnf(ctx, "service.reservation.Create: would exceed total capacity for ticket_class_id=%d", item.TicketClassID)
-			return gorm.ErrInvalidData
-		}
-
-		// Step 3: Update ticket class counters (increment reserved)
-		result := tx.Model(&ticketClass).
-			Where("id = ?", ticketClass.ID).
-			Update("reserved", gorm.Expr("reserved + ?", requestedQty))
-
-		if result.Error != nil {
-			s.l.Errorf(ctx, "service.reservation.Create.IncrementReserved: %v", result.Error)
-			return result.Error
-		}
-
-		if result.RowsAffected == 0 {
-			s.l.Errorf(ctx, "service.reservation.Create: failed to update ticket_class_id=%d", item.TicketClassID)
-			return gorm.ErrInvalidData
-		}
-
-		// Step 4: Build and insert the reservation record
-		r = s.buildModel(oCode, expAt, item)
-		if err := tx.Create(&r).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.Create.InsertReservation: %v", err)
-			return err
-		}
-
-		s.l.Infof(ctx, "service.reservation.Create: created reservation %d for order %s (ticket_class_id=%d, qty=%d, expires_at=%s)",
-			r.ID, r.OrderCode, r.TicketClassID, r.Qty, r.ExpiresAt.Format(time.RFC3339))
-
+		s.l.Infof(ctx, "service.reservation.Reserve: created %d reservations for order_code=%s", len(rs), in.OrderCode)
 		return nil
 	})
+}
 
-	if err != nil {
-		return models.Reservation{}, err
+// aggregateDemand collapses items to one entry per ticket class (summing qty)
+// and returns the ticket-class ids sorted ascending for deterministic locking.
+func aggregateDemand(items []ReserveItem) (ids []int64, qtyByID map[int64]int) {
+	qtyByID = make(map[int64]int, len(items))
+	for _, it := range items {
+		if _, ok := qtyByID[it.TicketClassID]; !ok {
+			ids = append(ids, it.TicketClassID)
+		}
+		qtyByID[it.TicketClassID] += it.Qty
 	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids, qtyByID
+}
 
-	return r, nil
+func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
+	m := make(map[int64]models.TicketClass, len(tcs))
+	for _, tc := range tcs {
+		m[tc.ID] = tc
+	}
+	return m
 }
 
 func (s implReservationService) GetByOrderCode(ctx context.Context, oCode string) ([]models.Reservation, error) {
@@ -451,15 +450,6 @@ func (s implReservationService) Delete(ctx context.Context, id uint) error {
 
 	if err := s.repo.Delete(ctx, &r); err != nil {
 		s.l.Errorf(ctx, "service.reservation.Delete: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s implReservationService) DeleteByOrderCode(ctx context.Context, oCode string) error {
-	if err := s.repo.WithContext(ctx).Where("order_code = ?", oCode).Delete(&models.Reservation{}).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.DeleteByOrderID: %v", err)
 		return err
 	}
 
