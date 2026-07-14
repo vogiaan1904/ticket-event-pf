@@ -66,6 +66,7 @@ mongo-data/
 # --- Tooling local state --------------------------------------------------
 # Ignore local permission files only; commit .claude/skills (and commands/agents).
 **/.claude/settings.local.json
+tools/
 
 
 # --- AI ---
