@@ -73,18 +73,23 @@ func (w *ReservationExpiryWorker) Stop(ctx context.Context) {
 func (w *ReservationExpiryWorker) runJob(ctx context.Context) {
 	start := time.Now()
 	total := 0
+	drained := false
 	for i := 0; i < drainMaxIterations; i++ {
 		n, err := w.rSvc.BatchExpireReservations(ctx, w.batchSize)
 		if err != nil {
-			w.l.Errorf(ctx, "ReservationExpiryWorker: batch expiration failed: %v", err)
+			w.l.Errorf(ctx, "ReservationExpiryWorker: batch expiration failed after expiring %d this run: %v", total, err)
 			return
 		}
 		total += n
 		if n < w.batchSize {
+			drained = true
 			break
 		}
 	}
 	if total > 0 {
 		w.l.Infof(ctx, "ReservationExpiryWorker: expired %d reservations in %v", total, time.Since(start))
+	}
+	if !drained {
+		w.l.Warnf(ctx, "ReservationExpiryWorker: hit drain cap (%d iterations), backlog may remain", drainMaxIterations)
 	}
 }
