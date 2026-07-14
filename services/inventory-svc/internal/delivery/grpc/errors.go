@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"errors"
+
 	svc "github.com/vogiaan/ticketbottle-inventory/internal/services"
 	pkgErrors "github.com/vogiaan/ticketbottle-inventory/pkg/errors"
 	"google.golang.org/grpc/codes"
@@ -12,12 +14,12 @@ var (
 )
 
 func (s *grpcService) mapError(err error) error {
-	switch err {
-	case gorm.ErrRecordNotFound:
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
 		return pkgErrors.ErrNotFound
-	case gorm.ErrInvalidData:
+	case errors.Is(err, gorm.ErrInvalidData):
 		return pkgErrors.ErrInsufficientStock
-	case svc.ErrStateConflict:
+	case errors.Is(err, svc.ErrStateConflict):
 		return pkgErrors.ErrConflict
 	default:
 		return pkgErrors.ErrInternal

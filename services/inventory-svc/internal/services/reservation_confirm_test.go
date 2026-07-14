@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 )
 
 func TestConfirm_MovesReservedToSold(t *testing.T) {
@@ -58,5 +60,25 @@ func TestConfirm_NoReservations_ReturnsNotFound(t *testing.T) {
 	svc, _ := reserveSvc(t)
 	if err := svc.Confirm(context.Background(), "nope"); err == nil {
 		t.Fatal("expected an error confirming an unknown order")
+	}
+}
+
+func TestConfirm_MixedState_ReturnsConflict(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc1 := seedTicketClass(t, repo, 100, 0, 0)
+	tc2 := seedTicketClass(t, repo, 100, 0, 0)
+	// One ACTIVE, one already CONFIRMED under the same order — an inconsistent
+	// state Confirm must reject rather than partially re-apply.
+	active := models.Reservation{OrderCode: "o-mixed", TicketClassID: tc1.ID, Qty: 1, Status: models.ReservationStatusActive, ExpiresAt: future()}
+	confirmed := models.Reservation{OrderCode: "o-mixed", TicketClassID: tc2.ID, Qty: 1, Status: models.ReservationStatusConfirmed, ExpiresAt: future()}
+	if err := repo.Create(context.Background(), &active); err != nil {
+		t.Fatalf("seed active: %v", err)
+	}
+	if err := repo.Create(context.Background(), &confirmed); err != nil {
+		t.Fatalf("seed confirmed: %v", err)
+	}
+
+	if err := svc.Confirm(context.Background(), "o-mixed"); err != ErrStateConflict {
+		t.Fatalf("Confirm on mixed state = %v, want ErrStateConflict", err)
 	}
 }

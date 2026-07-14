@@ -35,7 +35,9 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 	ids, qtyByID := aggregateDemand(in.Items)
 
 	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Idempotency: reservations already exist for this order → no-op.
+		// Idempotency: reservations already exist for this order → no-op. A
+		// concurrent duplicate that races past this unlocked count is still
+		// caught by the (order_code, ticket_class_id) unique index on insert.
 		var existing int64
 		if err := tx.Model(&models.Reservation{}).
 			Where("order_code = ?", in.OrderCode).Count(&existing).Error; err != nil {
@@ -121,6 +123,18 @@ func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
 	return m
 }
 
+// sortedInt64Keys returns the map keys in ascending order, so every operation
+// that updates multiple ticket_class rows locks them in the same (ascending id)
+// order — preserving the deadlock-freedom invariant.
+func sortedInt64Keys(m map[int64]int) []int64 {
+	keys := make([]int64, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	return keys
+}
+
 func (s implReservationService) Confirm(ctx context.Context, oCode string) error {
 	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return s.confirmReservationTx(ctx, tx, oCode)
@@ -166,7 +180,8 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 		rIDs = append(rIDs, r.ID)
 	}
 
-	for tcID, qty := range tcUps {
+	for _, tcID := range sortedInt64Keys(tcUps) {
+		qty := tcUps[tcID]
 		result := tx.Model(&models.TicketClass{}).
 			Where("id = ? AND reserved >= ?", tcID, qty).
 			Updates(map[string]any{
@@ -240,7 +255,8 @@ func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gor
 		rIDs = append(rIDs, r.ID)
 	}
 
-	for tcID, qty := range tcUps {
+	for _, tcID := range sortedInt64Keys(tcUps) {
+		qty := tcUps[tcID]
 		result := tx.Model(&models.TicketClass{}).
 			Where("id = ? AND reserved >= ?", tcID, qty).
 			Update("reserved", gorm.Expr("reserved - ?", qty))
@@ -311,7 +327,8 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 			rIDs = append(rIDs, r.ID)
 		}
 
-		for tcID, totalQty := range tsQtyMap {
+		for _, tcID := range sortedInt64Keys(tsQtyMap) {
+			totalQty := tsQtyMap[tcID]
 			result := tx.Model(&models.TicketClass{}).
 				Where("id = ?", tcID).
 				Where("reserved >= ?", totalQty). // Safety check
