@@ -45,30 +45,3 @@ func (r *Repository) Update(ctx context.Context, model interface{}) error {
 func (r *Repository) Delete(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Delete(model).Error
 }
-
-// HardDelete permanently deletes a record
-func (r *Repository) HardDelete(ctx context.Context, model interface{}) error {
-	return r.WithContext(ctx).Unscoped().Delete(model).Error
-}
-
-// FindAll retrieves all records
-func (r *Repository) FindAll(ctx context.Context, models interface{}) error {
-	return r.WithContext(ctx).Find(models).Error
-}
-
-// FindWhere retrieves records matching conditions
-func (r *Repository) FindWhere(ctx context.Context, models interface{}, query interface{}, args ...interface{}) error {
-	return r.WithContext(ctx).Where(query, args...).Find(models).Error
-}
-
-// Count counts records
-func (r *Repository) Count(ctx context.Context, model interface{}, count *int64) error {
-	return r.WithContext(ctx).Model(model).Count(count).Error
-}
-
-// Exists checks if a record exists
-func (r *Repository) Exists(ctx context.Context, model interface{}, conditions ...interface{}) (bool, error) {
-	var count int64
-	err := r.WithContext(ctx).Model(model).Where(conditions[0], conditions[1:]...).Count(&count).Error
-	return count > 0, err
-}

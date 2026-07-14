@@ -13,12 +13,8 @@ type TicketClassService interface {
 	Create(ctx context.Context, in CreateTicketClassInput) (models.TicketClass, error)
 	Update(ctx context.Context, id int64, in UpdateTicketClassInput) (models.TicketClass, error)
 	GetByID(ctx context.Context, id int64) (models.TicketClass, error)
-	GetByEventID(ctx context.Context, eventID string) ([]models.TicketClass, error)
 	GetMany(ctx context.Context, in GetManyTicketClassInput) ([]models.TicketClass, error)
 	Delete(ctx context.Context, id int64) error
-	IncrementReserved(ctx context.Context, id int64, quantity int) error
-	DecrementReserved(ctx context.Context, id int64, quantity int) error
-	IncrementSold(ctx context.Context, id int64, quantity int) error
 	GetAvailableCount(ctx context.Context, id int64) (int, error)
 	CheckAvailability(ctx context.Context, ins []CheckAvailabilityInput) (bool, error)
 }
@@ -77,16 +73,6 @@ func (s implTicketClassService) GetByID(ctx context.Context, id int64) (models.T
 	return tc, nil
 }
 
-func (s implTicketClassService) GetByEventID(ctx context.Context, eventID string) ([]models.TicketClass, error) {
-	var tcs []models.TicketClass
-	if err := s.repo.FindWhere(ctx, &tcs, "event_id = ?", eventID); err != nil {
-		s.l.Errorf(ctx, "service.ticketclass.GetByEventID: %v", err)
-		return nil, err
-	}
-
-	return tcs, nil
-}
-
 func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketClassInput) ([]models.TicketClass, error) {
 	var tcs []models.TicketClass
 
@@ -129,31 +115,6 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 	}
 
 	return nil
-}
-
-func (s *implTicketClassService) IncrementReserved(ctx context.Context, id int64, quantity int) error {
-	return s.repo.WithContext(ctx).
-		Model(&models.TicketClass{}).
-		Where("id = ?", id).
-		Where("total >= reserved + sold + ?", quantity). // Check availability
-		Update("reserved", gorm.Expr("reserved + ?", quantity)).Error
-}
-
-func (s *implTicketClassService) DecrementReserved(ctx context.Context, id int64, quantity int) error {
-	return s.repo.WithContext(ctx).
-		Model(&models.TicketClass{}).
-		Where("id = ?", id).
-		Update("reserved", gorm.Expr("GREATEST(0, reserved - ?)", quantity)).Error
-}
-
-func (s *implTicketClassService) IncrementSold(ctx context.Context, id int64, quantity int) error {
-	return s.repo.WithContext(ctx).
-		Model(&models.TicketClass{}).
-		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"sold":     gorm.Expr("sold + ?", quantity),
-			"reserved": gorm.Expr("GREATEST(0, reserved - ?)", quantity),
-		}).Error
 }
 
 func (s *implTicketClassService) GetAvailableCount(ctx context.Context, id int64) (int, error) {

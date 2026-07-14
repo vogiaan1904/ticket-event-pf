@@ -21,10 +21,7 @@ type ReservationService interface {
 	Reserve(ctx context.Context, in ReserveInput) error
 	Confirm(ctx context.Context, oCode string) error
 	Release(ctx context.Context, oCode string) error
-	UpdateStatus(ctx context.Context, id uint, status models.ReservationStatus) error
-	UpdateStatusByOrderCode(ctx context.Context, oCode string, status models.ReservationStatus) error
 	BatchExpireReservations(ctx context.Context, batchSize int) (int, error)
-	Delete(ctx context.Context, id uint) error
 }
 
 func NewReservationService(l pkgLog.Logger, repo *pkgGorm.Repository) ReservationService {
@@ -122,74 +119,6 @@ func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
 		m[tc.ID] = tc
 	}
 	return m
-}
-
-func (s implReservationService) GetByOrderCode(ctx context.Context, oCode string) ([]models.Reservation, error) {
-	var rs []models.Reservation
-	if err := s.repo.WithContext(ctx).Where("order_code = ?", oCode).Find(&rs).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.GetByOrderCode: %v", err)
-		return nil, err
-	}
-
-	return rs, nil
-}
-
-func (s implReservationService) GetActiveByTicketClassID(ctx context.Context, ticketClassID uint) ([]models.Reservation, error) {
-	var rs []models.Reservation
-	now := time.Now().UTC()
-	if err := s.repo.WithContext(ctx).
-		Where("ticket_class_id = ? AND status = ?", ticketClassID, models.ReservationStatusActive).
-		Where("expires_at > ?", now).
-		Find(&rs).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.GetActiveByTicketClassID: %v", err)
-		return nil, err
-	}
-
-	return rs, nil
-}
-
-func (s implReservationService) GetExpired(ctx context.Context, limit int) ([]models.Reservation, error) {
-	var rs []models.Reservation
-	now := time.Now().UTC()
-	if err := s.repo.WithContext(ctx).
-		Where("status = ? AND expires_at <= ?", models.ReservationStatusActive, now).
-		Limit(limit).
-		Find(&rs).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.GetExpired: %v", err)
-		return nil, err
-	}
-
-	return rs, nil
-}
-
-func (s implReservationService) UpdateStatus(ctx context.Context, id uint, status models.ReservationStatus) error {
-	var r models.Reservation
-	if err := s.repo.FindByID(ctx, &r, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.reservation.UpdateStatus: %v", err)
-		}
-		s.l.Errorf(ctx, "service.reservation.UpdateStatus: %v", err)
-		return err
-	}
-
-	r.Status = status
-	if err := s.repo.Update(ctx, &r); err != nil {
-		s.l.Errorf(ctx, "service.reservation.UpdateStatus: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s implReservationService) UpdateStatusByOrderCode(ctx context.Context, oCode string, status models.ReservationStatus) error {
-	if err := s.repo.WithContext(ctx).Model(&models.Reservation{}).
-		Where("order_code = ?", oCode).
-		Update("status", status).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.UpdateStatusByOrderCode: %v", err)
-		return err
-	}
-
-	return nil
 }
 
 func (s implReservationService) Confirm(ctx context.Context, oCode string) error {
@@ -423,39 +352,4 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 
 		return nil
 	})
-}
-
-func (s implReservationService) Delete(ctx context.Context, id uint) error {
-	var r models.Reservation
-	if err := s.repo.FindByID(ctx, &r, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.reservation.Delete: %v", err)
-		}
-		s.l.Errorf(ctx, "service.reservation.Delete: %v", err)
-		return err
-	}
-
-	if err := s.repo.Delete(ctx, &r); err != nil {
-		s.l.Errorf(ctx, "service.reservation.Delete: %v", err)
-		return err
-	}
-
-	return nil
-}
-
-func (s implReservationService) GetTotalReservedQuantity(ctx context.Context, ticketClassID uint) (int, error) {
-	var result struct {
-		Total int
-	}
-
-	now := time.Now().UTC()
-	if err := s.repo.WithContext(ctx).Model(&models.Reservation{}).
-		Select("COALESCE(SUM(qty), 0) as total").
-		Where("ticket_class_id = ? AND status = ? AND expires_at > ?",
-			ticketClassID, models.ReservationStatusActive, now).
-		Scan(&result).Error; err != nil {
-		s.l.Errorf(ctx, "service.reservation.GetTotalReservedQuantity: %v", err)
-		return 0, err
-	}
-	return result.Total, nil
 }
