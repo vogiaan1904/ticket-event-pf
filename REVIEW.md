@@ -126,7 +126,7 @@ Current state: the *entire* setup is `.claude/settings.local.json` (a permission
   - The TS services have **near-zero test coverage** (user-svc 0, event-svc 0 specs), so a full layout-convergence refactor would need a test harness bigger than the refactor itself, for the lowest-ROI item. **Deferred — do not plan now.**
 
   Resulting prioritized P2 tiers (verification is golden-master/build-passes/docs-match, not red-green — there are no tests to red-green against):
-  - **Tier 1 (safe, mechanical):** delete dead `user-svc/src/shared/repositories/`; rewrite `development/README.md` (still documents the defunct `legacy/mongodb` two-branch model + a non-existent `make up-legacy`). → planned in `docs/superpowers/plans/2026-06-15-p2-tier1-quick-wins.md`.
+  - **Tier 1 (safe, mechanical):** delete dead `user-svc/src/shared/repositories/`; (`development/` retired 2026-07-16 — kind is the sole local path, so its stale README is gone with it). → planned in `docs/superpowers/plans/2026-06-15-p2-tier1-quick-wins.md`.
   - **Tier 2:** migrate proto codegen to `buf` (single root module; removes the TS `src/protos` runtime copy; verify via golden stub-diff).
   - **Tier 3:** de-duplicate payment `lambdas/common` vs `src` (real overlap: prisma/kafka/logger/config; tricky because NestJS-DI vs plain-Node — scope tight; lambda `__tests__` exist as a partial net).
   - **Deferred:** TS layout convergence; (optional) shared Go `pkg` module.

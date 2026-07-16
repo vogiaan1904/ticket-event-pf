@@ -10,8 +10,7 @@ help:          ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/'
 
 up:            ## start host LocalStack on the kind net (needs kind cluster up + Gate-1 baseline green)
-	export $$(grep LOCALSTACK_AUTH_TOKEN $(ROOT)/development/envs/.env.localstack) && \
-	docker compose -f docker-compose.yml up -d
+	export $$(grep LOCALSTACK_AUTH_TOKEN .env) && docker compose -f docker-compose.yml up -d
 
 runtime-image: ## REQUIRED: pre-pull the AMD64 Lambda runtime (matches x86_64 fns + amd64 Prisma engine)
 	docker pull --platform linux/amd64 public.ecr.aws/lambda/nodejs:20

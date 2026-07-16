@@ -3,7 +3,7 @@
 # (a) kind pods reach it via the k8s `localstack` Service/Endpoints, and
 # (b) the Lambdas it spawns (LAMBDA_DOCKER_NETWORK=kind) reach kind NodePorts.
 # Requires: kind cluster up (the `kind` network exists) + LOCALSTACK_AUTH_TOKEN
-# (student Pro), e.g. `export $(grep LOCALSTACK_AUTH_TOKEN ../../development/envs/.env.localstack)`.
+# (student Pro) in deploy/localstack/.env (git-ignored; `make up` exports it).
 services:
   localstack:
     image: localstack/localstack-pro:stable

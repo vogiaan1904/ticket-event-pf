@@ -38,20 +38,19 @@ The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. 
 
 ## Local development
 
-Compose files and the Makefile live in `development/`. Build contexts point at `../services/<name>-svc`.
+Local dev runs on **kind + Helm** (the `deploy/` tree). The legacy Docker Compose setup under `development/` was **retired** (kind is the single local path). Operations live in `deploy/Makefile`:
 
 ```bash
-cd development
-make up-aws      # DynamoDB mode (LocalStack) — the supported path; order-svc is DynamoDB-only
-make down-aws    # stop AWS mode
-make status      # container status
-make clean       # remove containers + volumes
-make up          # legacy MongoDB mode — see note below
+make -C deploy cluster-up   # create the kind cluster
+make -C deploy infra-up     # infra tier (Postgres / Redis / Redpanda / Temporal / DynamoDB-local)
+make -C deploy apps-up      # build + kind-load the 8 app images, deploy the app tier
+make -C deploy gate1        # full purchase-flow acceptance test
+make -C deploy cluster-down # tear it all down
 ```
 
-> **`make up` (MongoDB mode) is legacy and currently non-functional.** `order-svc` on `main` is DynamoDB-only — the MongoDB driver/code has been removed (`internal/infra/mongo/` is empty). Use `make up-aws`. The `docker-compose.dev.yml` MongoDB path and the `mongo-order` container are kept only for history and should be removed or revived deliberately.
+Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
 
-Per-service env files live in `development/envs/.env.*`. Infra ports: Kafka 9092 (UI 8090), Temporal 7233 (UI 8080), Redis 6379 (waitroom) / 6380 (auth), LocalStack 4566; Postgres — Payment 5433, Event 5434, Inventory 5435, User 5436.
+**Rung 1.5 (local AWS simulation)** layers a host-side LocalStack over the same cluster to exercise real DynamoDB + the payment Lambdas — see `deploy/localstack/README.md`.
 
 ## Proto contracts & generation
 

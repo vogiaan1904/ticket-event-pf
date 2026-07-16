@@ -16,7 +16,7 @@ The canonical chain (synchronous gRPC unless noted; Kafka hops marked):
 7. **Waitroom frees the slot.** Waitroom consumes `CHECKOUT_COMPLETED` and admits the next user.
 
 ## Debugging tips
-- **Stuck order / not confirming?** Check Temporal UI (`localhost:8080`) for the workflow, then whether `payment-events` carried `PAYMENT_COMPLETED` (Kafka UI `localhost:8090`), then the order consumer logs (`make logs-consumer` in `development/`).
+- **Stuck order / not confirming?** Check Temporal UI (`localhost:8080`) for the workflow, then whether `payment-events` carried `PAYMENT_COMPLETED` (Kafka UI `localhost:8090`), then the order consumer logs (`kubectl -n ticketbottle logs deploy/order-consumer`).
 - **Oversold / reservation issues?** The invariant lives in `inventory-svc/internal/services/reservation.go` (`FOR UPDATE` inside a tx) + the `ReservationExpiryWorker` that auto-releases expired holds.
 - **Payment not advancing?** The gRPC service only *writes* the outbox; publishing is the `outbox-processor` Lambda. Editing `src/infra/messaging/kafka/` in payment-svc does **not** change live behavior.
 - **Datastore:** Order is DynamoDB-only (`make up-aws` / LocalStack). The `make up` MongoDB mode is legacy/non-functional.

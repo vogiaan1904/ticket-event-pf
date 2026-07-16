@@ -1,5 +1,5 @@
 # TicketBottle V2 — root orchestration.
-# Service code lives under services/<name>-svc; local infra/compose under development/.
+# Service code lives under services/<name>-svc; local dev on kind under deploy/.
 # See CLAUDE.md for the full picture.
 
 .PHONY: help proto proto-go proto-ts
@@ -10,7 +10,7 @@ help:
 	@echo "  make proto-go   Regenerate Go stubs only (order, inventory, waitroom)"
 	@echo "  make proto-ts   Regenerate TS stubs only (api-gateway, event, user, payment)"
 	@echo ""
-	@echo "  Local dev (compose) lives in development/ — cd development && make up-aws"
+	@echo "  Local dev runs on kind — make -C deploy cluster-up infra-up apps-up gate1"
 
 # ---- Proto: edit contracts in proto/, then regenerate every consumer ----
 # There is ONE source of truth: the root proto/ directory. Do not reintroduce
