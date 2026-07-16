@@ -19,7 +19,7 @@ So: **the gRPC service only writes events to the outbox; the Lambdas read and pu
 - `payment-webhook-handler` — receives ZaloPay/PayOS webhooks (HMAC/SDK signature verification), updates payment + writes an outbox row. Triggered by API Gateway.
 - `outbox-processor` — batch-publishes pending outbox rows to Kafka with retry. EventBridge schedule (~1 min).
 - `outbox-cleanup` — deletes old published rows / flags failed ones past max retries. EventBridge schedule (daily).
-- Shared `common` layer (Prisma + Kafka singletons, logger, types) and a `dependencies` layer; deploy via SAM (`template.yaml`) or `cloudformation.yaml`.
+- Shared `common` layer (Prisma + Kafka singletons, logger, types) and a `dependencies` layer; deploy via SAM (`template.yaml`).
 
 VNPay is a planned third provider (placeholder); ZaloPay and PayOS are implemented.
 

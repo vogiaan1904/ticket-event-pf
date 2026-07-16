@@ -38,7 +38,6 @@ lambdas/
 │   └── index.ts
 ├── __tests__/                   # Unit tests
 ├── scripts/                     # Build scripts
-├── cloudformation.yaml          # CloudFormation template
 ├── template.yaml                # SAM template
 └── package.json                 # Dependencies
 ```
@@ -98,7 +97,7 @@ sam local generate-event apigateway http-api-proxy > test-events/api-event.json
 
 ## Deployment
 
-### Option 1: Using SAM CLI (Recommended)
+### Using SAM CLI
 
 ```bash
 # Build
@@ -119,32 +118,6 @@ sam deploy --config-env dev --parameter-overrides \
 
 # Deploy to production
 sam deploy --config-env prod --guided
-```
-
-### Option 2: Using CloudFormation
-
-```bash
-# Build layers and functions
-npm run build:layers
-
-# Upload artifacts to S3
-aws s3 cp build/dependencies-layer.zip s3://your-bucket/dev/layers/
-aws s3 cp build/common-layer.zip s3://your-bucket/dev/layers/
-aws s3 cp build/payment-webhook-handler.zip s3://your-bucket/dev/functions/
-aws s3 cp build/outbox-processor.zip s3://your-bucket/dev/functions/
-aws s3 cp build/outbox-cleanup.zip s3://your-bucket/dev/functions/
-
-# Deploy stack
-aws cloudformation deploy \
-  --template-file cloudformation.yaml \
-  --stack-name ticketbottle-payment-lambdas-dev \
-  --parameter-overrides \
-    Environment=dev \
-    VpcId=vpc-xxx \
-    PrivateSubnetIds=subnet-xxx,subnet-yyy \
-    DatabaseUrl=postgresql://... \
-    # ... other parameters
-  --capabilities CAPABILITY_IAM
 ```
 
 ## Environment Variables

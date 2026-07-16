@@ -13,11 +13,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "local:setup": "./scripts/localstack-setup.sh",
     "local:deploy": "./scripts/deploy-to-dev-compose.sh",
-    "local:teardown": "./scripts/localstack-teardown.sh",
-    "local:test": "./scripts/integration-test.sh",
-    "local:debug": "./scripts/debug-lambda.sh",
     "local:logs": "awslocal logs tail /aws/lambda/payment-webhook-handler --follow",
     "local:logs:processor": "awslocal logs tail /aws/lambda/outbox-processor --follow",
     "local:logs:cleanup": "awslocal logs tail /aws/lambda/outbox-cleanup --follow"
