@@ -33,7 +33,7 @@ Rung 1.5 replaces **only those two** with **LocalStack-backed AWS services**, le
 - No changes to app business logic, the saga, or the gRPC services. Config + operations + reviving the existing Lambda code only.
 - No deploying these Lambdas to **real** AWS in this rung (that's a later Rung-2/3 serverless extension).
 - No unit tests — verification is the end-to-end purchase flow (Gate 1.5).
-- LocalStack **Pro** as a standing dependency — **community** is the target; Pro only if community can't attach Lambda layers.
+- Supporting LocalStack **community** as the default — this rung uses **LocalStack Pro (student token)**, which the author already has (free via the LocalStack student program, token in `development/envs/.env.localstack`) and which the existing lambda deploy script already requires for layers.
 
 ---
 
@@ -133,7 +133,7 @@ Full purchase flow green on the **kind cluster with the `values-localstack` over
 
 ## 8. Cost, edition, risks
 
-- **Cost: $0.** LocalStack **community** (Lambda + API Gateway + DynamoDB + EventBridge all supported); fall back to **Pro** only if community can't publish/attach layers.
+- **Cost: $0.** **LocalStack Pro (student token)** is the default edition — the author has a free student Pro token (already in `development/envs/.env.localstack`), so Pro stays $0. Pro supports Lambda layers natively (the existing `deploy-to-dev-compose.sh` already requires `edition=pro`), so no community layer-bundling workaround is needed.
 - **The 4 GB VPS is not used here** — it remains reserved as the future Rung-2 remote box.
 
 | Risk | Mitigation |
@@ -141,7 +141,7 @@ Full purchase flow green on the **kind cluster with the `values-localstack` over
 | Pod → LocalStack (hop 1) reachability | LocalStack static IP on the `kind` net + k8s `Service`/`Endpoints`; validated by an isolated DynamoDB smoke before the full flow. |
 | Lambda → kind Postgres/Redpanda (hops 2–3) | NodePorts + Lambdas on the `kind` net (reach the node container); Redpanda external advertised listener; each hop smoke-tested in isolation. |
 | Redpanda dual-listener misconfig | Add the external listener without touching the working internal one; internal clients unchanged; verified by `rpk` + the existing flow. |
-| Community LocalStack can't attach Lambda layers | Fall back to Pro, or bundle deps into each function zip. Isolated to lambda-deploy. |
+| LocalStack Pro (student) token invalid/expired | Verify the token activates `edition=pro` before deploying Lambdas; refresh via the LocalStack student program if needed. |
 | Signing a valid ZaloPay webhook in the gate | `mac = HMAC_SHA256(data, ZALOPAY_KEY2)` from `env.localstack.json`; minted in the harness like the checkout JWT already is. |
 | Committed Lambda `build/` zips stale | Rebuilt clean (`npm run build:layers`, Node 20) with the `rhel-openssl-3.0.x` Prisma engine before deploy. |
 
@@ -149,7 +149,7 @@ Full purchase flow green on the **kind cluster with the `values-localstack` over
 
 ## 9. Open decisions / deferred
 
-- **Confirmed:** LocalStack = host-side container (not a kind pod); community edition first; deploy all 3 Lambdas, gate on webhook + processor; keep plain kind mode as default.
+- **Confirmed:** LocalStack = host-side container (not a kind pod); **Pro (student token) is the default edition**; deploy all 3 Lambdas, gate on webhook + processor; keep plain kind mode as default.
 - **Deferred to the plan:** exact NodePort numbers + the Redpanda external-listener stanza; whether order-svc reaches LocalStack via the `Service`/`Endpoints` name or a direct static IP (default: Service/Endpoints); PayOS path (default: ZaloPay only for the gate).
 - **Later / not built here:** deploying these Lambdas to real AWS (Rung-2/3 serverless extension); cleaning up the legacy `development/` compose dir (separate housekeeping).
 
