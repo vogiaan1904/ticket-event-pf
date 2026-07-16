@@ -49,3 +49,8 @@ order:
 temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility — spec §4
+
+localstack:
+  expose: false
+  ip: 172.18.0.100
+  postgresNodePort: 31432
