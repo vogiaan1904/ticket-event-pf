@@ -27,6 +27,7 @@ redpanda:
   storage: 2Gi
 
 dynamodb:
+  enabled: true
   image: amazon/dynamodb-local:2.5.2
   awsCliImage: amazon/aws-cli:2.17.0
   tableName: ticketbottle-orders

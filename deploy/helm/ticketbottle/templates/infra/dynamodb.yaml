@@ -1,3 +1,4 @@
+{{- if .Values.dynamodb.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -78,3 +79,4 @@ spec:
                 --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
               aws dynamodb wait table-exists --endpoint-url "$EP" --table-name "$TABLE"
               echo "table $TABLE created"
+{{- end }}
