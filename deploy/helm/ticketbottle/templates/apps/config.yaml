@@ -120,10 +120,10 @@ data:
   SERVER_IDLE_TIMEOUT: 60s
   PAYMENT_TIMEOUT_SECONDS: "600"
   DYNAMODB_TABLE_NAME: ticketbottle-orders
-  AWS_REGION: us-east-1
-  DYNAMODB_ENDPOINT: http://dynamodb:8000
-  AWS_ACCESS_KEY_ID: local
-  AWS_SECRET_ACCESS_KEY: local
+  AWS_REGION: {{ .Values.order.awsRegion | quote }}
+  DYNAMODB_ENDPOINT: {{ .Values.order.dynamodbEndpoint | quote }}
+  AWS_ACCESS_KEY_ID: {{ .Values.order.awsAccessKeyId | quote }}
+  AWS_SECRET_ACCESS_KEY: {{ .Values.order.awsSecretAccessKey | quote }}
   TEMPORAL_HOST_PORT: temporal:7233
   TEMPORAL_NAMESPACE: default
   JWT_SECRET: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc

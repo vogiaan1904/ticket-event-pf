@@ -36,6 +36,12 @@ dynamodb:
 paymentEvents:
   enabled: true
 
+order:
+  dynamodbEndpoint: http://dynamodb:8000
+  awsRegion: us-east-1
+  awsAccessKeyId: local
+  awsSecretAccessKey: local
+
 temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility — spec §4
