@@ -1,0 +1,30 @@
+# Rung 1.5 — host-side LocalStack for the AWS-native services only.
+# Runs OUTSIDE kind, attached to the `kind` docker network with a static IP so
+# (a) kind pods reach it via the k8s `localstack` Service/Endpoints, and
+# (b) the Lambdas it spawns (LAMBDA_DOCKER_NETWORK=kind) reach kind NodePorts.
+# Requires: kind cluster up (the `kind` network exists) + LOCALSTACK_AUTH_TOKEN
+# (student Pro), e.g. `export $(grep LOCALSTACK_AUTH_TOKEN ../../development/envs/.env.localstack)`.
+services:
+  localstack:
+    image: localstack/localstack-pro:stable
+    container_name: ticketbottle-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=dynamodb,lambda,apigateway,events,iam,sts,logs,s3
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN}
+      - DEBUG=1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_DOCKER_NETWORK=kind          # Lambdas join the kind net -> reach the node's NodePorts
+      - LAMBDA_LAYERS_SUPPORT=1
+      - LAMBDA_RUNTIME_ENVIRONMENT_TIMEOUT=60
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+      - "../../services/payment-svc/lambdas/build:/build"
+      - "../../services/order-svc/scripts/init-dynamodb.sh:/etc/localstack/init/ready.d/init-dynamodb.sh"
+    networks:
+      kind:
+        ipv4_address: 172.18.0.100
+networks:
+  kind:
+    external: true
