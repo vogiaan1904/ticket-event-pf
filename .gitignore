@@ -14,7 +14,7 @@ Thumbs.db
 *.code-workspace
 
 # --- Secrets / environment ------------------------------------------------
-# Never commit real env files (development/envs/.env.* contain credentials).
+# Never commit real env files (deploy/localstack/.env + service env files contain credentials).
 .env
 .env.*
 *.env
