@@ -25,6 +25,10 @@ redis:
 redpanda:
   image: redpandadata/redpanda:v24.2.7
   storage: 2Gi
+  external:
+    enabled: false
+    advertisedHost: ticketbottle-control-plane
+    nodePort: 31094
 
 dynamodb:
   enabled: true
