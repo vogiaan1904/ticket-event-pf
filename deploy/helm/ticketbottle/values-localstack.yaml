@@ -1,0 +1,19 @@
+# Rung 1.5 overlay: layer ON TOP of values-local.yaml.
+#   helm upgrade tb deploy/helm/ticketbottle -n ticketbottle \
+#     -f deploy/helm/ticketbottle/values-local.yaml \
+#     -f deploy/helm/ticketbottle/values-localstack.yaml
+dynamodb:
+  enabled: false            # order-svc uses LocalStack DynamoDB instead
+paymentEvents:
+  enabled: false            # real Lambdas replace the adapter
+localstack:
+  expose: true
+  ip: 172.18.0.100          # LocalStack's static IP on the `kind` docker net (Task C1 confirms)
+  postgresNodePort: 31432
+redpanda:
+  external:
+    enabled: true
+    advertisedHost: ticketbottle-control-plane
+    nodePort: 31094
+order:
+  dynamodbEndpoint: http://localstack.ticketbottle.svc.cluster.local:4566
