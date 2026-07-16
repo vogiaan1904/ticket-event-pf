@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Gate-1: full purchase flow on kind.
+# Gate 1.5: full purchase flow on kind, payment via the host-LocalStack Lambda path.
 # register -> create event -> create event config -> publish event -> seed ticket class
 #   -> join waitroom -> (admission) read checkout token from Redis -> create order
-#   -> trigger payment webhook -> poll order until COMPLETED.
+#   -> ZaloPay-signed webhook to API Gateway -> payment-webhook-handler Lambda
+#   -> invoke outbox-processor Lambda -> poll order until COMPLETED.
 #
 # Field names below are pinned from the gateway DTOs/mappers and the Go services
 # (see the plan's Task-4 notes). Two hops bypass missing HTTP surface, matching the
@@ -27,7 +28,7 @@ for k in sys.argv[1].split('.'):
     d=d[k]
 print(d)" "$1" 2>/dev/null || true; }
 
-fail() { echo "GATE 1 FAILED: $1"; exit 1; }
+fail() { echo "GATE 1.5 FAILED: $1"; exit 1; }
 
 echo "== 1. register =="
 EMAIL="gate1+$(date +%s)@example.com"
@@ -117,7 +118,8 @@ ORDER_CODE=$(echo "$ORD" | getval data.order.code)
 echo "  orderCode=$ORDER_CODE"
 
 echo "== 9. fire ZaloPay-signed webhook -> API Gateway -> payment-webhook-handler Lambda =="
-LS_ENV="$(cd "$(dirname "$0")/../../services/payment-svc/lambdas" && pwd)/envs/env.localstack.json"
+# read KEY2 from the SAME env the Lambdas were deployed with (single source of truth)
+LS_ENV="$HERE/env.lambdas.json"
 API_ID=$(awslocal apigateway get-rest-apis --query 'items[?name==`ticketbottle-webhooks`].id | [0]' --output text)
 [ -n "$API_ID" ] && [ "$API_ID" != "None" ] || fail "API Gateway ticketbottle-webhooks not found"
 API_ENDPOINT="http://localhost:4566/restapis/$API_ID/dev/_user_request_"

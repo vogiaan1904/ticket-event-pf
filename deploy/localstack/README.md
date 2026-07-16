@@ -58,6 +58,11 @@ make revert        # back to plain kind mode (dynamodb-local + adapter) + restar
 
 ## Gotchas learned the hard way
 
+- **Static IP assumes the `kind` network is `172.18.0.0/16`.** `docker-compose.yml` pins
+  `172.18.0.100` and `values-localstack.yaml`'s `localstack.ip` must match it. On a machine
+  where Docker gave the `kind` network a different subnet, run
+  `docker network inspect kind -f '{{(index .IPAM.Config 0).Subnet}}'`, pick a free host
+  address in that subnet, and update the IP in **both** files.
 - **Lambda runtime must be AMD64.** The functions default to `x86_64`, and the Prisma
   engine baked into the layer is `rhel-openssl-3.0.x` (amd64). So LocalStack needs the
   **amd64** runtime image (`make runtime-image`), which runs *emulated* on Apple Silicon
