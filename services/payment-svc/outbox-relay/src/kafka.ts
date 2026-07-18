@@ -2,7 +2,7 @@ export { getKafkaProducer, disconnectKafka, publishWithRetry } from '../../lambd
 
 import { publishWithRetry } from '../../lambdas/common/kafka/producer';
 import { KAFKA_TOPICS } from '../../lambdas/common/constants/kafka-topics';
-import type { OutboxRow } from '../../lambdas/common/db/outbox.repo';
+import type { OutboxRow } from './db';
 
 export const topicFor = (eventType: string): string => {
   switch (eventType) {

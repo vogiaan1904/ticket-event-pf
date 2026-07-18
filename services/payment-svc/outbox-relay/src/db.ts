@@ -14,9 +14,14 @@ const MAX_RETRIES = Number(process.env.OUTBOX_MAX_RETRIES ?? 5);
 // transaction: claim (FOR UPDATE SKIP LOCKED) -> publish -> mark, then commit.
 // Looping inside composeDrain (rather than relying solely on LISTEN/safety-poll
 // retriggers) means a single wakeup fully drains a large backlog immediately.
+// A batch with any publish failures stops the loop instead of re-claiming
+// instantly: the failed rows are still SKIP LOCKED-eligible, so an instant
+// re-claim would just re-fail them back-to-back with no delay, burning through
+// maxRetries in milliseconds. Stopping here defers the retry to the next
+// NOTIFY/safety-poll trigger, which spreads retries out over time.
 export const composeDrain = () => async (): Promise<void> => {
   for (;;) {
-    const processed = await getDb()
+    const result = await getDb()
       .transaction()
       .execute((trx) =>
         drainOnce({
@@ -27,8 +32,8 @@ export const composeDrain = () => async (): Promise<void> => {
           topicFor,
           batchSize: BATCH,
           maxRetries: MAX_RETRIES,
-        }).then((r) => r.processed),
+        }),
       );
-    if (processed === 0) break;
+    if (result.processed === 0 || result.failed > 0) break;
   }
 };
