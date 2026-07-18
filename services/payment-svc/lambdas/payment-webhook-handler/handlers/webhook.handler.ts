@@ -1,9 +1,9 @@
-import { getPrismaClient } from '@/common/database/prisma';
+import { getDb } from '@/common/db/kysely';
 import { logger } from '@/common/logger';
+import { randomUUID } from 'crypto';
 import { EventType, PaymentCompletedEvent } from '@/common/types/event.types';
 import { PaymentProvider } from '@/common/types/payment.types';
 import { handleError, PaymentProviderError, ValidationError } from '@/common/utils/error-handler';
-import { PaymentStatus } from '@prisma/client';
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { PaymentGatewayInterface } from '../gateways/gateway.interface';
 import { PayOSGateway } from '../gateways/payos/payos.gateway';
@@ -53,6 +53,54 @@ const extractOrderCode = (provider: PaymentProvider, appTransId: string): string
   return appTransId;
 };
 
+// Returns true if THIS call performed the transition (and wrote the outbox row).
+// Concurrent duplicates hit the `status = 'PENDING'` guard, match 0 rows, and no-op.
+export const completePaymentAndEnqueue = async (
+  orderCode: string,
+  providerTransactionId: string | undefined,
+): Promise<boolean> =>
+  getDb().transaction().execute(async (trx) => {
+    const now = new Date();
+    const updated = await trx
+      .updateTable('payments')
+      .set({
+        status: 'COMPLETED',
+        completedAt: now,
+        updatedAt: now,
+        ...(providerTransactionId ? { providerTransactionId } : {}),
+      })
+      .where('orderCode', '=', orderCode)
+      .where('status', '=', 'PENDING')
+      .returning(['id', 'orderCode', 'amountCents', 'currency', 'provider', 'providerTransactionId'])
+      .executeTakeFirst();
+
+    if (!updated) return false; // already completed OR not found -> idempotent no-op
+
+    const payload: PaymentCompletedEvent = {
+      payment_id: updated.id,
+      order_code: updated.orderCode,
+      amount_cents: updated.amountCents,
+      currency: updated.currency,
+      provider: updated.provider,
+      transaction_id: updated.providerTransactionId ?? '',
+      completed_at: now.toISOString(),
+    };
+
+    await trx
+      .insertInto('outbox')
+      .values({
+        id: randomUUID(), // no DB-level default on outbox.id
+        aggregateId: updated.id,
+        aggregateType: 'payment',
+        eventType: EventType.PAYMENT_COMPLETED,
+        payload: JSON.stringify(payload),
+        retryCount: 0,
+      })
+      .execute();
+
+    return true;
+  });
+
 export const handleWebhook = async (
   event: APIGatewayProxyEvent,
 ): Promise<APIGatewayProxyResult> => {
@@ -91,82 +139,23 @@ export const handleWebhook = async (
       const callbackData = JSON.parse(body.data);
       orderCode = extractOrderCode(provider, callbackData.app_trans_id);
     } else if (provider === PaymentProvider.PAYOS) {
-      const numericOrderCode = body.data.orderCode;
-
-      const prisma = getPrismaClient();
-      const payment = await prisma.payment.findFirst({
-        where: {
-          providerTransactionId: callbackResult.providerTransactionId,
-        },
-      });
-
-      if (!payment) {
-        throw new ValidationError(
-          `Payment not found for transaction ${callbackResult.providerTransactionId}`,
-        );
-      }
-
+      const payment = await getDb()
+        .selectFrom('payments')
+        .select('orderCode')
+        .where('providerTransactionId', '=', callbackResult.providerTransactionId!)
+        .executeTakeFirst();
+      if (!payment) throw new ValidationError(`Payment not found for transaction ${callbackResult.providerTransactionId}`);
       orderCode = payment.orderCode;
     } else {
       throw new ValidationError(`Unsupported provider: ${provider}`);
     }
 
-    const prisma = getPrismaClient();
-
-    await prisma.$transaction(async (tx: any) => {
-      const payment = await tx.payment.findUnique({
-        where: { orderCode },
-      });
-
-      if (!payment) {
-        throw new ValidationError(`Payment not found for order ${orderCode}`);
-      }
-
-      if (payment.status === PaymentStatus.COMPLETED) {
-        logger.warn('Payment already completed, skipping update', {
-          orderCode,
-          paymentId: payment.id,
-          requestId,
-        });
-        return;
-      }
-
-      await tx.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: PaymentStatus.COMPLETED,
-          providerTransactionId:
-            callbackResult.providerTransactionId || payment.providerTransactionId,
-          completedAt: new Date(),
-          updatedAt: new Date(),
-        },
-      });
-
-      const eventPayload: PaymentCompletedEvent = {
-        payment_id: payment.id,
-        order_code: payment.orderCode,
-        amount_cents: payment.amountCents,
-        currency: payment.currency,
-        provider: payment.provider,
-        transaction_id: callbackResult.providerTransactionId || payment.providerTransactionId || '',
-        completed_at: (payment.completedAt || new Date()).toISOString(),
-      };
-
-      await tx.outbox.create({
-        data: {
-          aggregateId: payment.id,
-          aggregateType: 'payment',
-          eventType: EventType.PAYMENT_COMPLETED,
-          payload: eventPayload as any,
-          retryCount: 0,
-        },
-      });
-
-      logger.info('Payment completed', {
-        orderCode,
-        requestId,
-      });
-    });
+    const didComplete = await completePaymentAndEnqueue(orderCode, callbackResult.providerTransactionId);
+    if (!didComplete) {
+      logger.warn('Payment already completed or not found, skipping', { orderCode, requestId });
+    } else {
+      logger.info('Payment completed', { orderCode, requestId });
+    }
 
     return {
       statusCode: 200,
