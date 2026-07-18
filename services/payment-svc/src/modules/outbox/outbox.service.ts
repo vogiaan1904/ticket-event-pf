@@ -35,7 +35,6 @@ export class OutboxService {
           aggregateType,
           eventType,
           payload: payload as Prisma.JsonObject,
-          published: false,
           retryCount: 0,
         },
       });
@@ -97,7 +96,7 @@ export class OutboxService {
   async getUnpublishedEvents(limit: number = 100, maxRetries: number = 5): Promise<Outbox[]> {
     return this.prisma.outbox.findMany({
       where: {
-        published: false,
+        publishedAt: null,
         retryCount: {
           lt: maxRetries,
         },
@@ -116,7 +115,6 @@ export class OutboxService {
     await this.prisma.outbox.update({
       where: { id },
       data: {
-        published: true,
         publishedAt: new Date(),
       },
     });
@@ -151,7 +149,6 @@ export class OutboxService {
 
     const result = await this.prisma.outbox.deleteMany({
       where: {
-        published: true,
         publishedAt: {
           lt: cutoffDate,
         },
@@ -171,7 +168,7 @@ export class OutboxService {
   async getFailedEvents(maxRetries: number = 5): Promise<Outbox[]> {
     return this.prisma.outbox.findMany({
       where: {
-        published: false,
+        publishedAt: null,
         retryCount: {
           gte: maxRetries,
         },
