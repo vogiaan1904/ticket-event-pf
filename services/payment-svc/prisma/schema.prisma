@@ -49,16 +49,14 @@ enum Currency {
 
 model Outbox {
   id            String    @id @default(uuid())
-  aggregateId   String // Payment ID, Order Code, etc.
-  aggregateType String // "Payment", "Order", etc.
-  eventType     String // "PaymentCompleted", "PaymentFailed", etc.
-  payload       Json // Event data
-  published     Boolean   @default(false)
+  aggregateId   String
+  aggregateType String
+  eventType     String
+  payload       Json
   publishedAt   DateTime?
   createdAt     DateTime  @default(now())
   retryCount    Int       @default(0)
   lastError     String?
 
-  @@index([published, createdAt])
   @@map("outbox")
 }
