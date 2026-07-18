@@ -1,7 +1,21 @@
 {
   "compilerOptions": {
-    "target": "ES2022", "module": "CommonJS", "outDir": "dist", "rootDir": "src",
-    "strict": true, "esModuleInterop": true, "skipLibCheck": true, "resolveJsonModule": true
+    "target": "ES2022",
+    "module": "CommonJS",
+    "rootDir": "..",
+    "outDir": "dist",
+    "strict": true,
+    "strictNullChecks": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*"]
+  "include": [
+    "src/**/*",
+    "../lambdas/common/db/**/*",
+    "../lambdas/common/kafka/**/*",
+    "../lambdas/common/logger/**/*",
+    "../lambdas/common/constants/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "../lambdas/common/db/__tests__"]
 }

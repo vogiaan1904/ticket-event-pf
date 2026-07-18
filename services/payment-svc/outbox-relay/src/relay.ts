@@ -1,10 +1,4 @@
-export interface OutboxRow {
-  id: string;
-  aggregateId: string;
-  aggregateType: string;
-  eventType: string;
-  payload: unknown;
-}
+import type { OutboxRow } from './db';
 
 export interface DrainDeps {
   claim: (limit: number, maxRetries: number) => Promise<OutboxRow[]>;
