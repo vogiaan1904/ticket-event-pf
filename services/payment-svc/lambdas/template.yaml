@@ -209,6 +209,15 @@ Resources:
         Variables:
           OUTBOX_MAX_RETRIES: '3'
           OUTBOX_RETENTION_DAYS: !If [IsProduction, '30', '7']
+          OUTBOX_DLQ_URL: !Ref OutboxDlq
+      Policies:
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt OutboxDlq.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: '*'
       Events:
         ScheduleEvent:
           Type: Schedule
@@ -216,6 +225,29 @@ Resources:
             Schedule: rate(1 day)
             Description: Clean up outbox events daily
             Enabled: true
+
+  # ============================================================
+  # Outbox Failed-Events DLQ + Alarm
+  # ============================================================
+  OutboxDlq:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ticketbottle-outbox-dlq-${Environment}
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  OutboxFailedAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub ticketbottle-outbox-failed-${Environment}
+      AlarmDescription: Outbox events exhausted their retries and were routed to the DLQ
+      Namespace: TicketBottle/Payment
+      MetricName: OutboxFailedEvents
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
 
 Outputs:
   WebhookApiUrl:
@@ -237,3 +269,7 @@ Outputs:
   OutboxCleanupArn:
     Description: Outbox cleanup Lambda ARN
     Value: !GetAtt OutboxCleanupFunction.Arn
+
+  OutboxDlqUrl:
+    Description: DLQ for outbox events that exhausted their retries
+    Value: !Ref OutboxDlq

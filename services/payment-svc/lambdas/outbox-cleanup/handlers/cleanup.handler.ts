@@ -1,239 +1,170 @@
 import { EventBridgeEvent } from 'aws-lambda';
-import { getPrismaClient } from '@/common/database/prisma';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
+import { CloudWatchClient, PutMetricDataCommand } from '@aws-sdk/client-cloudwatch';
+import { getDb } from '@/common/db/kysely';
 import { logger } from '@/common/logger';
 import { getConfig } from '@/common/config';
 
+const sqsClient = new SQSClient({});
+const cloudWatchClient = new CloudWatchClient({});
+
+const METRIC_NAMESPACE = 'TicketBottle/Payment';
+const METRIC_NAME = 'OutboxFailedEvents';
+
+export interface FailedRow {
+  id: string;
+  aggregateId: string;
+  eventType: string;
+  retryCount: number;
+  lastError: string | null;
+}
+
+export interface RouteDeps {
+  sendMessage: (input: { QueueUrl: string; MessageBody: string }) => Promise<unknown>;
+  putMetric: (m: { value: number }) => Promise<unknown>;
+  dlqUrl: string;
+}
+
+export const routeExhaustedEvents = async (failed: FailedRow[], deps: RouteDeps): Promise<void> => {
+  await deps.putMetric({ value: failed.length });
+  for (const row of failed) {
+    await deps.sendMessage({ QueueUrl: deps.dlqUrl, MessageBody: JSON.stringify(row) });
+  }
+  if (failed.length > 0) {
+    logger.error('Outbox events exhausted retries -> DLQ', { count: failed.length });
+  }
+};
+
+const getDlqUrl = (): string => {
+  const url = process.env.OUTBOX_DLQ_URL;
+  if (!url) throw new Error('OUTBOX_DLQ_URL is required');
+  return url;
+};
+
 const deleteOldEvents = async (): Promise<number> => {
   const config = getConfig();
-  const prisma = getPrismaClient();
+  const db = getDb();
 
   const retentionDays = config.outbox.retentionDays;
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - retentionDays);
 
-  try {
-    const result = await prisma.outbox.deleteMany({
-      where: {
-        publishedAt: {
-          not: null,
-          lt: cutoffDate,
-        },
-      },
-    });
+  const result = await db
+    .deleteFrom('outbox')
+    .where('publishedAt', 'is not', null)
+    .where('publishedAt', '<', cutoffDate)
+    .executeTakeFirst();
 
-    logger.info('Old outbox events deleted', {
-      count: result.count,
-      retentionDays,
-    });
+  const count = Number(result.numDeletedRows);
 
-    return result.count;
-  } catch (error) {
-    logger.error('Failed to delete old outbox events', {
-      error: error instanceof Error ? error.message : String(error),
-    });
+  logger.info('Old outbox events deleted', { count, retentionDays });
 
-    throw error;
-  }
+  return count;
 };
 
-const findFailedEvents = async (): Promise<
-  Array<{
-    id: string;
-    aggregateId: string;
-    aggregateType: string;
-    eventType: string;
-    retryCount: number;
-    lastError: string | null;
-    createdAt: Date;
-  }>
-> => {
+const findFailedEvents = async (): Promise<FailedRow[]> => {
   const config = getConfig();
-  const prisma = getPrismaClient();
+  const db = getDb();
 
-  const maxRetries = config.outbox.maxRetries;
-
-  try {
-    const failedEvents = await prisma.outbox.findMany({
-      where: {
-        publishedAt: null,
-        retryCount: {
-          gte: maxRetries,
-        },
-      },
-      select: {
-        id: true,
-        aggregateId: true,
-        aggregateType: true,
-        eventType: true,
-        retryCount: true,
-        lastError: true,
-        createdAt: true,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-    });
-
-    return failedEvents;
-  } catch (error) {
-    logger.error('Failed to find failed outbox events', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    throw error;
-  }
+  return db
+    .selectFrom('outbox')
+    .select(['id', 'aggregateId', 'eventType', 'retryCount', 'lastError'])
+    .where('publishedAt', 'is', null)
+    .where('retryCount', '>=', config.outbox.maxRetries)
+    .orderBy('createdAt', 'asc')
+    .execute();
 };
 
-const monitorFailedEvents = async (
-  failedEvents: Array<{
-    id: string;
-    aggregateId: string;
-    aggregateType: string;
-    eventType: string;
-    retryCount: number;
-    lastError: string | null;
-    createdAt: Date;
-  }>,
-): Promise<void> => {
-  if (failedEvents.length === 0) {
-    return;
-  }
-
-  // TODOs in production:
-  // 1. Send alerts to CloudWatch Alarms
-  // 2. Send notifications to SNS topics
-  // 3. Create tickets in issue tracking system
-  // 4. Send to dead letter queue for manual intervention
-
-  logger.error('Outbox events exceeded retry limit', {
-    count: failedEvents.length,
-    events: failedEvents.map((e) => ({
-      id: e.id,
-      aggregateId: e.aggregateId,
-      eventType: e.eventType,
-      retryCount: e.retryCount,
-      lastError: e.lastError,
-      age: Math.floor((Date.now() - e.createdAt.getTime()) / 1000 / 60), // Age in minutes
-    })),
-  });
-
-  logger.warn(
-    `ALERT: ${failedEvents.length} outbox events failed to publish after ${failedEvents[0]?.retryCount} retries. Manual intervention may be required.`,
-  );
-};
-
-const getCleanupStats = async (): Promise<{
+export interface CleanupStats {
   totalEvents: number;
   publishedEvents: number;
   pendingEvents: number;
   failedEvents: number;
   oldestPendingAge: number | null;
-}> => {
+}
+
+const getCleanupStats = async (): Promise<CleanupStats> => {
   const config = getConfig();
-  const prisma = getPrismaClient();
+  const db = getDb();
+  const maxRetries = config.outbox.maxRetries;
 
-  try {
-    // Get total events count
-    const totalEvents = await prisma.outbox.count();
+  const [totalRow, publishedRow, pendingRow, failedRow] = await Promise.all([
+    db
+      .selectFrom('outbox')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom('outbox')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where('publishedAt', 'is not', null)
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom('outbox')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where('publishedAt', 'is', null)
+      .where('retryCount', '<', maxRetries)
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom('outbox')
+      .select((eb) => eb.fn.countAll<number>().as('count'))
+      .where('publishedAt', 'is', null)
+      .where('retryCount', '>=', maxRetries)
+      .executeTakeFirstOrThrow(),
+  ]);
 
-    // Get published events count
-    const publishedEvents = await prisma.outbox.count({
-      where: {
-        publishedAt: { not: null },
-      },
-    });
+  const oldestPending = await db
+    .selectFrom('outbox')
+    .select('createdAt')
+    .where('publishedAt', 'is', null)
+    .orderBy('createdAt', 'asc')
+    .executeTakeFirst();
 
-    // Get pending events count
-    const pendingEvents = await prisma.outbox.count({
-      where: {
-        publishedAt: null,
-        retryCount: { lt: config.outbox.maxRetries },
-      },
-    });
+  const oldestPendingAge = oldestPending
+    ? Math.floor((Date.now() - oldestPending.createdAt.getTime()) / 1000 / 60)
+    : null;
 
-    // Get failed events count
-    const failedEvents = await prisma.outbox.count({
-      where: {
-        publishedAt: null,
-        retryCount: { gte: config.outbox.maxRetries },
-      },
-    });
-
-    // Get oldest pending event
-    const oldestPending = await prisma.outbox.findFirst({
-      where: {
-        publishedAt: null,
-      },
-      orderBy: {
-        createdAt: 'asc',
-      },
-      select: {
-        createdAt: true,
-      },
-    });
-
-    const oldestPendingAge = oldestPending
-      ? Math.floor((Date.now() - oldestPending.createdAt.getTime()) / 1000 / 60)
-      : null;
-
-    return {
-      totalEvents,
-      publishedEvents,
-      pendingEvents,
-      failedEvents,
-      oldestPendingAge,
-    };
-  } catch (error) {
-    logger.error('Failed to get cleanup stats', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    throw error;
-  }
+  return {
+    totalEvents: Number(totalRow.count),
+    publishedEvents: Number(publishedRow.count),
+    pendingEvents: Number(pendingRow.count),
+    failedEvents: Number(failedRow.count),
+    oldestPendingAge,
+  };
 };
 
 export const performCleanup = async (): Promise<{
   deleted: number;
   failedCount: number;
-  stats: {
-    totalEvents: number;
-    publishedEvents: number;
-    pendingEvents: number;
-    failedEvents: number;
-    oldestPendingAge: number | null;
-  };
+  stats: CleanupStats;
 }> => {
-  try {
-    // Delete old published events
-    const deleted = await deleteOldEvents();
+  const deleted = await deleteOldEvents();
+  const failedEvents = await findFailedEvents();
 
-    // Find failed events
-    const failedEvents = await findFailedEvents();
+  await routeExhaustedEvents(failedEvents, {
+    sendMessage: (input) => sqsClient.send(new SendMessageCommand(input)),
+    putMetric: (m) =>
+      cloudWatchClient.send(
+        new PutMetricDataCommand({
+          Namespace: METRIC_NAMESPACE,
+          MetricData: [{ MetricName: METRIC_NAME, Value: m.value, Unit: 'Count' }],
+        }),
+      ),
+    dlqUrl: getDlqUrl(),
+  });
 
-    // Monitor and alert on failed events
-    await monitorFailedEvents(failedEvents);
+  const stats = await getCleanupStats();
 
-    // Get cleanup statistics
-    const stats = await getCleanupStats();
+  logger.info('Outbox cleanup completed', {
+    deleted,
+    failedCount: failedEvents.length,
+    stats,
+  });
 
-    logger.info('Outbox cleanup completed', {
-      deleted,
-      failedCount: failedEvents.length,
-      stats,
-    });
-
-    return {
-      deleted,
-      failedCount: failedEvents.length,
-      stats,
-    };
-  } catch (error) {
-    logger.error('Outbox cleanup failed', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-
-    throw error;
-  }
+  return {
+    deleted,
+    failedCount: failedEvents.length,
+    stats,
+  };
 };
 
 export const handleScheduledEvent = async (

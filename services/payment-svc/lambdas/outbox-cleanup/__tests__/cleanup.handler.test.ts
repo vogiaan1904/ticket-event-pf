@@ -1,342 +1,154 @@
-/**
- * Unit tests for outbox cleanup handler
- */
+import { randomUUID } from 'crypto';
+import { getDb, closeDb } from '@/common/db/kysely';
 
-import { performCleanup } from '../handlers/cleanup.handler';
-import { getPrismaClient } from '@/common/database/prisma';
-import { EventType } from '@/common/types/event.types';
+const mockSqsSend = jest.fn().mockResolvedValue({});
+const mockCwSend = jest.fn().mockResolvedValue({});
 
-// Mock dependencies
-jest.mock('@/common/database/prisma');
+// The dev cluster (kind) runs a live `outbox-relay` pod against this same
+// Postgres. It LISTENs on the outbox table and claims+publishes any
+// unpublished row with retryCount below its real OUTBOX_MAX_RETRIES (5, see
+// deploy/helm/ticketbottle/templates/apps/config.yaml). Every unpublished row
+// seeded below therefore uses a retryCount >= 5 so the relay can never claim
+// it out from under an assertion; "pending" vs "exhausted" is then decided
+// purely by this test's own mocked maxRetries (10).
+const RELAY_IMMUNE_RETRY_COUNT = 5;
+const EXHAUSTED_RETRY_COUNT = 10;
+
+jest.mock('@aws-sdk/client-sqs', () => ({
+  SQSClient: jest.fn().mockImplementation(() => ({ send: mockSqsSend })),
+  SendMessageCommand: jest.fn().mockImplementation((input) => input),
+}));
+jest.mock('@aws-sdk/client-cloudwatch', () => ({
+  CloudWatchClient: jest.fn().mockImplementation(() => ({ send: mockCwSend })),
+  PutMetricDataCommand: jest.fn().mockImplementation((input) => input),
+}));
 jest.mock('@/common/logger');
 jest.mock('@/common/config', () => ({
   getConfig: jest.fn(() => ({
     outbox: {
       batchSize: 10,
-      maxRetries: 3,
+      maxRetries: 10,
       retentionDays: 7,
     },
   })),
 }));
 
-const mockPrismaClient = {
-  outboxEvent: {
-    deleteMany: jest.fn(),
-    findMany: jest.fn(),
-    findFirst: jest.fn(),
-    count: jest.fn(),
-  },
+process.env.OUTBOX_DLQ_URL = 'https://sqs.local/outbox-dlq';
+
+// Imported after the mocks above so the module picks up the mocked AWS clients/config.
+import { performCleanup } from '../handlers/cleanup.handler';
+
+type SeedRow = {
+  id?: string;
+  aggregateId?: string;
+  aggregateType?: string;
+  eventType?: string;
+  retryCount?: number;
+  lastError?: string | null;
+  publishedAt?: Date | null;
+  createdAt?: Date;
 };
 
-(getPrismaClient as jest.Mock).mockReturnValue(mockPrismaClient);
+const seedOutboxRow = ({
+  id = randomUUID(),
+  aggregateId = 'payment-1',
+  aggregateType = 'payment',
+  eventType = 'PaymentCompleted',
+  retryCount = RELAY_IMMUNE_RETRY_COUNT,
+  lastError = null,
+  publishedAt = null,
+  createdAt = new Date(),
+}: SeedRow = {}) =>
+  getDb()
+    .insertInto('outbox')
+    .values({
+      id,
+      aggregateId,
+      aggregateType,
+      eventType,
+      payload: JSON.stringify({}),
+      retryCount,
+      lastError,
+      publishedAt,
+      createdAt,
+    })
+    .execute();
 
-describe('Outbox Cleanup Handler', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+afterAll(async () => {
+  await closeDb();
+});
+
+beforeEach(async () => {
+  jest.clearAllMocks();
+  await getDb().deleteFrom('outbox').execute();
+});
+
+describe('performCleanup', () => {
+  it('deletes published events older than the retention window', async () => {
+    const oldCutoff = new Date();
+    oldCutoff.setDate(oldCutoff.getDate() - 10);
+
+    await seedOutboxRow({ id: 'old-published', publishedAt: oldCutoff });
+    await seedOutboxRow({ id: 'recent-published', publishedAt: new Date() });
+    await seedOutboxRow({ id: 'unpublished', publishedAt: null });
+
+    const result = await performCleanup();
+
+    expect(result.deleted).toBe(1);
+    const remainingIds = await getDb().selectFrom('outbox').select('id').execute();
+    expect(remainingIds.map((r) => r.id).sort()).toEqual(['recent-published', 'unpublished']);
   });
 
-  describe('performCleanup', () => {
-    it('should successfully delete old published events', async () => {
-      // Mock delete result
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 150 });
+  it('routes exhausted-retry events to the DLQ and reports the count', async () => {
+    await seedOutboxRow({ id: 'exhausted-1', retryCount: EXHAUSTED_RETRY_COUNT, lastError: 'boom' });
+    await seedOutboxRow({ id: 'exhausted-2', retryCount: EXHAUSTED_RETRY_COUNT + 2, lastError: 'still boom' });
+    await seedOutboxRow({ id: 'still-retrying', retryCount: RELAY_IMMUNE_RETRY_COUNT });
 
-      // Mock no failed events
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
+    const result = await performCleanup();
 
-      // Mock stats
-      mockPrismaClient.outboxEvent.count
-        .mockResolvedValueOnce(500) // total events
-        .mockResolvedValueOnce(400) // published events
-        .mockResolvedValueOnce(90) // pending events
-        .mockResolvedValueOnce(10); // failed events
+    expect(result.failedCount).toBe(2);
+    expect(mockSqsSend).toHaveBeenCalledTimes(2);
+    expect(mockCwSend).toHaveBeenCalledWith(
+      expect.objectContaining({ MetricData: [expect.objectContaining({ MetricName: 'OutboxFailedEvents', Value: 2 })] }),
+    );
+  });
 
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue({
-        createdAt: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
-      });
+  it('emits a zero-value metric and sends nothing when no events are exhausted', async () => {
+    await seedOutboxRow({ id: 'still-retrying', retryCount: RELAY_IMMUNE_RETRY_COUNT });
 
-      const result = await performCleanup();
+    const result = await performCleanup();
 
-      expect(result.deleted).toBe(150);
-      expect(result.failedCount).toBe(0);
-      expect(result.stats).toEqual({
-        totalEvents: 500,
-        publishedEvents: 400,
-        pendingEvents: 90,
-        failedEvents: 10,
-        oldestPendingAge: 5,
-      });
+    expect(result.failedCount).toBe(0);
+    expect(mockSqsSend).not.toHaveBeenCalled();
+    expect(mockCwSend).toHaveBeenCalledWith(
+      expect.objectContaining({ MetricData: [expect.objectContaining({ Value: 0 })] }),
+    );
+  });
 
-      // Verify delete was called with correct filter
-      expect(mockPrismaClient.outboxEvent.deleteMany).toHaveBeenCalledWith({
-        where: {
-          publishedAt: {
-            not: null,
-            lt: expect.any(Date),
-          },
-        },
-      });
-
-      // Verify cutoff date is 7 days ago (within 1 second tolerance)
-      const deleteCall = mockPrismaClient.outboxEvent.deleteMany.mock.calls[0][0];
-      const cutoffDate = deleteCall.where.publishedAt.lt;
-      const expectedCutoff = new Date();
-      expectedCutoff.setDate(expectedCutoff.getDate() - 7);
-      const timeDiff = Math.abs(cutoffDate.getTime() - expectedCutoff.getTime());
-      expect(timeDiff).toBeLessThan(1000); // Within 1 second
+  it('reports cleanup stats across published, pending and failed events', async () => {
+    const published = new Date();
+    await seedOutboxRow({ id: 'published-recent', publishedAt: published });
+    await seedOutboxRow({
+      id: 'pending-1',
+      retryCount: RELAY_IMMUNE_RETRY_COUNT,
+      createdAt: new Date(Date.now() - 5 * 60 * 1000),
     });
+    await seedOutboxRow({ id: 'failed-1', retryCount: EXHAUSTED_RETRY_COUNT });
 
-    it('should find and report failed events', async () => {
-      const failedEvents = [
-        {
-          id: 'failed-1',
-          aggregateId: 'payment-1',
-          aggregateType: 'payment',
-          eventType: EventType.PAYMENT_COMPLETED,
-          retryCount: 5,
-          lastError: 'Kafka timeout',
-          createdAt: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-        },
-        {
-          id: 'failed-2',
-          aggregateId: 'payment-2',
-          aggregateType: 'payment',
-          eventType: EventType.PAYMENT_FAILED,
-          retryCount: 3,
-          lastError: 'Connection refused',
-          createdAt: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        },
-      ];
+    const result = await performCleanup();
 
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 50 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue(failedEvents);
+    expect(result.stats.totalEvents).toBe(3);
+    expect(result.stats.publishedEvents).toBe(1);
+    expect(result.stats.pendingEvents).toBe(1);
+    expect(result.stats.failedEvents).toBe(1);
+    expect(result.stats.oldestPendingAge).toBeGreaterThanOrEqual(4);
+  });
 
-      // Mock stats
-      mockPrismaClient.outboxEvent.count
-        .mockResolvedValueOnce(200) // total
-        .mockResolvedValueOnce(150) // published
-        .mockResolvedValueOnce(40) // pending
-        .mockResolvedValueOnce(10); // failed
+  it('reports a null oldestPendingAge when there are no unpublished events', async () => {
+    await seedOutboxRow({ id: 'published-only', publishedAt: new Date() });
 
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
+    const result = await performCleanup();
 
-      const result = await performCleanup();
-
-      expect(result.deleted).toBe(50);
-      expect(result.failedCount).toBe(2);
-
-      // Verify failed events query
-      expect(mockPrismaClient.outboxEvent.findMany).toHaveBeenCalledWith({
-        where: {
-          publishedAt: null,
-          retryCount: { gte: 3 },
-        },
-        select: {
-          id: true,
-          aggregateId: true,
-          aggregateType: true,
-          eventType: true,
-          retryCount: true,
-          lastError: true,
-          createdAt: true,
-        },
-        orderBy: {
-          createdAt: 'asc',
-        },
-      });
-    });
-
-    it('should handle case with no old events to delete', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-
-      // Mock stats
-      mockPrismaClient.outboxEvent.count
-        .mockResolvedValueOnce(100)
-        .mockResolvedValueOnce(50)
-        .mockResolvedValueOnce(45)
-        .mockResolvedValueOnce(5);
-
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
-
-      const result = await performCleanup();
-
-      expect(result.deleted).toBe(0);
-      expect(result.failedCount).toBe(0);
-      expect(result.stats.oldestPendingAge).toBeNull();
-    });
-
-    it('should calculate correct statistics', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 100 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-
-      // Mock stats
-      mockPrismaClient.outboxEvent.count
-        .mockResolvedValueOnce(1000) // total events
-        .mockResolvedValueOnce(800) // published events
-        .mockResolvedValueOnce(180) // pending events
-        .mockResolvedValueOnce(20); // failed events
-
-      // Oldest pending event is 120 minutes old
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue({
-        createdAt: new Date(Date.now() - 120 * 60 * 1000),
-      });
-
-      const result = await performCleanup();
-
-      expect(result.stats).toEqual({
-        totalEvents: 1000,
-        publishedEvents: 800,
-        pendingEvents: 180,
-        failedEvents: 20,
-        oldestPendingAge: 120,
-      });
-
-      // Verify stats queries
-      expect(mockPrismaClient.outboxEvent.count).toHaveBeenCalledTimes(4);
-
-      // Total events
-      expect(mockPrismaClient.outboxEvent.count).toHaveBeenNthCalledWith(1);
-
-      // Published events
-      expect(mockPrismaClient.outboxEvent.count).toHaveBeenNthCalledWith(2, {
-        where: { publishedAt: { not: null } },
-      });
-
-      // Pending events
-      expect(mockPrismaClient.outboxEvent.count).toHaveBeenNthCalledWith(3, {
-        where: {
-          publishedAt: null,
-          retryCount: { lt: 3 },
-        },
-      });
-
-      // Failed events
-      expect(mockPrismaClient.outboxEvent.count).toHaveBeenNthCalledWith(4, {
-        where: {
-          publishedAt: null,
-          retryCount: { gte: 3 },
-        },
-      });
-
-      // Oldest pending event
-      expect(mockPrismaClient.outboxEvent.findFirst).toHaveBeenCalledWith({
-        where: { publishedAt: null },
-        orderBy: { createdAt: 'asc' },
-        select: { createdAt: true },
-      });
-    });
-
-    it('should handle database errors gracefully', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockRejectedValue(
-        new Error('Database connection failed')
-      );
-
-      await expect(performCleanup()).rejects.toThrow('Database connection failed');
-    });
-
-    it('should continue with monitoring even if delete fails', async () => {
-      // Delete fails
-      mockPrismaClient.outboxEvent.deleteMany.mockRejectedValue(new Error('Delete failed'));
-
-      await expect(performCleanup()).rejects.toThrow('Delete failed');
-
-      // Verify delete was attempted
-      expect(mockPrismaClient.outboxEvent.deleteMany).toHaveBeenCalled();
-    });
-
-    it('should respect retention days configuration', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 50 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-
-      // Mock stats
-      mockPrismaClient.outboxEvent.count.mockResolvedValue(100);
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
-
-      await performCleanup();
-
-      // Verify retention days (7 days from config)
-      const deleteCall = mockPrismaClient.outboxEvent.deleteMany.mock.calls[0][0];
-      const cutoffDate = deleteCall.where.publishedAt.lt;
-      const now = new Date();
-      const daysDiff = Math.floor((now.getTime() - cutoffDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      expect(daysDiff).toBe(7);
-    });
-
-    it('should order failed events by creation time', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-      mockPrismaClient.outboxEvent.count.mockResolvedValue(0);
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
-
-      await performCleanup();
-
-      // Verify ordering
-      expect(mockPrismaClient.outboxEvent.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderBy: {
-            createdAt: 'asc',
-          },
-        })
-      );
-    });
-
-    it('should handle multiple failed events correctly', async () => {
-      const manyFailedEvents = Array.from({ length: 25 }, (_, i) => ({
-        id: `failed-${i}`,
-        aggregateId: `payment-${i}`,
-        aggregateType: 'payment',
-        eventType: EventType.PAYMENT_COMPLETED,
-        retryCount: 5,
-        lastError: `Error ${i}`,
-        createdAt: new Date(Date.now() - i * 60 * 1000),
-      }));
-
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 200 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue(manyFailedEvents);
-
-      // Mock stats
-      mockPrismaClient.outboxEvent.count
-        .mockResolvedValueOnce(500)
-        .mockResolvedValueOnce(450)
-        .mockResolvedValueOnce(25)
-        .mockResolvedValueOnce(25);
-
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
-
-      const result = await performCleanup();
-
-      expect(result.deleted).toBe(200);
-      expect(result.failedCount).toBe(25);
-    });
-
-    it('should calculate age correctly for oldest pending event', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 0 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-      mockPrismaClient.outboxEvent.count.mockResolvedValue(100);
-
-      // Event created 45 minutes ago
-      const oldestEventTime = new Date(Date.now() - 45 * 60 * 1000);
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue({
-        createdAt: oldestEventTime,
-      });
-
-      const result = await performCleanup();
-
-      expect(result.stats.oldestPendingAge).toBe(45);
-    });
-
-    it('should handle null oldest pending event', async () => {
-      mockPrismaClient.outboxEvent.deleteMany.mockResolvedValue({ count: 10 });
-      mockPrismaClient.outboxEvent.findMany.mockResolvedValue([]);
-      mockPrismaClient.outboxEvent.count.mockResolvedValue(50);
-
-      // No pending events
-      mockPrismaClient.outboxEvent.findFirst.mockResolvedValue(null);
-
-      const result = await performCleanup();
-
-      expect(result.stats.oldestPendingAge).toBeNull();
-    });
+    expect(result.stats.oldestPendingAge).toBeNull();
   });
 });
