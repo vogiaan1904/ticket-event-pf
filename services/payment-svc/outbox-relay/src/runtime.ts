@@ -53,6 +53,7 @@ export const startRuntime = async (): Promise<() => Promise<void>> => {
   // overlapping reconnect on top of it.
   let reconnecting = false;
   let backoffMs = RECONNECT_BASE_MS;
+  let reconnectTimer: NodeJS.Timeout | undefined;
 
   const connectListener = async (): Promise<Client> => {
     const client = new Client({ connectionString: process.env.DATABASE_URL });
@@ -77,13 +78,14 @@ export const startRuntime = async (): Promise<() => Promise<void>> => {
     reconnecting = true;
     const delay = backoffMs;
     backoffMs = Math.min(backoffMs * 2, RECONNECT_MAX_MS);
-    setTimeout(() => {
+    reconnectTimer = setTimeout(() => {
       if (stopped) {
         reconnecting = false;
         return;
       }
       connectListener()
         .then((client) => {
+          if (stopped) { client.end().catch(() => {}); return; }
           listener = client;
           backoffMs = RECONNECT_BASE_MS;
           reconnecting = false;
@@ -108,6 +110,7 @@ export const startRuntime = async (): Promise<() => Promise<void>> => {
   return async () => {
     stopped = true; // stop scheduling further reconnects during shutdown
     clearInterval(safety);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
     try {
       await listener?.end();
     } catch (e) {
