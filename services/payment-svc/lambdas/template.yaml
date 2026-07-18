@@ -194,29 +194,6 @@ Resources:
           - Authorization
 
   # ============================================================
-  # Outbox Processor
-  # ============================================================
-  OutboxProcessorFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub ticketbottle-payment-outbox-processor-${Environment}
-      Description: Processes outbox events and publishes to Kafka
-      CodeUri: outbox-processor/dist/
-      Handler: index.handler
-      Timeout: 300
-      Environment:
-        Variables:
-          OUTBOX_BATCH_SIZE: '50'
-          OUTBOX_MAX_RETRIES: '3'
-      Events:
-        ScheduleEvent:
-          Type: Schedule
-          Properties:
-            Schedule: rate(1 minute)
-            Description: Process outbox events every minute
-            Enabled: true
-
-  # ============================================================
   # Outbox Cleanup
   # ============================================================
   OutboxCleanupFunction:
@@ -256,10 +233,6 @@ Outputs:
   PaymentWebhookHandlerArn:
     Description: Payment webhook handler Lambda ARN
     Value: !GetAtt PaymentWebhookHandlerFunction.Arn
-
-  OutboxProcessorArn:
-    Description: Outbox processor Lambda ARN
-    Value: !GetAtt OutboxProcessorFunction.Arn
 
   OutboxCleanupArn:
     Description: Outbox cleanup Lambda ARN

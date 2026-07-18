@@ -15,7 +15,8 @@
     "../lambdas/common/db/**/*",
     "../lambdas/common/kafka/**/*",
     "../lambdas/common/logger/**/*",
-    "../lambdas/common/constants/**/*"
+    "../lambdas/common/constants/**/*",
+    "../lambdas/common/types/**/*"
   ],
   "exclude": ["node_modules", "dist", "../lambdas/common/db/__tests__"]
 }

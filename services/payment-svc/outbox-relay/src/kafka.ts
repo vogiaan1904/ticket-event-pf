@@ -2,15 +2,16 @@ export { getKafkaProducer, disconnectKafka, publishWithRetry } from '../../lambd
 
 import { publishWithRetry } from '../../lambdas/common/kafka/producer';
 import { KAFKA_TOPICS } from '../../lambdas/common/constants/kafka-topics';
+import { EventType } from '../../lambdas/common/types/event.types';
 import type { OutboxRow } from './db';
 
 export const topicFor = (eventType: string): string => {
   switch (eventType) {
-    case 'PaymentCompleted':
+    case EventType.PAYMENT_COMPLETED:
       return KAFKA_TOPICS.PAYMENT_COMPLETED;
-    case 'PaymentFailed':
+    case EventType.PAYMENT_FAILED:
       return KAFKA_TOPICS.PAYMENT_FAILED;
-    case 'PaymentCancelled':
+    case EventType.PAYMENT_CANCELLED:
       return KAFKA_TOPICS.PAYMENT_CANCELLED;
     default:
       return KAFKA_TOPICS.PAYMENT_FAILED;

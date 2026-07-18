@@ -2,28 +2,6 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: outbox-publisher
-  namespace: {{ include "tb.namespace" . }}
-  labels: {{- include "tb.labels" . | nindent 4 }}
-spec:
-  replicas: 1
-  selector:
-    matchLabels: { app: outbox-publisher }
-  template:
-    metadata:
-      labels: { app: outbox-publisher }
-    spec:
-      containers:
-        - name: outbox-publisher
-          image: ticketbottle/payment-events:local
-          imagePullPolicy: IfNotPresent
-          command: ["node", "publisher.js"]
-          envFrom:
-            - configMapRef: { name: payment-config }
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
   name: payment-webhook
   namespace: {{ include "tb.namespace" . }}
   labels: {{- include "tb.labels" . | nindent 4 }}

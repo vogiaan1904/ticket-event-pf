@@ -20,8 +20,8 @@ async function complete(orderCode) {
       currency: p.currency, provider: p.provider, paid_at: new Date().toISOString(),
     };
     await client.query(
-      `INSERT INTO outbox (id, "aggregateId", "aggregateType", "eventType", payload, published, "createdAt", "retryCount")
-       VALUES ($1, $2, 'Payment', 'PAYMENT_COMPLETED', $3, false, now(), 0)`,
+      `INSERT INTO outbox (id, "aggregateId", "aggregateType", "eventType", payload, "createdAt", "retryCount")
+       VALUES ($1, $2, 'Payment', 'PAYMENT_COMPLETED', $3, now(), 0)`,
       [randomUUID(), p.id, JSON.stringify(payload)],
     );
     await client.query('COMMIT');

@@ -40,6 +40,10 @@ dynamodb:
 paymentEvents:
   enabled: true
 
+outboxRelay:
+  enabled: true
+  replicas: 1
+
 order:
   dynamodbEndpoint: http://dynamodb:8000
   awsRegion: us-east-1
