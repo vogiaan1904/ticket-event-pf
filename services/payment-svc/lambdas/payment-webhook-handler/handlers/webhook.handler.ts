@@ -158,7 +158,6 @@ export const handleWebhook = async (
           aggregateType: 'payment',
           eventType: EventType.PAYMENT_COMPLETED,
           payload: eventPayload as any,
-          published: false,
           retryCount: 0,
         },
       });
