@@ -1,7 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { logger } from '@/common/logger';
 import { handleWebhook } from './handlers/webhook.handler';
-import { getPrismaClient } from '@/common/database/prisma';
 
 export const handler = async (
   event: APIGatewayProxyEvent,
@@ -40,13 +39,5 @@ export const handler = async (
         message: 'An unexpected error occurred',
       }),
     };
-  } finally {
-    // Clean up Prisma connection if Lambda is shutting down
-    // Note: In most cases, we want to keep the connection open for reuse
-    // Only disconnect if explicitly needed
-    if (context.getRemainingTimeInMillis() < 1000) {
-      logger.warn('Lambda timeout approaching, disconnecting Prisma');
-      await getPrismaClient().$disconnect();
-    }
   }
 };

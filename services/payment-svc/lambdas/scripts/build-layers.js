@@ -84,36 +84,19 @@ function buildDependenciesLayer() {
     );
   }
 
-  // Install production dependencies
+  // Install production dependencies (kysely, pg, kafkajs, @payos/node, axios, dayjs, winston)
   log('Installing production dependencies', 'blue');
   execCommand('npm ci --omit=dev --ignore-scripts', layerDir);
-
-  // Generate Prisma Client
-  log('Generating Prisma Client', 'blue');
-  const schemaPath = path.join(ROOT_DIR, '..', 'prisma', 'schema.prisma');
-  if (fs.existsSync(schemaPath)) {
-    // Copy schema to layer directory
-    fs.mkdirSync(path.join(layerDir, 'prisma'), { recursive: true });
-    fs.copyFileSync(schemaPath, path.join(layerDir, 'prisma', 'schema.prisma'));
-
-    // Generate Prisma Client in layer directory
-    execCommand(`npx prisma generate --schema=${path.join(layerDir, 'prisma', 'schema.prisma')}`, layerDir);
-  } else {
-    log('Warning: Prisma schema not found, skipping client generation', 'yellow');
-  }
 
   // Remove unnecessary files to reduce layer size
   log('Cleaning up unnecessary files', 'blue');
   const unnecessaryPaths = [
-    'node_modules/@prisma/engines',
-    'node_modules/prisma', // CLI not needed at runtime
     'node_modules/typescript', // Dev dependency
     'node_modules/effect', // Large dependency not needed at runtime
     'node_modules/fast-check', // Test dependency
     'node_modules/@types', // Type definitions not needed at runtime
     'node_modules/.bin',
     'node_modules/.cache',
-    'prisma', // Remove schema after generation
   ];
 
   unnecessaryPaths.forEach((p) => {
@@ -124,56 +107,23 @@ function buildDependenciesLayer() {
     }
   });
 
-  // Remove darwin engine files (not needed in Lambda)
-  log('Removing darwin engine binaries', 'blue');
-  const prismaClientPath = path.join(layerDir, 'node_modules/.prisma/client');
-  if (fs.existsSync(prismaClientPath)) {
-    const files = fs.readdirSync(prismaClientPath);
-    const darwinFiles = files.filter(f => f.includes('darwin'));
-    darwinFiles.forEach(f => {
-      const filePath = path.join(prismaClientPath, f);
-      log(`  Removing: ${f}`, 'blue');
-      fs.rmSync(filePath, { force: true });
-    });
-  }
-
-  // Remove unnecessary Prisma WASM files for other databases (keep only PostgreSQL)
-  log('Removing unnecessary database engine files', 'blue');
-  const prismaRuntimePath = path.join(layerDir, 'node_modules/@prisma/client/runtime');
-  if (fs.existsSync(prismaRuntimePath)) {
-    const runtimeFiles = fs.readdirSync(prismaRuntimePath);
-    // Keep only postgresql, remove mysql, sqlite, sqlserver, cockroachdb
-    const unnecessaryEngines = runtimeFiles.filter(f => 
-      (f.includes('query_engine') || f.includes('query_compiler')) &&
-      (f.includes('mysql') || f.includes('sqlite') || f.includes('sqlserver') || f.includes('cockroachdb'))
-    );
-    
-    unnecessaryEngines.forEach(f => {
-      const filePath = path.join(prismaRuntimePath, f);
-      log(`  Removing: ${f}`, 'blue');
-      fs.rmSync(filePath, { force: true });
-    });
-    
-    log(`  Removed ${unnecessaryEngines.length} unnecessary engine files`, 'green');
-  }
-
   // Remove unnecessary dayjs locales (keep only en)
   log('Removing unnecessary locale files', 'blue');
   const dayjsLocalePath = path.join(layerDir, 'node_modules/dayjs/locale');
   const dayjsEsmLocalePath = path.join(layerDir, 'node_modules/dayjs/esm/locale');
-  
+
   [dayjsLocalePath, dayjsEsmLocalePath].forEach(localePath => {
     if (fs.existsSync(localePath)) {
       const localeFiles = fs.readdirSync(localePath);
-      const unnecessaryLocales = localeFiles.filter(f => 
+      const unnecessaryLocales = localeFiles.filter(f =>
         f.endsWith('.js') && !f.startsWith('en') && f !== 'index.js' && f !== 'index.d.ts' && f !== 'types.d.ts'
       );
-      
+
       unnecessaryLocales.forEach(f => {
         const filePath = path.join(localePath, f);
         fs.rmSync(filePath, { force: true });
       });
-      
+
       log(`  Removed ${unnecessaryLocales.length} locale files from ${path.basename(localePath)}`, 'green');
     }
   });
@@ -221,11 +171,7 @@ function buildCommonLayer() {
 function buildLambdaFunctions() {
   log('\nBuilding Lambda functions', 'green');
 
-  const lambdas = [
-    'payment-webhook-handler',
-    'outbox-processor',
-    'outbox-cleanup',
-  ];
+  const lambdas = ['payment-webhook-handler', 'outbox-cleanup'];
 
   for (const lambda of lambdas) {
     log(`\nBuilding ${lambda}...`, 'blue');
@@ -271,10 +217,9 @@ function createZipArchives() {
     path.join(BUILD_DIR, 'dependencies-layer.zip'),
     path.join(BUILD_DIR, 'common-layer.zip'),
     path.join(BUILD_DIR, 'payment-webhook-handler.zip'),
-    path.join(BUILD_DIR, 'outbox-processor.zip'),
     path.join(BUILD_DIR, 'outbox-cleanup.zip'),
   ];
-  
+
   oldZips.forEach(zipFile => {
     if (fs.existsSync(zipFile)) {
       fs.rmSync(zipFile, { force: true });
@@ -296,11 +241,7 @@ function createZipArchives() {
   );
 
   // Create Lambda function zips
-  const lambdas = [
-    'payment-webhook-handler',
-    'outbox-processor',
-    'outbox-cleanup',
-  ];
+  const lambdas = ['payment-webhook-handler', 'outbox-cleanup'];
 
   for (const lambda of lambdas) {
     log(`Creating ${lambda}.zip`, 'blue');
@@ -326,7 +267,6 @@ function printLayerSizes() {
     'dependencies-layer.zip',
     'common-layer.zip',
     'payment-webhook-handler.zip',
-    'outbox-processor.zip',
     'outbox-cleanup.zip',
   ];
 

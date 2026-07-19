@@ -5,7 +5,6 @@
   "private": true,
   "main": "index.js",
   "scripts": {
-    "prisma:gen": "prisma generate",
     "build": "tsc --build",
     "build:watch": "tsc --build --watch",
     "build:clean": "tsc --build --clean",
@@ -15,12 +14,10 @@
     "test:coverage": "jest --coverage",
     "local:deploy": "./scripts/deploy-to-dev-compose.sh",
     "local:logs": "awslocal logs tail /aws/lambda/payment-webhook-handler --follow",
-    "local:logs:processor": "awslocal logs tail /aws/lambda/outbox-processor --follow",
     "local:logs:cleanup": "awslocal logs tail /aws/lambda/outbox-cleanup --follow"
   },
   "dependencies": {
     "@payos/node": "^2.0.3",
-    "@prisma/client": "^6.17.0",
     "axios": "^1.12.2",
     "crypto": "^1.0.1",
     "dayjs": "^1.11.19",
@@ -41,7 +38,6 @@
     "esbuild": "^0.27.0",
     "eslint": "^8.56.0",
     "jest": "^29.7.0",
-    "prisma": "^6.17.0",
     "ts-jest": "^29.1.1",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.3.3"

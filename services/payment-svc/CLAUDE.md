@@ -13,13 +13,14 @@ What the gRPC service **no longer does** (verified in current code — these mov
 - ❌ Publishing outbox rows to Kafka.
 - ❌ Scheduled jobs (`@nestjs/schedule` is no longer wired in).
 
-So: **the gRPC service only writes events to the outbox; the Lambdas read and publish them.** A `src/infra/messaging/kafka/` module still exists in the tree but is not driven by the live service — don't assume editing it changes runtime behavior.
+So: **the gRPC service only writes events to the outbox.** Reading the outbox and publishing to Kafka is now done by a long-lived **`outbox-relay`** worker (a k8s Deployment at `outbox-relay/`, not a Lambda) — it drains via Postgres `LISTEN/NOTIFY` + `SELECT … FOR UPDATE SKIP LOCKED` for sub-second latency. A `src/infra/messaging/kafka/` module still exists in the tree but is not driven by the live service — don't assume editing it changes runtime behavior.
 
 ### The Lambdas (`lambdas/`)
-- `payment-webhook-handler` — receives ZaloPay/PayOS webhooks (HMAC/SDK signature verification), updates payment + writes an outbox row. Triggered by API Gateway.
-- `outbox-processor` — batch-publishes pending outbox rows to Kafka with retry. EventBridge schedule (~1 min).
-- `outbox-cleanup` — deletes old published rows / flags failed ones past max retries. EventBridge schedule (daily).
-- Shared `common` layer (Prisma + Kafka singletons, logger, types) and a `dependencies` layer; deploy via SAM (`template.yaml`).
+- `payment-webhook-handler` — receives ZaloPay/PayOS webhooks (HMAC/SDK signature verification), updates payment (single conditional `UPDATE … WHERE status='PENDING'`) + writes an outbox row. Triggered by API Gateway.
+- `outbox-cleanup` — deletes old published rows / routes past-max-retry rows to an SQS DLQ + emits a CloudWatch alarm metric. EventBridge schedule (daily).
+- Shared `common` layer (Kysely + `pg` DB access, Kafka singletons, logger, types) and a `dependencies` layer; deploy via SAM (`template.yaml`).
+
+Outbox→Kafka publishing was formerly the `outbox-processor` Lambda (EventBridge ~1 min poll); it was **replaced by the long-lived `outbox-relay` worker** (above) for sub-second latency and no drain ceiling. The Lambdas use **Kysely + pg** (Prisma was removed).
 
 VNPay is a planned third provider (placeholder); ZaloPay and PayOS are implemented.
 

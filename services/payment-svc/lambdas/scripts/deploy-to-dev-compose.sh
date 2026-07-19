@@ -73,7 +73,6 @@ echo -e "${GREEN}Common: $COMMON_LAYER_ARN${NC}"
 # Delete existing Lambda functions (if any)
 echo -e "${YELLOW}Removing existing Lambda functions${NC}"
 awslocal lambda delete-function --function-name payment-webhook-handler 2>/dev/null || true
-awslocal lambda delete-function --function-name outbox-processor 2>/dev/null || true
 awslocal lambda delete-function --function-name outbox-cleanup 2>/dev/null || true
 
 # Create Lambda functions
@@ -92,20 +91,6 @@ awslocal lambda create-function \
   --environment file://envs/env.localstack.json >/dev/null 2>&1
 
 echo -e "${GREEN}payment-webhook-handler created${NC}"
-
-# Outbox processor (uses same env as webhook handler for simplicity in dev)
-awslocal lambda create-function \
-  --function-name outbox-processor \
-  --runtime nodejs20.x \
-  --role $LAMBDA_ROLE_ARN \
-  --handler index.handler \
-  --timeout 300 \
-  --memory-size 512 \
-  --zip-file fileb://build/outbox-processor.zip \
-  --layers $DEPENDENCIES_LAYER_ARN $COMMON_LAYER_ARN \
-  --environment file://envs/env.localstack.json >/dev/null 2>&1
-
-echo -e "${GREEN}outbox-processor created${NC}"
 
 # Outbox cleanup (uses same env as webhook handler for simplicity in dev)
 awslocal lambda create-function \

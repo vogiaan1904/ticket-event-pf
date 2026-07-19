@@ -1,7 +1,6 @@
 import { EventBridgeEvent, Context } from 'aws-lambda';
 import { logger } from '@/common/logger';
 import { handleScheduledEvent } from './handlers/cleanup.handler';
-import { getPrismaClient } from '@/common/database/prisma';
 
 export const handler = async (
   event: EventBridgeEvent<string, any>,
@@ -35,17 +34,5 @@ export const handler = async (
         error: error instanceof Error ? error.message : String(error),
       }),
     };
-  } finally {
-    if (context.getRemainingTimeInMillis() < 1000) {
-      logger.warn('Lambda timeout approaching, disconnecting Prisma');
-
-      try {
-        await getPrismaClient().$disconnect();
-      } catch (error) {
-        logger.error('Failed to disconnect Prisma client', {
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
-    }
   }
 };
