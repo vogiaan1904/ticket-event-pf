@@ -19,7 +19,6 @@
   "dependencies": {
     "@payos/node": "^2.0.3",
     "axios": "^1.12.2",
-    "crypto": "^1.0.1",
     "dayjs": "^1.11.19",
     "kafkajs": "^2.2.4",
     "kysely": "^0.28.17",
