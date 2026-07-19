@@ -84,36 +84,6 @@ export const createMockEventBridgeEvent = <T = any>(
   };
 };
 
-export const createMockPrismaClient = () => {
-  return {
-    payment: {
-      findUnique: jest.fn(),
-      findMany: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-    },
-    outbox: {
-      findMany: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      updateMany: jest.fn(),
-      delete: jest.fn(),
-      deleteMany: jest.fn(),
-    },
-    $transaction: jest.fn((callback) => callback({
-      payment: {
-        update: jest.fn(),
-      },
-      outbox: {
-        create: jest.fn(),
-      },
-    })),
-    $connect: jest.fn(),
-    $disconnect: jest.fn(),
-  };
-};
-
 export const createMockKafkaProducer = () => {
   return {
     connect: jest.fn().mockResolvedValue(undefined),

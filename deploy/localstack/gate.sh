@@ -3,7 +3,7 @@
 # register -> create event -> create event config -> publish event -> seed ticket class
 #   -> join waitroom -> (admission) read checkout token from Redis -> create order
 #   -> ZaloPay-signed webhook to API Gateway -> payment-webhook-handler Lambda
-#   -> invoke outbox-processor Lambda -> poll order until COMPLETED.
+#   -> outbox-relay publishes the row (LISTEN/NOTIFY) -> poll order until COMPLETED.
 #
 # Field names below are pinned from the gateway DTOs/mappers and the Go services
 # (see the plan's Task-4 notes). Two hops bypass missing HTTP surface, matching the
@@ -132,19 +132,12 @@ mac=hmac.new(key2.encode(),data.encode(),hashlib.sha256).hexdigest()
 print(json.dumps({'data':data,'mac':mac,'type':1}))" "$KEY2" "$ORDER_CODE")
 WH_RESP=$(curl -s -X POST "$API_ENDPOINT/webhook/zalopay" -H 'Content-Type: application/json' -d "$WEBHOOK_BODY")
 echo "  webhook resp: $WH_RESP"
-echo "== 9b. invoke outbox-processor Lambda (publish now; don't wait for EventBridge) =="
-awslocal lambda invoke --function-name outbox-processor \
-  --cli-binary-format raw-in-base64-out --payload '{"source":"gate"}' /tmp/gate15-op.json >/dev/null 2>&1 || true
-
-echo "== 10. poll order until COMPLETED (Kafka -> Temporal ConfirmOrder) =="
+echo "== 10. poll order until COMPLETED (outbox-relay publishes via LISTEN/NOTIFY -> Kafka -> Temporal ConfirmOrder) =="
 for i in $(seq 1 30); do
   O=$(curl -s -H "$AUTH" "$GW/orders/code/$ORDER_CODE")
   STATUS=$(echo "$O" | getval data.status)
   echo "  [$i] status=${STATUS:-?}"
   [ "$STATUS" = "COMPLETED" ] && { echo "GATE 1.5 PASSED: order $ORDER_CODE COMPLETED (ticketClassId=$TCID)"; exit 0; }
-  # re-invoke the processor periodically in case the outbox row landed after step 9b
-  [ $((i % 3)) -eq 0 ] && awslocal lambda invoke --function-name outbox-processor \
-    --cli-binary-format raw-in-base64-out --payload '{"source":"gate"}' /tmp/gate15-op.json >/dev/null 2>&1 || true
   sleep 2
 done
 fail "order $ORDER_CODE did not reach COMPLETED"

@@ -104,10 +104,9 @@ data:
   KAFKA_BROKERS: redpanda:9093
   KAFKA_CONSUMER_GROUP_ID: payment-consumer-group
   KAFKA_SSL: "false"
-  OUTBOX_POLL_INTERVAL_MS: "5000"
+  RELAY_SAFETY_POLL_MS: "5000"
   OUTBOX_BATCH_SIZE: "100"
   OUTBOX_MAX_RETRIES: "5"
-  OUTBOX_CLEANUP_DAYS: "7"
 ---
 apiVersion: v1
 kind: ConfigMap

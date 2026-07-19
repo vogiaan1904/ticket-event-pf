@@ -207,7 +207,7 @@ Resources:
       Timeout: 300
       Environment:
         Variables:
-          OUTBOX_MAX_RETRIES: '3'
+          OUTBOX_MAX_RETRIES: '5'
           OUTBOX_RETENTION_DAYS: !If [IsProduction, '30', '7']
           OUTBOX_DLQ_URL: !Ref OutboxDlq
       Policies:
