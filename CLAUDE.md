@@ -38,7 +38,7 @@ The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. 
 
 ## Local development
 
-Local dev runs on **kind + Helm** (the `deploy/` tree). The legacy Docker Compose setup under `development/` was **retired** (kind is the single local path). Operations live in `deploy/Makefile`:
+Local **full-stack** dev runs on **kind + Helm** (the `deploy/` tree). The old *full-stack* Docker Compose setup under `development/` was **retired** — `kind` is the single **full-stack** local path. For **single-service inner-loop** work, use the per-service `docker-compose.dev.yml` (spins up only that service's datastore; run the service natively with hot-reload, then `docker compose down -v`) — this is the sanctioned, disk-light inner-loop tool. Full-stack operations live in `deploy/Makefile`:
 
 ```bash
 make -C deploy cluster-up   # create the kind cluster
@@ -51,6 +51,8 @@ make -C deploy cluster-down # tear it all down
 Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
 
 **Rung 1.5 (local AWS simulation)** layers a host-side LocalStack over the same cluster to exercise real DynamoDB + the payment Lambdas — see `deploy/localstack/README.md`.
+
+**Target operating model (planned, not yet built — see Appendix B of `docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md`):** to take the heavy stack off the dev Mac, the plan of record moves full-stack dev to **k3s on a stoppable EC2** with **real DynamoDB** (retiring the LocalStack simulation), builds images in **CI → ECR**, and keeps `kind` only as a $0 offline fallback. Until Phase A lands, `kind` + the commands above remain the working full-stack path.
 
 ## Proto contracts & generation
 
