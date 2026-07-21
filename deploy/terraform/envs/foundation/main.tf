@@ -39,3 +39,27 @@ module "vpc" {
   source = "../../modules/vpc"
   tags   = local.tags
 }
+
+locals {
+  image_names = [
+    "ticketbottle/user",
+    "ticketbottle/event",
+    "ticketbottle/payment",
+    "ticketbottle/inventory",
+    "ticketbottle/waitroom",
+    "ticketbottle/order-api",
+    "ticketbottle/order-consumer",
+    "ticketbottle/gateway",
+    "ticketbottle/outbox-relay",
+    "ticketbottle/user-migrate",
+    "ticketbottle/event-migrate",
+    "ticketbottle/payment-migrate",
+    "ticketbottle/payment-events",
+  ]
+}
+
+module "ecr" {
+  source      = "../../modules/ecr"
+  image_names = local.image_names
+  tags        = local.tags
+}
