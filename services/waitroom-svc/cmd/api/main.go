@@ -92,7 +92,7 @@ func main() {
 	qSvc := service.NewQueueService(qRepo, l)
 
 	// Initialize queue processor
-	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, eventSvc, prod, l, cfg.Queue)
+	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, eventSvc, prod, l, cfg.Queue, cfg.JWT)
 
 	// Initialize waitroom service with processor
 	wrSvc := service.NewWaitroomService(qSvc, ssSvc, eventSvc, prod, l, queueProcessor)
@@ -104,9 +104,7 @@ func main() {
 		MaxAttempts: cfg.Kafka.ConsumerRetryMax,
 		BaseDelay:   cfg.Kafka.ConsumerRetryBackoff,
 	}, l)
-	if err := cons.Start(ctx); err != nil {
-		l.Fatalf(ctx, "Failed to start Kafka consumer: %v", err)
-	}
+	cons.Start(ctx)
 
 	// Start Queue Processor
 	go func() {

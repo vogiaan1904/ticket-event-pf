@@ -21,6 +21,7 @@ type fakeQueue struct {
 	processing map[string]bool
 
 	addToProcessingErr error
+	isProcessingErr    error
 	peekErr            error
 	removeErr          error
 
@@ -67,6 +68,13 @@ func (f *fakeQueue) AddToProcessing(_ context.Context, _, ssID string, _ time.Du
 
 func (f *fakeQueue) GetProcessingCount(context.Context, string) (int64, error) {
 	return int64(len(f.processing)), nil
+}
+
+func (f *fakeQueue) IsProcessing(_ context.Context, _, ssID string) (bool, error) {
+	if f.isProcessingErr != nil {
+		return false, f.isProcessingErr
+	}
+	return f.processing[ssID], nil
 }
 
 func (f *fakeQueue) BufferQueueReady(_ context.Context, payload []byte) error {
@@ -132,11 +140,15 @@ func (f *fakeSessions) GenerateCheckoutToken(context.Context, *models.Session) (
 	return "token", nil
 }
 
-func (f *fakeSessions) UpdateCheckoutToken(_ context.Context, ssID string, _ string, _ time.Time) error {
+func (f *fakeSessions) UpdateCheckoutToken(_ context.Context, ssID string, token string, expAt time.Time) error {
 	if f.updateTokenErr != nil {
 		return f.updateTokenErr
 	}
 	if ss, ok := f.sessions[ssID]; ok {
+		now := time.Now()
+		ss.CheckoutToken = token
+		ss.CheckoutExpiresAt = &expAt
+		ss.AdmittedAt = &now
 		ss.Status = models.SessionStatusAdmitted
 	}
 	return nil
@@ -191,6 +203,7 @@ func newTestProcessor(q *fakeQueue, s *fakeSessions, p *fakeProducer) *queueProc
 			BatchSize:             10,
 			RetryAttempts:         2,
 			RetryDelay:            time.Millisecond,
+			CheckoutTTL:           15 * time.Minute,
 		},
 		stopCh: make(chan struct{}),
 	}
@@ -512,5 +525,123 @@ func TestUnbufferableEventIsCounted(t *testing.T) {
 
 	if got := proc.GetStatus().ErrorCount; got == 0 {
 		t.Error("a lost QUEUE_READY event must increment the error count")
+	}
+}
+
+// --- half-finished admission recovery ----------------------------------------
+
+// UpdateCheckoutToken commits (session reads as admitted) but the slot write
+// fails. The session then holds a token and no slot. Treating that as terminal
+// drops the user -- the very loss this processor exists to prevent -- so it must
+// be finished on a later tick.
+func TestHalfFinishedAdmissionIsResumedNotDropped(t *testing.T) {
+	q := newFakeQueue("ss-1")
+	q.addToProcessingErr = errors.New("redis unavailable")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
+	p := &fakeProducer{}
+
+	proc := newTestProcessor(q, s, p)
+
+	// Tick 1: the slot write fails after the token was persisted.
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("tick 1: %v", err)
+	}
+
+	if !slices.Contains(q.queued, "ss-1") {
+		t.Fatal("the user must stay queued when the slot write fails")
+	}
+	if s.sessions["ss-1"].Status != models.SessionStatusAdmitted {
+		t.Fatal("precondition: the session is left admitted without a slot")
+	}
+	if q.processing["ss-1"] {
+		t.Fatal("precondition: no slot was taken")
+	}
+
+	// Tick 2: Redis recovers. The half-finished admission must be completed,
+	// not classified as stale.
+	q.addToProcessingErr = nil
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("tick 2: %v", err)
+	}
+
+	if !q.processing["ss-1"] {
+		t.Error("the resumed admission should have claimed a checkout slot")
+	}
+	if slices.Contains(q.queued, "ss-1") {
+		t.Error("the resumed admission should have left the queue")
+	}
+	if !slices.Contains(p.published, "ss-1") {
+		t.Error("the resumed admission should have published QUEUE_READY")
+	}
+	if !slices.Contains(q.broadcast, "ss-1") {
+		t.Error("the resumed admission should be announced on the position broadcast")
+	}
+}
+
+// The resumed admission must reuse the token already handed out, not mint a new
+// one -- the old token may already be in the user's hands.
+func TestResumedAdmissionReusesTheExistingToken(t *testing.T) {
+	expAt := time.Now().Add(10 * time.Minute)
+	ss := queuedSession("ss-1")
+	ss.Status = models.SessionStatusAdmitted
+	ss.CheckoutToken = "already-issued-token"
+	ss.CheckoutExpiresAt = &expAt
+
+	q := newFakeQueue("ss-1")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": ss}}
+	s.generateTokenErr = errors.New("must not mint a new token")
+
+	proc := newTestProcessor(q, s, &fakeProducer{})
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !q.processing["ss-1"] {
+		t.Error("the half-finished admission should have been completed")
+	}
+}
+
+// A transient failure while checking slot state must not be read as "no slot".
+func TestIsProcessingFailureLeavesUserQueued(t *testing.T) {
+	expAt := time.Now().Add(10 * time.Minute)
+	ss := queuedSession("ss-1")
+	ss.Status = models.SessionStatusAdmitted
+	ss.CheckoutToken = "tok"
+	ss.CheckoutExpiresAt = &expAt
+
+	q := newFakeQueue("ss-1")
+	q.isProcessingErr = errors.New("redis unavailable")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": ss}}
+
+	if err := newTestProcessor(q, s, &fakeProducer{}).ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !slices.Contains(q.queued, "ss-1") {
+		t.Error("an unreadable slot state is transient; the user must stay queued")
+	}
+}
+
+// An admitted session whose checkout window has already lapsed is genuinely
+// finished -- resuming it would hand back an expired token.
+func TestExpiredCheckoutIsNotResumed(t *testing.T) {
+	expAt := time.Now().Add(-time.Minute)
+	ss := queuedSession("ss-1")
+	ss.Status = models.SessionStatusAdmitted
+	ss.CheckoutToken = "stale-tok"
+	ss.CheckoutExpiresAt = &expAt
+
+	q := newFakeQueue("ss-1")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": ss}}
+
+	if err := newTestProcessor(q, s, &fakeProducer{}).ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if q.processing["ss-1"] {
+		t.Error("an expired checkout must not be resumed")
+	}
+	if slices.Contains(q.queued, "ss-1") {
+		t.Error("an expired checkout is terminal and should be purged from the queue")
 	}
 }

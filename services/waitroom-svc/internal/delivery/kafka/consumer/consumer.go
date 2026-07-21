@@ -12,6 +12,9 @@ import (
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 )
 
+// maxRejoinBackoff caps the delay between consumer-group rejoin attempts.
+const maxRejoinBackoff = 30 * time.Second
+
 // RetryPolicy bounds how long a transient failure is retried in place before the
 // message is parked. Delays grow exponentially from BaseDelay.
 type RetryPolicy struct {
@@ -82,10 +85,12 @@ func (c *Consumer) processMessage(ctx context.Context, msg *sarama.ConsumerMessa
 // offset manager keeps the highest mark, so the next success commits straight
 // past the failure and nothing ever redelivers it.
 //
-// Returning an error is not a retry channel either -- sarama does not end the
-// session when ConsumeClaim returns, it just closes that claim, leaving the
-// partition stalled until the next rebalance. So a message is retried here, in
-// place, and parked in the dead-letter topic if it cannot be made to succeed.
+// Returning is a poor retry channel. Sarama cancels the whole session as soon
+// as any ConsumeClaim returns (`defer sess.cancel()`, consumer_group.go:871),
+// so every transient blip would cost a full consumer-group rebalance across all
+// partitions, and Start's re-Consume loop would spin on it. So a message is
+// retried here, in place, and parked in the dead-letter topic if it cannot be
+// made to succeed.
 func (c *Consumer) deliver(ctx context.Context, msg *sarama.ConsumerMessage) (commit bool, err error) {
 	maxAttempts := max(c.policy.MaxAttempts, 1)
 
@@ -126,20 +131,34 @@ func (c *Consumer) deliver(ctx context.Context, msg *sarama.ConsumerMessage) (co
 		msg.Topic, msg.Partition, msg.Offset, attempts, lastErr)
 
 	if dlqErr := c.dlq.PublishDeadLetter(ctx, msg, lastErr.Error(), attempts); dlqErr != nil {
-		// Nowhere safe to put it. Refusing to commit stalls this partition,
-		// which is loud and recoverable; committing would drop the message.
+		// Nowhere safe to put it. Returning ends the session, so the message is
+		// redelivered after the rejoin (which backs off) and we try again --
+		// committing would drop it outright.
 		return false, dlqErr
 	}
 
 	return true, nil
 }
 
-func (c *Consumer) Start(ctx context.Context) error {
+func (c *Consumer) Start(ctx context.Context) {
 	topics := []string{kafka.TopicCheckoutCompleted, kafka.TopicCheckoutFailed, kafka.TopicCheckoutExpired}
 	c.wg.Go(func() {
+		// Consume returns on every rebalance, and on any ConsumeClaim exit.
+		// Rejoining immediately turns a persistent failure (broker down, DLQ
+		// unwritable) into a rebalance storm, so back off between attempts.
+		backoff := c.policy.BaseDelay
+
 		for {
 			if err := c.consGr.Consume(ctx, topics, c); err != nil {
 				c.l.Errorf(ctx, "delivery.kafka.consumer.consumer.Start: %v", err)
+
+				select {
+				case <-time.After(backoff):
+					backoff = min(backoff*2, maxRejoinBackoff)
+				case <-ctx.Done():
+				}
+			} else {
+				backoff = c.policy.BaseDelay
 			}
 
 			if ctx.Err() != nil {
@@ -157,7 +176,6 @@ func (c *Consumer) Start(ctx context.Context) error {
 	})
 
 	c.l.Infof(ctx, "Consumer is consuming topics: %v", topics)
-	return nil
 }
 
 func (c *Consumer) Close() error {

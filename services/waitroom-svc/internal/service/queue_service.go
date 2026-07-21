@@ -19,6 +19,7 @@ type QueueService interface {
 	GetQueueInfo(ctx context.Context, eventID string) (*QueueInfoOutput, error)
 	RemoveFromProcessing(ctx context.Context, eventID, sessionID string) error
 	GetProcessingCount(ctx context.Context, eventID string) (int64, error)
+	IsProcessing(ctx context.Context, eventID, sessionID string) (bool, error)
 	PeekQueue(ctx context.Context, eventID string, count int) ([]string, error)
 	RemoveFromQueue(ctx context.Context, eventID string, sessionIDs ...string) error
 	AddToProcessing(ctx context.Context, eventID, sessionID string, ttl time.Duration) error
@@ -161,6 +162,11 @@ func (s *queueService) RemoveFromProcessing(ctx context.Context, eventID, sessio
 
 func (s *queueService) GetProcessingCount(ctx context.Context, eventID string) (int64, error) {
 	return s.repo.GetProcessingCount(ctx, eventID)
+}
+
+// IsProcessing reports whether the session currently holds a checkout slot.
+func (s *queueService) IsProcessing(ctx context.Context, eventID, sessionID string) (bool, error) {
+	return s.repo.IsProcessing(ctx, eventID, sessionID)
 }
 
 func (s *queueService) GetQueueInfo(ctx context.Context, eID string) (*QueueInfoOutput, error) {

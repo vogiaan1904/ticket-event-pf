@@ -83,7 +83,7 @@ func PrintManualTestInstructions() {
 
 	fmt.Println("\n6. Check Redis state:")
 	fmt.Println("   redis-cli ZCARD waitroom:concert-2024:queue  # Should decrease")
-	fmt.Println("   redis-cli SCARD waitroom:concert-2024:processing  # Should increase")
+	fmt.Println("   redis-cli ZCARD waitroom:concert-2024:checkouts  # Should increase")
 }
 
 func main() {

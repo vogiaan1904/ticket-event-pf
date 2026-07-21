@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -183,7 +184,7 @@ func (r *redisQueueRepository) IsProcessing(ctx context.Context, eID, ssID strin
 
 	expiresAt, err := r.cli.ZScore(ctx, pKey, ssID)
 	if err != nil {
-		if err == redis.Nil {
+		if errors.Is(err, redis.Nil) {
 			return false, nil
 		}
 

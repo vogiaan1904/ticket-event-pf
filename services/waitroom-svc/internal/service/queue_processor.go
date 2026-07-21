@@ -58,6 +58,7 @@ type ProcessorConfig struct {
 	EventCacheTTL         time.Duration // How long to cache active events
 	RetryAttempts         int           // Retry attempts for failed operations
 	RetryDelay            time.Duration // Delay between retries
+	CheckoutTTL           time.Duration // How long an admitted user holds a slot
 	ShutdownTimeout       time.Duration // Max time to wait for graceful shutdown
 	EnableMetrics         bool          // Enable detailed metrics collection
 	MaxProcessingDuration time.Duration // Max time for processing all events
@@ -70,6 +71,7 @@ func NewQueueProcessor(
 	prod producer.Producer,
 	l logger.Logger,
 	cfg config.QueueConfig,
+	jwtCfg config.JWTConfig,
 ) QueueProcessor {
 	return &queueProcessor{
 		qSvc:  qSvc,
@@ -84,6 +86,9 @@ func NewQueueProcessor(
 			EventCacheTTL:         5 * time.Minute,
 			RetryAttempts:         3,
 			RetryDelay:            time.Second,
+			// The slot TTL and the token lifetime must be the same window --
+			// a slot outliving its token holds capacity nobody can use.
+			CheckoutTTL:           jwtCfg.Expiry,
 			ShutdownTimeout:       30 * time.Second,
 			EnableMetrics:         true,
 			MaxProcessingDuration: 30 * time.Second,
@@ -312,10 +317,7 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 	}
 
 	if !ss.CanAdmit() {
-		// Left the queue, already admitted, or past its expiry -- not a queue
-		// member any more, whatever the sorted set still says.
-		return fmt.Errorf("%w: status=%s, expired=%v",
-			ErrSessionNotAdmittable, ss.Status, ss.IsExpired())
+		return qp.resumeOrReject(ctx, eventID, ss)
 	}
 
 	token, err := qp.ssSvc.GenerateCheckoutToken(ctx, ss)
@@ -323,22 +325,68 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 		return fmt.Errorf("failed to generate checkout token: %w", err)
 	}
 
-	expAt := time.Now().Add(15 * time.Minute)
+	expAt := time.Now().Add(qp.cfg.CheckoutTTL)
 
-	err = qp.ssSvc.UpdateCheckoutToken(ctx, sessionID, token, expAt)
-	if err != nil {
+	if err := qp.ssSvc.UpdateCheckoutToken(ctx, sessionID, token, expAt); err != nil {
 		return fmt.Errorf("failed to update session with checkout token: %w", err)
 	}
 
-	err = qp.qSvc.AddToProcessing(ctx, eventID, sessionID, 15*time.Minute)
+	return qp.claimSlot(ctx, eventID, ss, token, expAt)
+}
+
+// resumeOrReject handles a session the queue still lists but that cannot be
+// admitted the normal way.
+//
+// The case that matters is a *half-finished* admission: UpdateCheckoutToken
+// committed -- so the session already reads as admitted -- but the slot write
+// did not. The session then holds a token and no slot, which is neither state
+// the queue understands. Calling that terminal would drop the user, which is
+// the exact silent loss this processor exists to prevent, so it is finished
+// instead, reusing the token already persisted.
+func (qp *queueProcessor) resumeOrReject(ctx context.Context, eventID string, ss *models.Session) error {
+	// Left the queue, expired, or never got far enough to have a usable token.
+	notAdmittable := fmt.Errorf("%w: status=%s, expired=%v",
+		ErrSessionNotAdmittable, ss.Status, ss.IsExpired())
+
+	if ss.Status != models.SessionStatusAdmitted ||
+		ss.IsExpired() ||
+		ss.HasCheckoutExpired() ||
+		ss.CheckoutToken == "" ||
+		ss.CheckoutExpiresAt == nil {
+		return notAdmittable
+	}
+
+	holding, err := qp.qSvc.IsProcessing(ctx, eventID, ss.ID)
 	if err != nil {
-		// Try to rollback session update (best effort)
-		qp.ssSvc.UpdateSessionStatus(ctx, sessionID, models.SessionStatusQueued)
+		// Transient: leave the user queued rather than guess.
+		return fmt.Errorf("failed to check checkout slot: %w", err)
+	}
+
+	if holding {
+		// Genuinely admitted; the queue entry is just stale bookkeeping.
+		return notAdmittable
+	}
+
+	qp.l.Warnf(ctx, "Resuming half-finished admission - event_id: %s, session_id: %s", eventID, ss.ID)
+
+	return qp.claimSlot(ctx, eventID, ss, ss.CheckoutToken, *ss.CheckoutExpiresAt)
+}
+
+// claimSlot takes the checkout slot and announces it. The slot is taken before
+// the queue entry is released (see ProcessEventQueue), so any failure here
+// leaves the user queued for another attempt.
+func (qp *queueProcessor) claimSlot(ctx context.Context, eventID string, ss *models.Session, token string, expAt time.Time) error {
+	// Deliberately no status rollback on failure. The session is left admitted
+	// without a slot, which resumeOrReject recognises and finishes on a later
+	// tick. The previous best-effort rollback discarded its own error, and a
+	// rollback that silently failed left the session admitted, un-slotted, and
+	// classified as stale -- which dropped the user.
+	if err := qp.qSvc.AddToProcessing(ctx, eventID, ss.ID, time.Until(expAt)); err != nil {
 		return fmt.Errorf("failed to add to processing: %w", err)
 	}
 
 	evt := kafka.QueueReadyEvent{
-		SessionID:     sessionID,
+		SessionID:     ss.ID,
 		UserID:        ss.UserID,
 		EventID:       eventID,
 		CheckoutToken: token,
@@ -355,12 +403,12 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 		// they actually learn about their token on. Buffer the event for the
 		// next tick instead of losing it.
 		qp.l.Errorf(ctx, "Failed to publish QUEUE_READY, buffering for retry - session_id: %s, error: %v",
-			sessionID, err)
+			ss.ID, err)
 		qp.bufferQueueReady(ctx, evt)
 	}
 
 	qp.l.Infof(ctx, "User admitted to checkout successfully - session_id: %s, user_id: %s, event_id: %s, expires_at: %v",
-		sessionID, ss.UserID, eventID, expAt)
+		ss.ID, ss.UserID, eventID, expAt)
 
 	return nil
 }
@@ -407,6 +455,15 @@ func (qp *queueProcessor) drainBufferedQueueReady(ctx context.Context) {
 			// wedge the buffer behind it.
 			qp.incrementErrorCount()
 			qp.l.Errorf(ctx, "Discarding unparseable buffered QUEUE_READY event: %v", err)
+			settled++
+			continue
+		}
+
+		// After a long outage the token in here may already have expired;
+		// republishing it would announce a checkout nobody can complete.
+		if !evt.ExpiresAt.IsZero() && time.Now().After(evt.ExpiresAt) {
+			qp.l.Warnf(ctx, "Discarding expired buffered QUEUE_READY event - session_id: %s, expires_at: %v",
+				evt.SessionID, evt.ExpiresAt)
 			settled++
 			continue
 		}
