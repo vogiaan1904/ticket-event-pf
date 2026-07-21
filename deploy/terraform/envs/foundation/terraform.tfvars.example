@@ -1,0 +1,4 @@
+aws_region         = "us-east-1"
+alert_email        = "you@example.com"
+github_repo        = "vogiaan1904/ticket-event-pf"
+monthly_budget_usd = 40
