@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -14,8 +15,6 @@ import (
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 	"github.com/vogiaan1904/ticketbottle-waitroom/protogen/event"
 )
-
-var ()
 
 type QueueProcessor interface {
 	Start(ctx context.Context) error
@@ -218,9 +217,14 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 
 	batchSize := min(availableSlots, int64(qp.cfg.BatchSize))
 
-	ssIDs, err := qp.qSvc.PopFromQueue(processingCtx, eventID, int(batchSize))
+	// Claim/ack rather than pop. An entry leaves the queue only once admission
+	// has reached a terminal outcome, so a transient failure retries the same
+	// user at the same position on the next tick instead of dropping them.
+	// There is deliberately no window in which a session sits in neither the
+	// queue nor the processing set.
+	ssIDs, err := qp.qSvc.PeekQueue(processingCtx, eventID, int(batchSize))
 	if err != nil {
-		return fmt.Errorf("failed to pop from queue: %w", err)
+		return fmt.Errorf("failed to peek queue: %w", err)
 	}
 
 	if len(ssIDs) == 0 {
@@ -230,17 +234,41 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 
 	qp.l.Infof(processingCtx, "Starting batch admission, event_id: %s, session_count: %d", eventID, len(ssIDs))
 
-	admittedCount := 0
 	admittedSsIDs := make([]string, 0, len(ssIDs))
+	staleSsIDs := make([]string, 0)
 
 	for _, sessionID := range ssIDs {
-		if err := qp.admitUserToCheckout(processingCtx, eventID, sessionID); err != nil {
-			qp.l.Errorf(processingCtx, "Failed to admit user to checkout, event_id: %s, session_id: %s", eventID, sessionID)
-		} else {
-			admittedCount++
+		err := qp.admitUserToCheckout(processingCtx, eventID, sessionID)
+
+		switch {
+		case err == nil:
 			admittedSsIDs = append(admittedSsIDs, sessionID)
+
+		case errors.Is(err, ErrSessionNotAdmittable):
+			qp.l.Infof(processingCtx, "Dropping stale queue entry - event_id: %s, session_id: %s, reason: %v",
+				eventID, sessionID, err)
+			staleSsIDs = append(staleSsIDs, sessionID)
+
+		default:
+			// Transient. Leave the entry in the queue; the next tick retries it
+			// from the same position.
+			qp.l.Errorf(processingCtx, "Failed to admit user, leaving queued for retry - event_id: %s, session_id: %s, error: %v",
+				eventID, sessionID, err)
 		}
 	}
+
+	// Only now is it safe to let go of these entries.
+	if leaving := slices.Concat(admittedSsIDs, staleSsIDs); len(leaving) > 0 {
+		if err := qp.qSvc.RemoveFromQueue(processingCtx, eventID, leaving...); err != nil {
+			// The sessions are already admitted and hold their slots. Leaving
+			// them queued is self-correcting: the next tick sees them as
+			// not-admittable and drops them then.
+			qp.l.Errorf(processingCtx, "Failed to remove settled sessions from queue - event_id: %s, count: %d, error: %v",
+				eventID, len(leaving), err)
+		}
+	}
+
+	admittedCount := len(admittedSsIDs)
 
 	qp.mu.Lock()
 	qp.totalAdmitted += int64(admittedCount)
@@ -273,12 +301,18 @@ func (qp *queueProcessor) admitUserToCheckout(ctx context.Context, eventID, sess
 func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, sessionID string) error {
 	ss, err := qp.ssSvc.GetSession(ctx, sessionID)
 	if err != nil {
+		// The session outlived its TTL, so there is nothing left to admit.
+		if errors.Is(err, ErrSessionNotFound) {
+			return fmt.Errorf("%w: session not found", ErrSessionNotAdmittable)
+		}
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
 	if !ss.CanAdmit() {
-		return fmt.Errorf("session cannot be admitted: status=%s, expired=%v",
-			ss.Status, ss.IsExpired())
+		// Left the queue, already admitted, or past its expiry -- not a queue
+		// member any more, whatever the sorted set still says.
+		return fmt.Errorf("%w: status=%s, expired=%v",
+			ErrSessionNotAdmittable, ss.Status, ss.IsExpired())
 	}
 
 	token, err := qp.ssSvc.GenerateCheckoutToken(ctx, ss)
@@ -349,6 +383,13 @@ func (qp *queueProcessor) withRetry(ctx context.Context, operation func() error)
 
 		if err := operation(); err != nil {
 			lastErr = err
+
+			// Retrying cannot change the outcome, and the caller needs the
+			// unwrapped signal to drop the queue entry.
+			if errors.Is(err, ErrSessionNotAdmittable) {
+				return err
+			}
+
 			qp.l.Warnf(ctx, "Operation failed, retrying - attempt: %d/%d, error: %v",
 				attempt+1, qp.cfg.RetryAttempts, err)
 			continue
@@ -377,11 +418,4 @@ func (qp *queueProcessor) GetStatus() ProcessorStatus {
 		TotalAdmitted: qp.totalAdmitted,
 		ErrorCount:    qp.errorCount,
 	}
-}
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	}
-	return b
 }

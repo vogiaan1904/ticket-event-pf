@@ -36,6 +36,24 @@ make protoc / make update-proto
 - `internal/delivery/{grpc,http,kafka}` — transports; `internal/repository/redis`, `internal/infra/redis`.
 - `pkg/` — shared `kafka`, `redis`, `grpc`, `logger`, `errors`, `response`, `util`.
 
+## Admission is claim/ack, not pop
+
+`ProcessEventQueue` **peeks** the head of the queue (`PeekQueue`) and removes an entry
+only once admission reaches a terminal outcome:
+
+- admitted → removed (it now holds a slot in the processing set)
+- `ErrSessionNotAdmittable` → removed (session gone, already admitted, abandoned, or
+  past its expiry — no longer a queue member)
+- anything else is **transient**: the entry stays, and the next tick retries the same
+  user at the same position
+
+Never reintroduce a destructive pop here. Removing before admission succeeds means a
+transient Redis error silently drops the user from the queue forever — their session
+stays `queued` but is absent from the sorted set, so their position reads `-1` and
+nothing ever retries them. Ordering also matters: add to the processing set *before*
+removing from the queue. Being briefly in both is self-correcting (the next tick sees
+the session as not-admittable and drops it); being in neither loses the user.
+
 ## Kafka consumer delivery semantics
 
 `internal/delivery/kafka/consumer` is at-least-once and **never skips a message**. A

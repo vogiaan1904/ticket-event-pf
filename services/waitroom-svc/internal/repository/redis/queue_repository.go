@@ -13,8 +13,7 @@ import (
 
 type QueueRepository interface {
 	AddToQueue(ctx context.Context, eID string, ss *models.Session) error
-	RemoveFromQueue(ctx context.Context, eID, ssID string) error
-	PopFromQueue(ctx context.Context, eID string, count int) ([]string, error)
+	RemoveFromQueue(ctx context.Context, eID string, ssIDs ...string) error
 	GetQueueLength(ctx context.Context, eID string) (int64, error)
 	GetQueuePosition(ctx context.Context, eID, ssID string) (int64, error)
 	GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error)
@@ -59,57 +58,24 @@ func (r *redisQueueRepository) AddToQueue(ctx context.Context, eID string, ss *m
 	return nil
 }
 
-func (r *redisQueueRepository) RemoveFromQueue(ctx context.Context, eID, ssID string) error {
+func (r *redisQueueRepository) RemoveFromQueue(ctx context.Context, eID string, ssIDs ...string) error {
+	if len(ssIDs) == 0 {
+		return nil
+	}
+
 	qKey := r.queueKey(eID)
 
-	_, err := r.cli.ZRem(ctx, qKey, ssID)
-	if err != nil {
+	members := make([]any, len(ssIDs))
+	for i, ssID := range ssIDs {
+		members[i] = ssID
+	}
+
+	if _, err := r.cli.ZRem(ctx, qKey, members...); err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.RemoveFromQueue: %v", err)
 		return err
 	}
 
 	return nil
-}
-
-func (r *redisQueueRepository) PopFromQueue(ctx context.Context, eID string, count int) ([]string, error) {
-	qKey := r.queueKey(eID)
-
-	// Lua script for atomic pop operation
-	script := redis.NewScript(`
-		local key = KEYS[1]
-		local count = tonumber(ARGV[1])
-
-		local members = redis.call('ZRANGE', key, 0, count - 1)
-		if #members > 0 then
-			redis.call('ZREM', key, unpack(members))
-		end
-
-		return members
-	`)
-
-	res, err := script.Run(ctx, r.cli.GetClient(), []string{qKey}, count).Result()
-	if err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.PopFromQueue: %v", err)
-		return nil, err
-	}
-
-	ssIDs := make([]string, 0)
-	if resSlice, ok := res.([]any); ok {
-		for _, v := range resSlice {
-			if id, ok := v.(string); ok {
-				ssIDs = append(ssIDs, id)
-			}
-		}
-	}
-
-	if len(ssIDs) > 0 {
-		r.l.Debugf(ctx, "Popped from queue",
-			"event_id", eID,
-			"count", len(ssIDs),
-		)
-	}
-
-	return ssIDs, nil
 }
 
 func (r *redisQueueRepository) GetQueueLength(ctx context.Context, eID string) (int64, error) {

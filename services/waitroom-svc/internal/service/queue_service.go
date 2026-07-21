@@ -19,7 +19,8 @@ type QueueService interface {
 	GetQueueInfo(ctx context.Context, eventID string) (*QueueInfoOutput, error)
 	RemoveFromProcessing(ctx context.Context, eventID, sessionID string) error
 	GetProcessingCount(ctx context.Context, eventID string) (int64, error)
-	PopFromQueue(ctx context.Context, eventID string, count int) ([]string, error)
+	PeekQueue(ctx context.Context, eventID string, count int) ([]string, error)
+	RemoveFromQueue(ctx context.Context, eventID string, sessionIDs ...string) error
 	AddToProcessing(ctx context.Context, eventID, sessionID string, ttl time.Duration) error
 	GetActiveEvents(ctx context.Context) ([]string, error)
 
@@ -176,12 +177,28 @@ func (s *queueService) GetQueueInfo(ctx context.Context, eID string) (*QueueInfo
 	}, nil
 }
 
-func (s *queueService) PopFromQueue(ctx context.Context, eventID string, count int) ([]string, error) {
-	sessionIDs, err := s.repo.PopFromQueue(ctx, eventID, count)
+// PeekQueue reads the head of the queue without removing anything. Entries are
+// removed only once admission has reached a terminal outcome -- see
+// queueProcessor.ProcessEventQueue.
+func (s *queueService) PeekQueue(ctx context.Context, eventID string, count int) ([]string, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+
+	sessionIDs, err := s.repo.GetQueueMembers(ctx, eventID, 0, int64(count-1))
 	if err != nil {
-		return nil, fmt.Errorf("failed to pop from queue: %w", err)
+		return nil, fmt.Errorf("failed to peek queue: %w", err)
 	}
 	return sessionIDs, nil
+}
+
+// RemoveFromQueue drops entries from the queue without the bookkeeping
+// DequeueSession does; the caller owns any position broadcast.
+func (s *queueService) RemoveFromQueue(ctx context.Context, eventID string, sessionIDs ...string) error {
+	if err := s.repo.RemoveFromQueue(ctx, eventID, sessionIDs...); err != nil {
+		return fmt.Errorf("failed to remove from queue: %w", err)
+	}
+	return nil
 }
 
 func (s *queueService) AddToProcessing(ctx context.Context, eventID, sessionID string, ttl time.Duration) error {

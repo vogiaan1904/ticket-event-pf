@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/vogiaan1904/ticketbottle-waitroom/config"
+	"github.com/vogiaan1904/ticketbottle-waitroom/internal/models"
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/redis"
 )
@@ -169,6 +171,76 @@ func TestReAddingSessionDoesNotDoubleCount(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected 1 slot, got %d", count)
+	}
+}
+
+// Reading the head of the queue must not remove anything -- that is what lets
+// the processor retry a transient admission failure at the same position.
+func TestGetQueueMembersIsNonDestructiveAndOrdered(t *testing.T) {
+	repo, cli := newTestRepo(t)
+	ctx := context.Background()
+	eID := "evt-peek"
+	defer cli.Del(ctx, "waitroom:"+eID+":queue")
+
+	base := time.Now()
+	for i, id := range []string{"ss-1", "ss-2", "ss-3"} {
+		ss := &models.Session{ID: id, EventID: eID, QueuedAt: base.Add(time.Duration(i) * time.Second)}
+		if err := repo.AddToQueue(ctx, eID, ss); err != nil {
+			t.Fatalf("add %s: %v", id, err)
+		}
+	}
+
+	for range 2 {
+		got, err := repo.GetQueueMembers(ctx, eID, 0, 1)
+		if err != nil {
+			t.Fatalf("peek: %v", err)
+		}
+		if !slices.Equal(got, []string{"ss-1", "ss-2"}) {
+			t.Fatalf("peek = %v, want [ss-1 ss-2]", got)
+		}
+	}
+
+	length, err := repo.GetQueueLength(ctx, eID)
+	if err != nil {
+		t.Fatalf("length: %v", err)
+	}
+	if length != 3 {
+		t.Errorf("peeking removed entries: length = %d, want 3", length)
+	}
+}
+
+func TestRemoveFromQueueDropsExactlyTheGivenMembers(t *testing.T) {
+	repo, cli := newTestRepo(t)
+	ctx := context.Background()
+	eID := "evt-remove-batch"
+	defer cli.Del(ctx, "waitroom:"+eID+":queue")
+
+	base := time.Now()
+	for i, id := range []string{"ss-1", "ss-2", "ss-3"} {
+		ss := &models.Session{ID: id, EventID: eID, QueuedAt: base.Add(time.Duration(i) * time.Second)}
+		if err := repo.AddToQueue(ctx, eID, ss); err != nil {
+			t.Fatalf("add %s: %v", id, err)
+		}
+	}
+
+	if err := repo.RemoveFromQueue(ctx, eID, "ss-1", "ss-3"); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+
+	got, err := repo.GetQueueMembers(ctx, eID, 0, -1)
+	if err != nil {
+		t.Fatalf("members: %v", err)
+	}
+	if !slices.Equal(got, []string{"ss-2"}) {
+		t.Errorf("queue = %v, want [ss-2]", got)
+	}
+
+	// Removing nothing must be a no-op, not a full-key operation.
+	if err := repo.RemoveFromQueue(ctx, eID); err != nil {
+		t.Fatalf("empty remove: %v", err)
+	}
+	if length, _ := repo.GetQueueLength(ctx, eID); length != 1 {
+		t.Errorf("empty remove changed the queue: length = %d, want 1", length)
 	}
 }
 

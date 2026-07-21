@@ -119,7 +119,7 @@ ZADD waitroom:event-123:queue 1699999999 "session-abc"
 SET waitroom:session:abc '{"status":"queued",...}'
 
 # 2. Processor admits user
-ZPOPMIN waitroom:event-123:queue
+ZRANGE waitroom:event-123:queue 0 N-1   # peek; removed only once admitted
 ZADD waitroom:event-123:checkouts <expiry-unix-ms> "session-abc"
 SET waitroom:session:abc '{"status":"admitted",...}'
 PUBLISH queue:updates:event-123 '{"type":"admitted"}'
