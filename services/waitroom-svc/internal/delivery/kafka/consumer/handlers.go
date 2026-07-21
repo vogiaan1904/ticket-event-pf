@@ -22,7 +22,7 @@ func (c *Consumer) HandleCheckoutCompleted(ctx context.Context, message *sarama.
 		SessionID: e.SessionID,
 		UserID:    e.UserID,
 		EventID:   e.EventID,
-		Timestamp: e.Timestamp,
+		Timestamp: e.Timestamp.OrElse(message.Timestamp),
 	}); err != nil {
 		c.l.Error(ctx, "delivery.kafka.consumer.handlers.HandleCheckoutCompleted: %v", err)
 		return err
@@ -44,7 +44,7 @@ func (c *Consumer) HandleCheckoutFailed(ctx context.Context, message *sarama.Con
 		SessionID: e.SessionID,
 		UserID:    e.UserID,
 		EventID:   e.EventID,
-		Timestamp: e.Timestamp,
+		Timestamp: e.Timestamp.OrElse(message.Timestamp),
 	}); err != nil {
 		c.l.Error(ctx, "delivery.kafka.consumer.handlers.HandleCheckoutFailed: %v", err)
 		return err
@@ -66,7 +66,7 @@ func (c *Consumer) HandleCheckoutExpired(ctx context.Context, message *sarama.Co
 		SessionID: e.SessionID,
 		UserID:    e.UserID,
 		EventID:   e.EventID,
-		Timestamp: e.Timestamp,
+		Timestamp: e.Timestamp.OrElse(message.Timestamp),
 	}); err != nil {
 		c.l.Error(ctx, "delivery.kafka.consumer.handlers.HandleCheckoutExpired: %v", err)
 		return err
