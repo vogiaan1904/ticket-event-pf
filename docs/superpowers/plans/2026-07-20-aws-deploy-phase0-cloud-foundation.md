@@ -76,17 +76,21 @@ docker buildx version
   Expected: all three print versions. If missing: `brew install awscli terraform` and ensure Docker Desktop/buildx is present.
 
 - [ ] **Step 4: Configure CLI credentials for the admin identity (us-east-1)**
+  Use `aws login` (browser sign-in, **short-lived** session) rather than minting a long-lived `AKIA…` access key — consistent with this plan's no-static-keys posture (OIDC for CI, instance profile for the box).
 ```bash
-aws configure           # or: aws configure sso
-# set region = us-east-1, output = json
+aws login                          # browser sign-in; --region here applies to THIS command only
+aws configure set region us-east-1 # the stored default is set separately
 ```
+  Note: the session **expires**; on `ExpiredToken` mid-apply, re-run `aws login` and re-apply (Terraform is idempotent).
 
-- [ ] **Step 5: Verify identity and region**
+- [ ] **Step 5: Verify identity, region, and *credential source***
 ```bash
+aws configure list          # TYPE column must read `login`, not `shared-credentials-file`/`env`
 aws sts get-caller-identity
 aws configure get region
 ```
   Expected: a JSON body with your `Account` (12 digits) and the admin user/role `Arn`; region prints `us-east-1`. **Record the Account ID** — used to sanity-check ECR URLs later.
+  ⚠️ **Verify the Account matches the account you intend to build in.** The credential chain is first-match-wins, so a stale `~/.aws/credentials` from a previous account silently overrides `aws login` — you would build every resource in the wrong account. If `aws configure list` shows `shared-credentials-file`, remove/rename that file (and delete the key in its own account's IAM) before proceeding.
 
 - [ ] **Step 6: Decide the budget-alert email**
   Choose the email AWS Budgets + Anomaly Detection will notify (your `vogiaan1904@gmail.com` unless you prefer another). You will confirm the Anomaly Detection subscription email after Task 1's apply.
