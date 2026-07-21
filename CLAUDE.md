@@ -24,7 +24,7 @@ Ports below are the **authoritative** values (from each service's config/`main`)
 | Waitroom | `services/waitroom-svc` | Go | 50056 | gRPC | Redis |
 | Inventory | `services/inventory-svc` | Go | 50057 | gRPC | PostgreSQL (GORM) |
 
-`proto/` is **not a service** — it is the shared `.proto` contract source (see `proto/CLAUDE.md`).
+`proto/` is **not a service** — it is the shared `.proto` contract source (see "Proto contracts & generation" below).
 
 ## Architecture in one paragraph
 

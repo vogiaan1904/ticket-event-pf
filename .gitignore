@@ -70,3 +70,6 @@ tools/
 
 
 # --- AI ---
+
+# --- Localstack ---
+tf-lab/
