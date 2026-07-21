@@ -138,6 +138,12 @@ func (r *Client) ZRange(ctx context.Context, key string, start, stop int64) ([]s
 	return r.redis.ZRange(ctx, key, start, stop).Result()
 }
 
+// ZScore returns the score of a member in a sorted set. It returns redis.Nil
+// when the key or the member does not exist.
+func (r *Client) ZScore(ctx context.Context, key, member string) (float64, error) {
+	return r.redis.ZScore(ctx, key, member).Result()
+}
+
 // ============= Set Operations =============
 
 // SAdd adds one or more members to a set.

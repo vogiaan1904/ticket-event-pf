@@ -152,12 +152,29 @@ func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, 
 	return mems, nil
 }
 
+// processingKeyGrace keeps the processing key alive past its last slot expiry so
+// an event that goes quiet still gets garbage collected. Correctness comes from
+// the per-member scores, never from this TTL.
+const processingKeyGrace = time.Hour
+
+// reapAndCountScript drops every slot whose expiry has passed, then counts what
+// is left. Reaping and counting must be one round trip: a count taken against
+// un-reaped data over-reports occupancy and starves admission.
+var reapAndCountScript = redis.NewScript(`
+	local key = KEYS[1]
+	local now = tonumber(ARGV[1])
+
+	redis.call('ZREMRANGEBYSCORE', key, '-inf', now)
+	return redis.call('ZCARD', key)
+`)
+
 func (r *redisQueueRepository) AddToProcessing(ctx context.Context, eID, ssID string, ttl time.Duration) error {
 	pKey := r.processingKey(eID)
+	expiresAt := time.Now().Add(ttl)
 
 	pipe := r.cli.GetClient().Pipeline()
-	pipe.SAdd(ctx, pKey, ssID)
-	pipe.Expire(ctx, pKey, ttl)
+	pipe.ZAdd(ctx, pKey, redis.Z{Score: float64(expiresAt.UnixMilli()), Member: ssID})
+	pipe.PExpire(ctx, pKey, ttl+processingKeyGrace)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.AddToProcessing: %v", err)
@@ -170,7 +187,7 @@ func (r *redisQueueRepository) AddToProcessing(ctx context.Context, eID, ssID st
 func (r *redisQueueRepository) RemoveFromProcessing(ctx context.Context, eID, ssID string) error {
 	pKey := r.processingKey(eID)
 
-	if err := r.cli.SRem(ctx, pKey, ssID); err != nil {
+	if _, err := r.cli.ZRem(ctx, pKey, ssID); err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.RemoveFromProcessing: %v", err)
 		return err
 	}
@@ -181,7 +198,8 @@ func (r *redisQueueRepository) RemoveFromProcessing(ctx context.Context, eID, ss
 func (r *redisQueueRepository) GetProcessingCount(ctx context.Context, eID string) (int64, error) {
 	pKey := r.processingKey(eID)
 
-	count, err := r.cli.SCard(ctx, pKey)
+	count, err := reapAndCountScript.Run(ctx, r.cli.GetClient(),
+		[]string{pKey}, time.Now().UnixMilli()).Int64()
 	if err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.GetProcessingCount: %v", err)
 		return 0, err
@@ -193,13 +211,17 @@ func (r *redisQueueRepository) GetProcessingCount(ctx context.Context, eID strin
 func (r *redisQueueRepository) IsProcessing(ctx context.Context, eID, ssID string) (bool, error) {
 	pKey := r.processingKey(eID)
 
-	exists, err := r.cli.SIsMember(ctx, pKey, ssID)
+	expiresAt, err := r.cli.ZScore(ctx, pKey, ssID)
 	if err != nil {
+		if err == redis.Nil {
+			return false, nil
+		}
+
 		r.l.Errorf(ctx, "redisQueueRepository.IsProcessing: %v", err)
 		return false, err
 	}
 
-	return exists, nil
+	return int64(expiresAt) > time.Now().UnixMilli(), nil
 }
 
 func (r *redisQueueRepository) PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error {
@@ -237,8 +259,16 @@ func (r *redisQueueRepository) queueKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:queue", eID)
 }
 
+// processingKey holds the sessions currently occupying a checkout slot, as a
+// sorted set scored by absolute expiry (unix ms). Slots expire individually, so
+// an abandoned checkout frees its own slot without waiting on a downstream event
+// and without disturbing any other slot.
+//
+// Named ":checkouts" rather than ":processing" on purpose: the old key was a
+// plain SET, and Redis is persistent here, so reusing the name would hit
+// WRONGTYPE against a surviving key. The old key carries a TTL and expires out.
 func (r *redisQueueRepository) processingKey(eID string) string {
-	return fmt.Sprintf("waitroom:%s:processing", eID)
+	return fmt.Sprintf("waitroom:%s:checkouts", eID)
 }
 
 func (r *redisQueueRepository) positionUpdateChannel(eID string) string {

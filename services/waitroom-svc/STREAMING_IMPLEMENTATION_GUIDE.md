@@ -319,7 +319,7 @@ redis-cli PUBSUB NUMSUB queue:updates:concert-2024
 redis-cli ZRANGE waitroom:concert-2024:queue 0 -1 WITHSCORES
 
 # Processing count
-redis-cli SCARD waitroom:concert-2024:processing
+redis-cli ZCARD waitroom:concert-2024:checkouts
 
 # Session details
 redis-cli GET session:abc-123

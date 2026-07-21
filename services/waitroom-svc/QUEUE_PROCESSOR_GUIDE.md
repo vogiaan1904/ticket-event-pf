@@ -104,7 +104,7 @@ T6    Processor checks event-B only  {event-B}          event-B: 1
 ```
 waitroom:active_events                    → Set of event IDs with queues
 waitroom:{event_id}:queue                 → Sorted set (users waiting)
-waitroom:{event_id}:processing            → Set (users in checkout)
+waitroom:{event_id}:checkouts             → Sorted set (users in checkout, scored by slot expiry)
 waitroom:session:{session_id}             → JSON (session data)
 waitroom:user_session:{user}:{event}      → String (session ID index)
 queue:updates:{event_id}                  → Pub/Sub channel
@@ -120,7 +120,7 @@ SET waitroom:session:abc '{"status":"queued",...}'
 
 # 2. Processor admits user
 ZPOPMIN waitroom:event-123:queue
-SADD waitroom:event-123:processing "session-abc"
+ZADD waitroom:event-123:checkouts <expiry-unix-ms> "session-abc"
 SET waitroom:session:abc '{"status":"admitted",...}'
 PUBLISH queue:updates:event-123 '{"type":"admitted"}'
 
@@ -151,7 +151,7 @@ redis-cli SMEMBERS waitroom:active_events
 
 # Check specific event
 redis-cli ZCARD waitroom:{EVENT_ID}:queue
-redis-cli SCARD waitroom:{EVENT_ID}:processing
+redis-cli ZCARD waitroom:{EVENT_ID}:checkouts
 
 # Real-time monitoring
 redis-cli MONITOR
@@ -181,7 +181,7 @@ redis-cli ZCARD waitroom:{EVENT_ID}:queue
 # Should have users
 
 # 3. Check processing not maxed
-redis-cli SCARD waitroom:{EVENT_ID}:processing
+redis-cli ZCARD waitroom:{EVENT_ID}:checkouts
 # Should be < 100
 
 # 4. Check logs
