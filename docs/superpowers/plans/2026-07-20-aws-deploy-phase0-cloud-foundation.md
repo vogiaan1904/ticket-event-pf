@@ -359,6 +359,22 @@ terraform apply
 ```
 Expected: `Apply complete! Resources: 3 added.`
 
+  ⚠️ **Likely failure: `ValidationException: Limit exceeded on dimensional spend monitor creation`.** AWS permits exactly **one** `DIMENSIONAL`/`SERVICE` anomaly monitor per account, and launching Cost Explorer (Task 0 Step 3) auto-creates one named `Default-Services-Monitor`. Import it instead of creating a second:
+```bash
+aws ce get-anomaly-monitors --query 'AnomalyMonitors[?MonitorType==`DIMENSIONAL`].MonitorArn' --output text
+terraform import module.budget.aws_ce_anomaly_monitor.service "<that ARN>"
+terraform plan    # MUST read `will be updated in-place` (a rename), NOT `must be replaced`
+terraform apply
+```
+  If the plan says *must be replaced*, stop — applying would destroy the monitor and then fail to re-create it against the same limit. Align `name` in `modules/budget/main.tf` to the existing monitor's name instead.
+  Note: the monitor is now managed here, so `terraform destroy` on `foundation` removes the account's anomaly detection.
+
+  ⚠️ **Budget count:** AWS gives **2 budgets free**, ~$0.02/day each beyond that. If you created budgets by hand before this, delete the redundant ones — `ticketbottle-monthly` supersedes a plain $20 budget because it alerts at 50%/100%/forecast rather than one threshold.
+```bash
+aws budgets describe-budgets --account-id "$(aws sts get-caller-identity --query Account --output text)" \
+  --query 'Budgets[].BudgetName' --output text
+```
+
 - [ ] **Step 12: Confirm the anomaly-subscription email**
 Check the inbox for `var.alert_email` and **confirm** the AWS Cost Anomaly Detection subscription (AWS sends a confirmation email). Budgets notifications need no confirmation.
 
