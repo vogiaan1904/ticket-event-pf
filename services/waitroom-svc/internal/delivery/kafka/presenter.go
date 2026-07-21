@@ -1,6 +1,51 @@
 package kafka
 
-import "time"
+import (
+	"encoding/json"
+	"strings"
+	"time"
+)
+
+// EventTime is a wire timestamp that never fails to decode.
+//
+// These events carry the release of a checkout slot; the timestamp itself is
+// only bookkeeping. Decoding the whole message strictly would let a cosmetic
+// field stall the queue, so anything unparseable decodes to the zero time and
+// the handler substitutes the broker timestamp instead.
+type EventTime struct {
+	time.Time
+}
+
+func (t *EventTime) UnmarshalJSON(b []byte) error {
+	t.Time = time.Time{}
+
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil || strings.TrimSpace(s) == "" {
+		return nil
+	}
+
+	if parsed, err := time.Parse(time.RFC3339, s); err == nil {
+		t.Time = parsed
+	}
+
+	return nil
+}
+
+func (t EventTime) MarshalJSON() ([]byte, error) {
+	if t.IsZero() {
+		return json.Marshal("")
+	}
+	return json.Marshal(t.UTC().Format(time.RFC3339))
+}
+
+// OrElse returns the decoded timestamp, or fallback when it was absent or
+// malformed on the wire.
+func (t EventTime) OrElse(fallback time.Time) time.Time {
+	if t.IsZero() {
+		return fallback
+	}
+	return t.Time
+}
 
 // Events published BY Waitroom Service
 
@@ -38,22 +83,22 @@ type CheckoutCompletedEvent struct {
 	SessionID string    `json:"session_id"`
 	UserID    string    `json:"user_id"`
 	EventID   string    `json:"event_id"`
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp EventTime `json:"timestamp"`
 }
 
 type CheckoutFailedEvent struct {
 	SessionID string    `json:"session_id"`
 	UserID    string    `json:"user_id"`
 	EventID   string    `json:"event_id"`
-	Timestamp time.Time `json:"timestamp"`
+	Timestamp EventTime `json:"timestamp"`
 }
 
 type CheckoutExpiredEvent struct {
 	SessionID string    `json:"session_id"`
 	UserID    string    `json:"user_id"`
 	EventID   string    `json:"event_id"`
-	ExpiredAt time.Time `json:"expired_at"`
-	Timestamp time.Time `json:"timestamp"`
+	ExpiredAt EventTime `json:"expired_at"`
+	Timestamp EventTime `json:"timestamp"`
 }
 
 type Ticket struct {

@@ -303,10 +303,10 @@ func simulateRandomExits(ctx context.Context, rdb *redis.Client, eventID string,
 }
 
 func simulateCheckoutCompletions(ctx context.Context, rdb *redis.Client, eventID string) int {
-	processingKey := fmt.Sprintf("waitroom:%s:processing", eventID)
+	processingKey := fmt.Sprintf("waitroom:%s:checkouts", eventID)
 
 	// Get all sessions in processing
-	processingMembers, err := rdb.SMembers(ctx, processingKey).Result()
+	processingMembers, err := rdb.ZRange(ctx, processingKey, 0, -1).Result()
 	if err != nil || len(processingMembers) == 0 {
 		return 0
 	}
@@ -327,7 +327,7 @@ func simulateCheckoutCompletions(ctx context.Context, rdb *redis.Client, eventID
 		sessionID := processingMembers[i]
 
 		// Remove from processing set
-		if err := rdb.SRem(ctx, processingKey, sessionID).Err(); err != nil {
+		if err := rdb.ZRem(ctx, processingKey, sessionID).Err(); err != nil {
 			continue
 		}
 
@@ -364,8 +364,8 @@ func getQueueLength(ctx context.Context, rdb *redis.Client, eventID string) int6
 }
 
 func getProcessingCount(ctx context.Context, rdb *redis.Client, eventID string) int64 {
-	processingKey := fmt.Sprintf("waitroom:%s:processing", eventID)
-	count, _ := rdb.SCard(ctx, processingKey).Result()
+	processingKey := fmt.Sprintf("waitroom:%s:checkouts", eventID)
+	count, _ := rdb.ZCard(ctx, processingKey).Result()
 	return count
 }
 

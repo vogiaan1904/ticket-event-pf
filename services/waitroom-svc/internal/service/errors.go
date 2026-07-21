@@ -16,6 +16,13 @@ var (
 	ErrProcessorStopped = errors.New("queue processor has been stopped")
 	ErrEventNotActive   = errors.New("event is not active or not found")
 
+	// ErrSessionNotAdmittable marks an admission failure that will never
+	// succeed: the session is gone, already admitted, or otherwise no longer a
+	// queue member. It is the processor's signal that dropping the entry from
+	// the queue is correct -- every other failure is transient and must leave
+	// the user queued.
+	ErrSessionNotAdmittable = errors.New("session is no longer admittable")
+
 	ErrTokenEmpty               = errors.New("token cannot be empty")
 	ErrTokenInvalid             = errors.New("invalid token")
 	ErrTokenInvalidated         = errors.New("token has been invalidated")

@@ -92,13 +92,18 @@ func main() {
 	qSvc := service.NewQueueService(qRepo, l)
 
 	// Initialize queue processor
-	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, eventSvc, prod, l, cfg.Queue)
+	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, eventSvc, prod, l, cfg.Queue, cfg.JWT)
 
 	// Initialize waitroom service with processor
 	wrSvc := service.NewWaitroomService(qSvc, ssSvc, eventSvc, prod, l, queueProcessor)
 
-	// Waitroom Consumer
-	cons := consumer.NewConsumer(kConsGrCli, wrSvc, l)
+	// Waitroom Consumer. Messages it cannot process are parked on <topic>.dlq
+	// rather than skipped, so a checkout slot is never silently stranded.
+	dlqProd := producer.NewDeadLetterProducer(kSyncProd, l)
+	cons := consumer.NewConsumer(kConsGrCli, wrSvc, dlqProd, consumer.RetryPolicy{
+		MaxAttempts: cfg.Kafka.ConsumerRetryMax,
+		BaseDelay:   cfg.Kafka.ConsumerRetryBackoff,
+	}, l)
 	cons.Start(ctx)
 
 	// Start Queue Processor

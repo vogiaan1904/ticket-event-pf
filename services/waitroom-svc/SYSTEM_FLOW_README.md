@@ -195,14 +195,15 @@ ZRANGE waitroom:concert-2024:queue 0 -1 WITHSCORES
 4) "1696248015"       # Joined 15 seconds later
 ```
 
-### 3. Processing Set (Set)
+### 3. Processing Set (Sorted Set)
 
 ```redis
-# Key: waitroom:{event_id}:processing
+# Key: waitroom:{event_id}:checkouts
 # Members: session_ids of users currently in checkout
-# TTL: 15 minutes per member
+# Score: absolute slot expiry (unix ms) -- each slot expires on its own
+#        schedule and is reaped on the next count
 
-SMEMBERS waitroom:concert-2024:processing
+ZRANGE waitroom:concert-2024:checkouts 0 -1
 1) "session-xyz-789"  # User in checkout
 2) "session-uvw-012"  # User in checkout
 # Max 100 concurrent users (configurable)
@@ -392,7 +393,7 @@ grpcurl -plaintext -d '{"user_id":"user2","event_id":"concert1"}' \
 redis-cli ZRANGE waitroom:concert-2024:queue 0 -1 WITHSCORES
 
 # Check processing set
-redis-cli SMEMBERS waitroom:concert-2024:processing
+redis-cli ZRANGE waitroom:concert-2024:checkouts 0 -1
 
 # Monitor pub/sub
 redis-cli PSUBSCRIBE 'queue:updates:*'

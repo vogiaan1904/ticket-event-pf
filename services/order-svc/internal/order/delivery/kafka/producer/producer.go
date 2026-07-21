@@ -45,7 +45,7 @@ func (p implProducer) PublishCheckoutCompleted(ctx context.Context, event kafka.
 		Headers: []sarama.RecordHeader{
 			{
 				Key:   []byte("timestamp"),
-				Value: []byte(time.Now().Format(time.RFC3339)),
+				Value: []byte(util.TimeToISO8601Str(time.Now())),
 			},
 		},
 	}
@@ -63,7 +63,7 @@ func (p *implProducer) Close() error {
 }
 
 func (p *implProducer) PublishCheckoutFailed(ctx context.Context, event kafka.CheckoutFailedEvent) error {
-	event.Timestamp = time.Now().String()
+	event.Timestamp = util.TimeToISO8601Str(time.Now())
 	val, err := json.Marshal(event)
 	if err != nil {
 		p.l.Errorf(ctx, "order.delivery.kafka.producer.publishCheckoutFailed: %v", err)
@@ -77,7 +77,7 @@ func (p *implProducer) PublishCheckoutFailed(ctx context.Context, event kafka.Ch
 		Headers: []sarama.RecordHeader{
 			{
 				Key:   []byte("timestamp"),
-				Value: []byte(time.Now().Format(time.RFC3339)),
+				Value: []byte(util.TimeToISO8601Str(time.Now())),
 			},
 		},
 	}
