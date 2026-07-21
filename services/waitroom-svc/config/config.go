@@ -51,6 +51,11 @@ type KafkaConfig struct {
 	ProducerRequiredAcks int
 	Enabled              bool
 	ConsumerGroupID      string
+	// ConsumerRetryMax bounds in-place retries of a failed message before it is
+	// routed to the dead-letter topic. ConsumerRetryBackoff is the first delay;
+	// it doubles each attempt.
+	ConsumerRetryMax     int
+	ConsumerRetryBackoff time.Duration
 }
 
 type MicroserviceConfig struct {
@@ -110,6 +115,8 @@ func Load() (*Config, error) {
 			ProducerRequiredAcks: getEnvAsInt("KAFKA_PRODUCER_REQUIRED_ACKS", 1),
 			Enabled:              getEnvAsBool("KAFKA_ENABLED", true),
 			ConsumerGroupID:      getEnv("KAFKA_CONSUMER_GROUP_ID", "waitroom-service"),
+			ConsumerRetryMax:     getEnvAsInt("KAFKA_CONSUMER_RETRY_MAX", 5),
+			ConsumerRetryBackoff: getEnvAsDuration("KAFKA_CONSUMER_RETRY_BACKOFF", 500*time.Millisecond),
 		},
 		Microservice: MicroserviceConfig{
 			Event: getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),

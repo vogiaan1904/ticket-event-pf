@@ -13,6 +13,10 @@ TOPICS=(
   "checkout.expired:10:1"
   "payment.completed:10:1"
   "payment.failed:10:1"
+  # Dead-letter topics for messages the consumer could not process.
+  "checkout.completed.dlq:1:1"
+  "checkout.failed.dlq:1:1"
+  "checkout.expired.dlq:1:1"
 )
 
 echo "Creating Kafka topics..."

@@ -36,6 +36,25 @@ make protoc / make update-proto
 - `internal/delivery/{grpc,http,kafka}` — transports; `internal/repository/redis`, `internal/infra/redis`.
 - `pkg/` — shared `kafka`, `redis`, `grpc`, `logger`, `errors`, `response`, `util`.
 
+## Kafka consumer delivery semantics
+
+`internal/delivery/kafka/consumer` is at-least-once and **never skips a message**. A
+committed offset means "this will never need to be seen again", so:
+
+- Transient failures are retried **in place** (`KAFKA_CONSUMER_RETRY_MAX`, exponential
+  backoff from `KAFKA_CONSUMER_RETRY_BACKOFF`).
+- Failures that survive the retries, and any `Permanent(err)` (a payload the handler
+  cannot decode), are parked on `<topic>.dlq` with the failure context in headers, then
+  committed so the partition keeps moving.
+- If the DLQ publish also fails, the offset is left uncommitted and the claim stops —
+  a stalled partition is recoverable, a committed-but-unprocessed message is not.
+
+Two sarama behaviours drive this design; don't "simplify" it without re-reading them:
+offset marks are **monotonic** (`MarkOffset` keeps the highest), so marking a later
+message commits past an earlier failure permanently; and returning an error from
+`ConsumeClaim` does **not** end the session or trigger redelivery — sarama just closes
+that claim, stalling the partition until the next rebalance.
+
 ## Notes
 
 - Logging uses the zap wrapper with ctx-first `f`-suffixed methods (`l.Errorf(ctx, ...)`).
