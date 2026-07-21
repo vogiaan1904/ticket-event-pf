@@ -255,3 +255,64 @@ func TestGetProcessingCountOnUnknownEvent(t *testing.T) {
 		t.Errorf("expected 0, got %d", count)
 	}
 }
+
+// The buffer holds QUEUE_READY events whose publish failed. It must be FIFO and
+// must not shed an entry until it has actually been republished.
+func TestBufferedQueueReadyIsFIFOAndOnlyTrimmedWhenSettled(t *testing.T) {
+	repo, cli := newTestRepo(t)
+	ctx := context.Background()
+	defer cli.Del(ctx, "waitroom:queue_ready:pending")
+	cli.Del(ctx, "waitroom:queue_ready:pending")
+
+	for _, p := range []string{"a", "b", "c"} {
+		if err := repo.BufferQueueReady(ctx, []byte(p)); err != nil {
+			t.Fatalf("buffer %s: %v", p, err)
+		}
+	}
+
+	// Peeking twice must return the same head, in order.
+	for range 2 {
+		got, err := repo.PeekBufferedQueueReady(ctx, 2)
+		if err != nil {
+			t.Fatalf("peek: %v", err)
+		}
+		if !slices.Equal(got, []string{"a", "b"}) {
+			t.Fatalf("peek = %v, want [a b]", got)
+		}
+	}
+
+	// Settling only the first entry must leave the rest intact and in order.
+	if err := repo.TrimBufferedQueueReady(ctx, 1); err != nil {
+		t.Fatalf("trim: %v", err)
+	}
+
+	got, err := repo.PeekBufferedQueueReady(ctx, 10)
+	if err != nil {
+		t.Fatalf("peek after trim: %v", err)
+	}
+	if !slices.Equal(got, []string{"b", "c"}) {
+		t.Errorf("after trim = %v, want [b c]", got)
+	}
+
+	// Trimming nothing must be a no-op.
+	if err := repo.TrimBufferedQueueReady(ctx, 0); err != nil {
+		t.Fatalf("zero trim: %v", err)
+	}
+	if got, _ := repo.PeekBufferedQueueReady(ctx, 10); len(got) != 2 {
+		t.Errorf("zero trim changed the buffer: %v", got)
+	}
+}
+
+func TestPeekBufferedQueueReadyOnEmptyBuffer(t *testing.T) {
+	repo, cli := newTestRepo(t)
+	ctx := context.Background()
+	cli.Del(ctx, "waitroom:queue_ready:pending")
+
+	got, err := repo.PeekBufferedQueueReady(ctx, 10)
+	if err != nil {
+		t.Fatalf("peek on empty buffer should not error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want empty", got)
+	}
+}

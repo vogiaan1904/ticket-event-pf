@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -179,6 +180,8 @@ func (qp *queueProcessor) processAllQueues(ctx context.Context) {
 		}
 	}()
 
+	qp.drainBufferedQueueReady(ctx)
+
 	activeEvents, err := qp.getActiveEvents(ctx)
 	if err != nil {
 		qp.incrementErrorCount()
@@ -334,7 +337,7 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 		return fmt.Errorf("failed to add to processing: %w", err)
 	}
 
-	err = qp.prod.PublishQueueReady(ctx, kafka.QueueReadyEvent{
+	evt := kafka.QueueReadyEvent{
 		SessionID:     sessionID,
 		UserID:        ss.UserID,
 		EventID:       eventID,
@@ -342,16 +345,94 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 		AdmittedAt:    time.Now(),
 		ExpiresAt:     expAt,
 		Timestamp:     time.Now(),
-	})
-	if err != nil {
-		qp.l.Errorf(ctx, "Failed to publish QUEUE_READY event - session_id: %s, error: %v",
+	}
+
+	if err := qp.prod.PublishQueueReady(ctx, evt); err != nil {
+		// The admission itself is already durable -- the session is admitted
+		// and holds a slot -- so this must not fail the operation. Reporting
+		// failure here would send the caller down the not-admittable path and
+		// drop the user out of the position broadcast, which is the channel
+		// they actually learn about their token on. Buffer the event for the
+		// next tick instead of losing it.
+		qp.l.Errorf(ctx, "Failed to publish QUEUE_READY, buffering for retry - session_id: %s, error: %v",
 			sessionID, err)
+		qp.bufferQueueReady(ctx, evt)
 	}
 
 	qp.l.Infof(ctx, "User admitted to checkout successfully - session_id: %s, user_id: %s, event_id: %s, expires_at: %v",
 		sessionID, ss.UserID, eventID, expAt)
 
 	return nil
+}
+
+// bufferQueueReady parks an unpublished QUEUE_READY event for a later tick. It
+// is the last line of defence, so a failure here is the one case where the event
+// is genuinely lost -- say so loudly.
+func (qp *queueProcessor) bufferQueueReady(ctx context.Context, evt kafka.QueueReadyEvent) {
+	payload, err := json.Marshal(evt)
+	if err != nil {
+		qp.incrementErrorCount()
+		qp.l.Errorf(ctx, "QUEUE_READY event LOST, cannot marshal - session_id: %s, error: %v",
+			evt.SessionID, err)
+		return
+	}
+
+	if err := qp.qSvc.BufferQueueReady(ctx, payload); err != nil {
+		qp.incrementErrorCount()
+		qp.l.Errorf(ctx, "QUEUE_READY event LOST, cannot buffer - session_id: %s, error: %v",
+			evt.SessionID, err)
+	}
+}
+
+// drainBufferedQueueReady republishes events parked by a previous tick. Entries
+// are peeked and only trimmed once actually published, so a still-broken broker
+// costs a retry rather than the event. It stops at the first failure to keep the
+// buffer in order.
+func (qp *queueProcessor) drainBufferedQueueReady(ctx context.Context) {
+	payloads, err := qp.qSvc.PeekBufferedQueueReady(ctx, qp.cfg.BatchSize)
+	if err != nil {
+		qp.l.Errorf(ctx, "Failed to read buffered QUEUE_READY events: %v", err)
+		return
+	}
+
+	if len(payloads) == 0 {
+		return
+	}
+
+	settled := 0
+	for _, payload := range payloads {
+		var evt kafka.QueueReadyEvent
+		if err := json.Unmarshal([]byte(payload), &evt); err != nil {
+			// Nothing will ever make this publishable; drop it rather than
+			// wedge the buffer behind it.
+			qp.incrementErrorCount()
+			qp.l.Errorf(ctx, "Discarding unparseable buffered QUEUE_READY event: %v", err)
+			settled++
+			continue
+		}
+
+		if err := qp.prod.PublishQueueReady(ctx, evt); err != nil {
+			qp.l.Warnf(ctx, "Buffered QUEUE_READY still failing, will retry - session_id: %s, error: %v",
+				evt.SessionID, err)
+			break
+		}
+
+		settled++
+	}
+
+	if settled == 0 {
+		return
+	}
+
+	if err := qp.qSvc.TrimBufferedQueueReady(ctx, settled); err != nil {
+		// The events were published; failing to trim means they republish next
+		// tick. Duplicates are the safe direction here.
+		qp.l.Errorf(ctx, "Failed to trim buffered QUEUE_READY events - settled: %d, error: %v",
+			settled, err)
+		return
+	}
+
+	qp.l.Infof(ctx, "Republished buffered QUEUE_READY events - count: %d", settled)
 }
 
 func (qp *queueProcessor) getActiveEvents(ctx context.Context) ([]string, error) {

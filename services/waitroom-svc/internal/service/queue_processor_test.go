@@ -25,6 +25,14 @@ type fakeQueue struct {
 	removeErr          error
 
 	removeCalls [][]string
+
+	// session IDs announced via the position broadcast (the SSE channel)
+	broadcast []string
+
+	// buffered QUEUE_READY payloads awaiting republish
+	buffered        []string
+	bufferErr       error
+	peekBufferedErr error
 }
 
 func newFakeQueue(queued ...string) *fakeQueue {
@@ -61,6 +69,26 @@ func (f *fakeQueue) GetProcessingCount(context.Context, string) (int64, error) {
 	return int64(len(f.processing)), nil
 }
 
+func (f *fakeQueue) BufferQueueReady(_ context.Context, payload []byte) error {
+	if f.bufferErr != nil {
+		return f.bufferErr
+	}
+	f.buffered = append(f.buffered, string(payload))
+	return nil
+}
+
+func (f *fakeQueue) PeekBufferedQueueReady(_ context.Context, count int) ([]string, error) {
+	if f.peekBufferedErr != nil {
+		return nil, f.peekBufferedErr
+	}
+	return slices.Clone(f.buffered[:min(count, len(f.buffered))]), nil
+}
+
+func (f *fakeQueue) TrimBufferedQueueReady(_ context.Context, count int) error {
+	f.buffered = slices.Delete(f.buffered, 0, min(count, len(f.buffered)))
+	return nil
+}
+
 func (f *fakeQueue) EnqueueSession(context.Context, *models.Session) (int64, error) { return 0, nil }
 func (f *fakeQueue) DequeueSession(context.Context, string, string) error           { return nil }
 func (f *fakeQueue) GetQueueStatus(context.Context, string, *models.Session) (*QueueStatusOutput, error) {
@@ -69,7 +97,8 @@ func (f *fakeQueue) GetQueueStatus(context.Context, string, *models.Session) (*Q
 func (f *fakeQueue) GetQueueInfo(context.Context, string) (*QueueInfoOutput, error) { return nil, nil }
 func (f *fakeQueue) RemoveFromProcessing(context.Context, string, string) error     { return nil }
 func (f *fakeQueue) GetActiveEvents(context.Context) ([]string, error)              { return nil, nil }
-func (f *fakeQueue) PublishPositionUpdate(context.Context, *models.PositionUpdateEvent) error {
+func (f *fakeQueue) PublishPositionUpdate(_ context.Context, u *models.PositionUpdateEvent) error {
+	f.broadcast = append(f.broadcast, u.AffectedSessionIDs...)
 	return nil
 }
 func (f *fakeQueue) SubscribeToPositionUpdates(context.Context, string) (PositionUpdateSubscription, error) {
@@ -351,5 +380,137 @@ func TestNoSlotsAvailableLeavesQueueUntouched(t *testing.T) {
 
 	if !slices.Equal(q.queued, []string{"ss-1"}) {
 		t.Errorf("queue = %v, want [ss-1] untouched when no slots are free", q.queued)
+	}
+}
+
+// --- QUEUE_READY publish failure ---------------------------------------------
+
+type failingPublishProducer struct {
+	fakeProducer
+	failUntil int // number of publish attempts that fail
+	attempts  int
+}
+
+func (f *failingPublishProducer) PublishQueueReady(ctx context.Context, e kafka.QueueReadyEvent) error {
+	f.attempts++
+	if f.attempts <= f.failUntil {
+		return errors.New("kafka unreachable")
+	}
+	return f.fakeProducer.PublishQueueReady(ctx, e)
+}
+
+// A failed publish must not un-report an admission that actually happened. The
+// naive fix -- returning the error -- sends the caller down the not-admittable
+// path, which would drop the user out of the position broadcast: the channel
+// they actually learn about their checkout token on.
+func TestPublishFailureStillCountsAsAdmitted(t *testing.T) {
+	q := newFakeQueue("ss-1")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
+	p := &failingPublishProducer{failUntil: 99}
+
+	proc := newTestProcessor(q, s, &fakeProducer{})
+	proc.prod = p
+
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if s.sessions["ss-1"].Status != models.SessionStatusAdmitted {
+		t.Error("the session was admitted; a failed notification must not undo that")
+	}
+	if !q.processing["ss-1"] {
+		t.Error("the session should hold a checkout slot")
+	}
+	if slices.Contains(q.queued, "ss-1") {
+		t.Error("an admitted session must leave the queue even if its publish failed")
+	}
+	// The decisive assertion. Returning the publish error instead would send
+	// this session down the not-admittable path, excluding it here -- and the
+	// position broadcast is how the user actually receives their token.
+	if !slices.Contains(q.broadcast, "ss-1") {
+		t.Error("an admitted user must still be announced on the position broadcast")
+	}
+
+	if len(q.buffered) != 1 {
+		t.Errorf("the unpublished event should have been buffered, got %d", len(q.buffered))
+	}
+}
+
+func TestBufferedEventIsRepublishedOnALaterTick(t *testing.T) {
+	q := newFakeQueue("ss-1")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
+	p := &failingPublishProducer{failUntil: 1} // first publish fails, then Kafka recovers
+
+	proc := newTestProcessor(q, s, &fakeProducer{})
+	proc.prod = p
+
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(q.buffered) != 1 {
+		t.Fatalf("expected 1 buffered event, got %d", len(q.buffered))
+	}
+
+	// Next tick drains the buffer.
+	proc.processAllQueues(context.Background())
+
+	if len(q.buffered) != 0 {
+		t.Errorf("buffer should be drained, still holding %d", len(q.buffered))
+	}
+	if !slices.Contains(p.published, "ss-1") {
+		t.Error("the buffered event should have been republished")
+	}
+}
+
+// A still-broken broker must cost a retry, not the event.
+func TestBufferedEventSurvivesAContinuedOutage(t *testing.T) {
+	q := newFakeQueue()
+	q.buffered = []string{`{"session_id":"ss-1","event_id":"e-1"}`}
+	p := &failingPublishProducer{failUntil: 99}
+
+	proc := newTestProcessor(q, &fakeSessions{sessions: map[string]*models.Session{}}, &fakeProducer{})
+	proc.prod = p
+
+	proc.processAllQueues(context.Background())
+
+	if len(q.buffered) != 1 {
+		t.Errorf("event must stay buffered while the broker is down, got %d", len(q.buffered))
+	}
+}
+
+// An unparseable entry would otherwise wedge every event behind it.
+func TestUnparseableBufferedEventIsDiscarded(t *testing.T) {
+	q := newFakeQueue()
+	q.buffered = []string{`{not json`, `{"session_id":"ss-2","event_id":"e-1"}`}
+	p := &fakeProducer{}
+
+	proc := newTestProcessor(q, &fakeSessions{sessions: map[string]*models.Session{}}, p)
+
+	proc.processAllQueues(context.Background())
+
+	if len(q.buffered) != 0 {
+		t.Errorf("buffer should be fully drained, still holding %v", q.buffered)
+	}
+	if !slices.Contains(p.published, "ss-2") {
+		t.Error("the good event behind the poison one must still be published")
+	}
+}
+
+// If even the buffer write fails the event is genuinely gone -- it must at least
+// be counted, not silently dropped.
+func TestUnbufferableEventIsCounted(t *testing.T) {
+	q := newFakeQueue("ss-1")
+	q.bufferErr = errors.New("redis unavailable")
+	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
+
+	proc := newTestProcessor(q, s, &fakeProducer{})
+	proc.prod = &failingPublishProducer{failUntil: 99}
+
+	if err := proc.ProcessEventQueue(context.Background(), "e-1"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := proc.GetStatus().ErrorCount; got == 0 {
+		t.Error("a lost QUEUE_READY event must increment the error count")
 	}
 }

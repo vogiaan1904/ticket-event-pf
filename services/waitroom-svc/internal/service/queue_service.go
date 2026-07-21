@@ -24,6 +24,10 @@ type QueueService interface {
 	AddToProcessing(ctx context.Context, eventID, sessionID string, ttl time.Duration) error
 	GetActiveEvents(ctx context.Context) ([]string, error)
 
+	BufferQueueReady(ctx context.Context, payload []byte) error
+	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
+	TrimBufferedQueueReady(ctx context.Context, count int) error
+
 	PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error
 	SubscribeToPositionUpdates(ctx context.Context, eventID string) (PositionUpdateSubscription, error)
 }
@@ -214,6 +218,18 @@ func (s *queueService) GetActiveEvents(ctx context.Context) ([]string, error) {
 		return nil, fmt.Errorf("failed to get active events: %w", err)
 	}
 	return events, nil
+}
+
+func (s *queueService) BufferQueueReady(ctx context.Context, payload []byte) error {
+	return s.repo.BufferQueueReady(ctx, payload)
+}
+
+func (s *queueService) PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error) {
+	return s.repo.PeekBufferedQueueReady(ctx, count)
+}
+
+func (s *queueService) TrimBufferedQueueReady(ctx context.Context, count int) error {
+	return s.repo.TrimBufferedQueueReady(ctx, count)
 }
 
 func (s *queueService) PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error {

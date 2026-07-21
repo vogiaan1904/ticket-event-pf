@@ -24,6 +24,10 @@ type QueueRepository interface {
 	// Pub/Sub methods for real-time position updates
 	PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error
 	SubscribeToPositionUpdates(ctx context.Context, eID string) (*redis.PubSub, error)
+	// Buffered QUEUE_READY publishes awaiting retry
+	BufferQueueReady(ctx context.Context, payload []byte) error
+	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
+	TrimBufferedQueueReady(ctx context.Context, count int) error
 	// Active events tracking
 	AddActiveEvent(ctx context.Context, eID string) error
 	RemoveActiveEvent(ctx context.Context, eID string) error
@@ -239,6 +243,71 @@ func (r *redisQueueRepository) processingKey(eID string) string {
 
 func (r *redisQueueRepository) positionUpdateChannel(eID string) string {
 	return fmt.Sprintf("queue:updates:%s", eID)
+}
+
+// ============= Buffered QUEUE_READY Publishes =============
+
+// maxBufferedQueueReady caps the retry buffer. It only grows while Kafka is
+// unreachable, but an unbounded Redis list is its own outage, so the oldest
+// entries are shed past this point.
+const maxBufferedQueueReady = 10000
+
+// BufferQueueReady parks a QUEUE_READY payload whose publish failed. The list is
+// FIFO: appended at the tail, drained from the head, so ordering survives.
+func (r *redisQueueRepository) BufferQueueReady(ctx context.Context, payload []byte) error {
+	key := r.bufferedQueueReadyKey()
+
+	length, err := r.cli.GetClient().RPush(ctx, key, payload).Result()
+	if err != nil {
+		r.l.Errorf(ctx, "redisQueueRepository.BufferQueueReady: %v", err)
+		return err
+	}
+
+	if length > maxBufferedQueueReady {
+		dropped := length - maxBufferedQueueReady
+		r.l.Errorf(ctx, "QUEUE_READY retry buffer overflowed, dropping %d oldest event(s) - length: %d, max: %d",
+			dropped, length, maxBufferedQueueReady)
+
+		if err := r.cli.GetClient().LTrim(ctx, key, dropped, -1).Err(); err != nil {
+			r.l.Errorf(ctx, "redisQueueRepository.BufferQueueReady.LTrim: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// PeekBufferedQueueReady reads the head of the buffer without consuming it, so a
+// payload is only dropped once it has actually been published.
+func (r *redisQueueRepository) PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error) {
+	if count <= 0 {
+		return nil, nil
+	}
+
+	payloads, err := r.cli.GetClient().LRange(ctx, r.bufferedQueueReadyKey(), 0, int64(count-1)).Result()
+	if err != nil {
+		r.l.Errorf(ctx, "redisQueueRepository.PeekBufferedQueueReady: %v", err)
+		return nil, err
+	}
+
+	return payloads, nil
+}
+
+// TrimBufferedQueueReady drops the first count entries -- the settled prefix.
+func (r *redisQueueRepository) TrimBufferedQueueReady(ctx context.Context, count int) error {
+	if count <= 0 {
+		return nil
+	}
+
+	if err := r.cli.GetClient().LTrim(ctx, r.bufferedQueueReadyKey(), int64(count), -1).Err(); err != nil {
+		r.l.Errorf(ctx, "redisQueueRepository.TrimBufferedQueueReady: %v", err)
+		return err
+	}
+
+	return nil
+}
+
+func (r *redisQueueRepository) bufferedQueueReadyKey() string {
+	return "waitroom:queue_ready:pending"
 }
 
 // ============= Active Events Tracking =============

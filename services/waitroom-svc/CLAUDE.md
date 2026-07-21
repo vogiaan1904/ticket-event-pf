@@ -54,6 +54,18 @@ nothing ever retries them. Ordering also matters: add to the processing set *bef
 removing from the queue. Being briefly in both is self-correcting (the next tick sees
 the session as not-admittable and drops it); being in neither loses the user.
 
+### QUEUE_READY publishes are buffered, not dropped
+
+A failed `QUEUE_READY` publish must **not** fail the admission. By that point the
+session is already admitted and holds a slot, and reporting failure sends the caller
+down the `ErrSessionNotAdmittable` path — which would drop the user out of the position
+broadcast, the channel they actually receive their checkout token on. Instead the event
+is parked on the `waitroom:queue_ready:pending` list and republished at the head of the
+next tick (`drainBufferedQueueReady`), peeked and trimmed only once settled.
+
+Note `queue.ready` currently has **no consumer** anywhere in the repo; the user-facing
+notification is the Redis pub/sub position update consumed over SSE.
+
 ## Kafka consumer delivery semantics
 
 `internal/delivery/kafka/consumer` is at-least-once and **never skips a message**. A
