@@ -19,7 +19,7 @@
 - **Image platform:** all images built `--platform linux/amd64` (k3s/EKS nodes are amd64).
 - **GitHub repo:** `vogiaan1904/ticket-event-pf`. **Account/region are never hard-coded** in HCL — use `data.aws_caller_identity`/`data.aws_region`.
 - **Naming:** every resource prefixed `ticketbottle-` (or `tb-`) and tagged `{ Project = "ticketbottle", ManagedBy = "terraform", Env = "foundation" }` so Phase A/B can look them up by tag.
-- **Terraform credentials:** every `terraform` command below assumes **`AWS_PROFILE=tf`** — the `credential_process` profile from Task 0 Step 5b that bridges the `aws login` session to the AWS Go SDK. Without it Terraform reports `No valid credential sources found`.
+- **Terraform credentials:** Task 0 Step 5b makes `[default]` a `credential_process` profile bridging the `aws login` session to the AWS Go SDK, so every `terraform` command below runs with **no profile prefix**. Skip that step and Terraform reports `No valid credential sources found`.
 - **Verification model:** this is infrastructure, not unit-testable code. Each task's "test" is `terraform plan`/`apply` succeeding plus an `aws` CLI assertion on the created resource — consistent with the spec's behavioural-gate philosophy (`docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md`, §7). Do **not** invent unit tests for Terraform.
 
 ---
@@ -95,17 +95,21 @@ aws configure get region
 
 - [ ] **Step 5b: Bridge the login session to Terraform (`credential_process`)**
   `aws login` is an AWS **CLI** feature; Terraform uses the AWS **Go SDK**, which cannot read `login_session`/`~/.aws/login/cache/`. Without this step `terraform plan` fails with `No valid credential sources found` + an IMDS `169.254.169.254 ... host is down` (the SDK falling through to its last resort, which only exists on EC2).
-  Append to `~/.aws/config`:
+  Make **`[default]` the bridge** so no command needs an `AWS_PROFILE` prefix. Replace `~/.aws/config` with:
 ```ini
-[profile tf]
+[default]
 region = us-east-1
-credential_process = aws configure export-credentials --profile default
+credential_process = aws configure export-credentials --profile awslogin
+
+[profile awslogin]
+region = us-east-1
+login_session = arn:aws:iam::<ACCOUNT>:user/admin      # written by `aws login`
 ```
 ```bash
-AWS_PROFILE=tf aws sts get-caller-identity   # must match Step 5's Account
+aws sts get-caller-identity     # must match Step 5's Account, with no prefix
 ```
-  Run every `terraform` command in this plan with `AWS_PROFILE=tf` (or `export AWS_PROFILE=tf` once per shell — but then re-login with `aws login --profile default`).
-  Expected: identical Account/Arn to Step 5. No recursion occurs because `[default]` has no `credential_process` of its own.
+  Expected: identical Account/Arn to Step 5, and every `terraform`/SDK tool now resolves credentials transparently. No recursion occurs because `[profile awslogin]` has no `credential_process` of its own.
+  ⚠️ Re-login (on `ExpiredToken`) is now `aws login --profile awslogin` — the profile that holds the session.
 
 - [ ] **Step 6: Decide the budget-alert email**
   Choose the email AWS Budgets + Anomaly Detection will notify (your `vogiaan1904@gmail.com` unless you prefer another). You will confirm the Anomaly Detection subscription email after Task 1's apply.
