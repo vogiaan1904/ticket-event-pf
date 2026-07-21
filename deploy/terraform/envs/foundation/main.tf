@@ -34,3 +34,8 @@ module "budget" {
   monthly_budget_usd = var.monthly_budget_usd
   tags               = local.tags
 }
+
+module "vpc" {
+  source = "../../modules/vpc"
+  tags   = local.tags
+}
