@@ -35,18 +35,30 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 	ids, qtyByID := aggregateDemand(in.Items)
 
 	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Idempotency: reservations already exist for this order → no-op. A
-		// concurrent duplicate that races past this unlocked count is still
-		// caught by the (order_code, ticket_class_id) unique index on insert.
-		var existing int64
+		// Idempotency, scoped by status. A live hold (ACTIVE or CONFIRMED)
+		// means this is a retry of a call that already succeeded -- no-op. But
+		// rows that are all terminal mean the hold was released or expired,
+		// and silently returning success there would hand the caller an order
+		// with zero inventory behind it. A concurrent duplicate that races
+		// past this unlocked read is still caught by the
+		// (order_code, ticket_class_id) unique index on insert.
+		var statuses []models.ReservationStatus
 		if err := tx.Model(&models.Reservation{}).
-			Where("order_code = ?", in.OrderCode).Count(&existing).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.Reserve.CountExisting: %v", err)
+			Where("order_code = ?", in.OrderCode).
+			Pluck("status", &statuses).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.Reserve.LoadExistingStatuses: %v", err)
 			return err
 		}
-		if existing > 0 {
-			s.l.Infof(ctx, "service.reservation.Reserve: reservations already exist for order_code=%s, no-op", in.OrderCode)
-			return nil
+		if len(statuses) > 0 {
+			for _, st := range statuses {
+				if st == models.ReservationStatusActive || st == models.ReservationStatusConfirmed {
+					s.l.Infof(ctx, "service.reservation.Reserve: live reservations already exist for order_code=%s, no-op", in.OrderCode)
+					return nil
+				}
+			}
+			s.l.Warnf(ctx, "service.reservation.Reserve: order_code=%s has only terminal reservations (%v), refusing to re-reserve",
+				in.OrderCode, statuses)
+			return ErrStateConflict
 		}
 
 		// Lock all target ticket classes in ascending id order (deadlock-free).
