@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
@@ -44,8 +45,9 @@ func (s implTicketClassService) Create(ctx context.Context, in CreateTicketClass
 func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateTicketClassInput) (models.TicketClass, error) {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.Update: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.Update: ticket class %d not found", id)
+			return models.TicketClass{}, ErrNotFound
 		}
 		s.l.Errorf(ctx, "service.ticketclass.Update: %v", err)
 		return models.TicketClass{}, err
@@ -63,8 +65,9 @@ func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateT
 func (s implTicketClassService) GetByID(ctx context.Context, id int64) (models.TicketClass, error) {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.GetByID: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.GetByID: ticket class %d not found", id)
+			return models.TicketClass{}, ErrNotFound
 		}
 		s.l.Errorf(ctx, "service.ticketclass.GetByID: %v", err)
 		return models.TicketClass{}, err
@@ -101,8 +104,8 @@ func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketCla
 func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.Delete: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.Delete: ticket class %d not found, no-op", id)
 			return nil
 		}
 		s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
@@ -120,8 +123,9 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 func (s *implTicketClassService) GetAvailableCount(ctx context.Context, id int64) (int, error) {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.GetAvailableCount: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.GetAvailableCount: ticket class %d not found", id)
+			return 0, ErrNotFound
 		}
 		s.l.Errorf(ctx, "service.ticketclass.GetAvailableCount: %v", err)
 		return 0, err

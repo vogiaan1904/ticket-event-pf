@@ -15,12 +15,14 @@ var (
 
 func (s *grpcService) mapError(err error) error {
 	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
+	case errors.Is(err, svc.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 		return pkgErrors.ErrNotFound
-	case errors.Is(err, gorm.ErrInvalidData):
+	case errors.Is(err, svc.ErrInsufficientStock):
 		return pkgErrors.ErrInsufficientStock
 	case errors.Is(err, svc.ErrStateConflict):
 		return pkgErrors.ErrConflict
+	case errors.Is(err, svc.ErrInventoryDrift):
+		return pkgErrors.ErrInternal
 	default:
 		return pkgErrors.ErrInternal
 	}

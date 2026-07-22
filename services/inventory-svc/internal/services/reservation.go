@@ -58,7 +58,7 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 		}
 		if len(tcs) != len(ids) {
 			s.l.Warnf(ctx, "service.reservation.Reserve: ticket classes not found (want=%d got=%d)", len(ids), len(tcs))
-			return gorm.ErrRecordNotFound
+			return ErrNotFound
 		}
 		byID := indexByID(tcs)
 
@@ -69,7 +69,7 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 			if tc.Total-tc.Reserved-tc.Sold < q {
 				s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
 					id, tc.Total-tc.Reserved-tc.Sold, q)
-				return gorm.ErrInvalidData
+				return ErrInsufficientStock
 			}
 		}
 
@@ -86,7 +86,7 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 			}
 			if res.RowsAffected == 0 {
 				s.l.Warnf(ctx, "service.reservation.Reserve: availability guard failed for ticket_class_id=%d", id)
-				return gorm.ErrInvalidData
+				return ErrInsufficientStock
 			}
 			rs = append(rs, s.buildModel(in.OrderCode, in.ExpiresAt, ReserveItem{TicketClassID: id, Qty: q}))
 		}
@@ -151,7 +151,7 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 	}
 	if len(rs) == 0 {
 		s.l.Warnf(ctx, "service.reservation.Confirm: no reservations for order_code=%s", oCode)
-		return gorm.ErrRecordNotFound
+		return ErrNotFound
 	}
 
 	// Idempotency: all already confirmed → no-op.
@@ -194,7 +194,7 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 		}
 		if result.RowsAffected == 0 {
 			s.l.Errorf(ctx, "service.reservation.Confirm: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
-			return gorm.ErrInvalidData
+			return ErrInventoryDrift
 		}
 	}
 
@@ -266,7 +266,7 @@ func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gor
 		}
 		if result.RowsAffected == 0 {
 			s.l.Errorf(ctx, "service.reservation.Release: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
-			return gorm.ErrInvalidData
+			return ErrInventoryDrift
 		}
 	}
 
