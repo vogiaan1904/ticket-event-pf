@@ -101,7 +101,12 @@ func (s *grpcService) newCreateTicketClassInput(req *invpb.CreateTicketClassRequ
 	}, nil
 }
 
-// newUpdateTicketClassInput converts protobuf request to service input
+// newUpdateTicketClassInput converts protobuf request to service input.
+//
+// The proto uses plain (non-optional) scalars, so the zero value is the only
+// available "absent" signal: an empty string or a 0 means "leave unchanged".
+// That makes it impossible to set a price of 0 or an empty name through this
+// RPC -- an accepted limitation until the contract gains `optional` fields.
 func (s *grpcService) newUpdateTicketClassInput(req *invpb.UpdateTicketClassRequest) (svc.UpdateTicketClassInput, error) {
 	startSaleAt, err := parseTime(req.GetStartSaleAt())
 	if err != nil {
@@ -113,15 +118,25 @@ func (s *grpcService) newUpdateTicketClassInput(req *invpb.UpdateTicketClassRequ
 		return svc.UpdateTicketClassInput{}, err
 	}
 
-	priceCents := req.GetPriceCents()
-	return svc.UpdateTicketClassInput{
-		Name:        req.GetName(),
-		PriceCents:  &priceCents,
-		Currency:    req.GetCurrency(),
-		Total:       int(req.GetTotal()),
+	in := svc.UpdateTicketClassInput{
 		SaleStartAt: startSaleAt,
 		SaleEndAt:   endSaleAt,
-	}, nil
+	}
+	if v := req.GetName(); v != "" {
+		in.Name = &v
+	}
+	if v := req.GetCurrency(); v != "" {
+		in.Currency = &v
+	}
+	if v := req.GetPriceCents(); v != 0 {
+		in.PriceCents = &v
+	}
+	if v := req.GetTotal(); v != 0 {
+		total := int(v)
+		in.Total = &total
+	}
+
+	return in, nil
 }
 
 func (s *grpcService) newGetManyTicketClassInput(req *invpb.FindManyTicketClassRequest) (svc.GetManyTicketClassInput, error) {

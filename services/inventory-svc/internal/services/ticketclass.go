@@ -8,6 +8,7 @@ import (
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
 	pkgLog "github.com/vogiaan/ticketbottle-inventory/pkg/logger"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TicketClassService interface {
@@ -43,19 +44,48 @@ func (s implTicketClassService) Create(ctx context.Context, in CreateTicketClass
 }
 
 func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateTicketClassInput) (models.TicketClass, error) {
-	var tc models.TicketClass
-	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			s.l.Warnf(ctx, "service.ticketclass.Update: ticket class %d not found", id)
-			return models.TicketClass{}, ErrNotFound
-		}
-		s.l.Errorf(ctx, "service.ticketclass.Update: %v", err)
-		return models.TicketClass{}, err
-	}
+	cols := s.updateColumns(in)
 
-	s.buildUpdate(in, &tc)
-	if err := s.repo.Update(ctx, &tc); err != nil {
-		s.l.Errorf(ctx, "service.ticketclass.Update: %v", err)
+	var tc models.TicketClass
+	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the row so the capacity check below sees a stable
+		// reserved/sold, and so a concurrent Reserve on this ticket class
+		// serialises behind us instead of racing the write.
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&tc, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.l.Warnf(ctx, "service.ticketclass.Update: ticket class %d not found", id)
+				return ErrNotFound
+			}
+			s.l.Errorf(ctx, "service.ticketclass.Update.Lock: %v", err)
+			return err
+		}
+
+		if in.Total != nil && *in.Total < tc.Reserved+tc.Sold {
+			s.l.Warnf(ctx, "service.ticketclass.Update: refusing total=%d below committed reserved=%d sold=%d for ticket_class_id=%d",
+				*in.Total, tc.Reserved, tc.Sold, id)
+			return ErrStateConflict
+		}
+
+		if len(cols) == 0 {
+			return nil
+		}
+
+		if err := tx.Model(&models.TicketClass{}).Where("id = ?", id).
+			Updates(cols).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Update.Write: %v", err)
+			return err
+		}
+
+		// Re-read inside the transaction so the caller gets the row as
+		// committed, counters included.
+		if err := tx.First(&tc, id).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Update.Reload: %v", err)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return models.TicketClass{}, err
 	}
 
