@@ -94,7 +94,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 	compensations.AddCompensation(oActs.DeleteOrderItems, code)
 
 	// 4. Reserve inventory
-	expAt := util.TimeToISO8601Str(workflow.Now(ctx).Add(PaymentTimeout))
+	expAt := util.TimeToISO8601Str(reservationExpiry(workflow.Now(ctx)))
 	err = reserveInventory(ctx, code, expAt, in.Items)
 	if err != nil {
 		return nil, err
