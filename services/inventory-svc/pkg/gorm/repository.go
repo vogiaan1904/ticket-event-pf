@@ -36,7 +36,16 @@ func (r *Repository) FindByID(ctx context.Context, model interface{}, id interfa
 	return r.WithContext(ctx).First(model, id).Error
 }
 
-// Update updates a record
+// Update updates a record.
+//
+// Deprecated: this is Save(model) under the hood, which writes every column
+// on the row -- including counters like ticket_class.reserved/sold. Calling
+// it with a model loaded outside the current transaction clobbers whatever a
+// concurrent, properly-locked writer changed in the meantime; this is what
+// caused this service's oversell P0 (a concurrent reservation's `reserved`
+// increment was silently erased). Callers must instead issue a
+// column-targeted Updates(map) inside a `SELECT ... FOR UPDATE` transaction,
+// or a guarded conditional UPDATE, as internal/services/reservation.go does.
 func (r *Repository) Update(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Save(model).Error
 }
