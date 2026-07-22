@@ -167,7 +167,7 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 		// decision here rather than an automatic CASCADE that could just as
 		// easily take a live reservation with it -- clear them before the
 		// parent row.
-		if err := tx.Where("ticket_class_id = ?", id).Delete(&models.Reservation{}).Error; err != nil {
+		if err := deleteTerminalReservations(tx, id); err != nil {
 			s.l.Errorf(ctx, "service.ticketclass.Delete.DeleteTerminalReservations: %v", err)
 			return err
 		}
@@ -180,6 +180,20 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 		s.l.Infof(ctx, "service.ticketclass.Delete: deleted ticket_class_id=%d", id)
 		return nil
 	})
+}
+
+// deleteTerminalReservations removes only the terminal (EXPIRED/CANCELLED)
+// reservation rows for a ticket class inside tx. The caller's liveCount guard
+// already refuses Delete whenever an ACTIVE/CONFIRMED row exists, but scoping
+// this statement to terminal statuses too keeps the FK RESTRICT backstop
+// load-bearing: if a future code path ever creates a reservation without
+// taking the ticket_class lock first, this statement leaves it in place and
+// the parent delete below hits a genuine FK violation instead of silently
+// removing it alongside the terminal rows.
+func deleteTerminalReservations(tx *gorm.DB, id int64) error {
+	return tx.Where("ticket_class_id = ? AND status IN ?", id,
+		[]models.ReservationStatus{models.ReservationStatusExpired, models.ReservationStatusCancelled}).
+		Delete(&models.Reservation{}).Error
 }
 
 func (s *implTicketClassService) GetAvailableCount(ctx context.Context, id int64) (int, error) {

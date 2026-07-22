@@ -51,18 +51,27 @@ func PostMigrateStatements() []string {
 		// behind it. Only run that DDL when confdeltype is actually wrong
 		// ('c' = CASCADE, 'a' = NO ACTION) -- the already-correct case
 		// ('r' = RESTRICT) does a plain catalog SELECT and takes no lock.
+		// The lookup is qualified by conrelid so it can only ever match the
+		// reservation table's own constraint, never a same-named one
+		// elsewhere -- SELECT ... INTO without STRICT would otherwise
+		// silently take an arbitrary matching row.
+		// The re-add is NOT VALID, like every other constraint in this file:
+		// the rows were under a foreign key the whole time, only the
+		// ON DELETE action was wrong, so the data is already known-valid and
+		// a full validating scan under lock would be pure waste.
 		`DO $$
 		   DECLARE
 		     current_action "char";
 		   BEGIN
 		     SELECT confdeltype INTO current_action
 		       FROM pg_constraint
-		      WHERE conname = 'fk_ticket_class_reservations';
+		      WHERE conname = 'fk_ticket_class_reservations'
+		        AND conrelid = 'reservation'::regclass;
 
 		     IF current_action IS NOT NULL AND current_action <> 'r' THEN
 		       ALTER TABLE reservation DROP CONSTRAINT fk_ticket_class_reservations;
 		       ALTER TABLE reservation ADD CONSTRAINT fk_ticket_class_reservations
-		         FOREIGN KEY (ticket_class_id) REFERENCES ticket_class (id) ON DELETE RESTRICT;
+		         FOREIGN KEY (ticket_class_id) REFERENCES ticket_class (id) ON DELETE RESTRICT NOT VALID;
 		     END IF;
 		   END $$`,
 	}

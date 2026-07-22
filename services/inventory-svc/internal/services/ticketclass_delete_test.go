@@ -7,6 +7,7 @@ import (
 
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
+	"gorm.io/gorm"
 )
 
 func deleteSvc(t *testing.T) (TicketClassService, ReservationService, *pkgGorm.Repository) {
@@ -117,5 +118,48 @@ func TestDelete_UnknownID_NoOp(t *testing.T) {
 	tcSvc, _, _ := deleteSvc(t)
 	if err := tcSvc.Delete(context.Background(), 999999999); err != nil {
 		t.Fatalf("Delete on unknown id = %v, want no-op success", err)
+	}
+}
+
+// The guard above (liveCount check) already refuses the whole Delete when a
+// live reservation is present, so the full service method can never reach
+// deleteTerminalReservations with a mix of live and terminal rows -- proving
+// that requires calling the child-delete step directly, bypassing the guard,
+// the way a future code path that skips the ticket_class lock would. This is
+// the load-bearing check for Fix 1: it pins down that the statement itself
+// scopes to terminal rows, regardless of whether the guard above it also
+// happens to catch the same case today.
+func TestDeleteTerminalReservations_LeavesLiveRowsUntouched(t *testing.T) {
+	_, _, repo := deleteSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+
+	seed := []models.Reservation{
+		{OrderCode: "o-mix-active", TicketClassID: tc.ID, Qty: 1, Status: models.ReservationStatusActive, ExpiresAt: future()},
+		{OrderCode: "o-mix-confirmed", TicketClassID: tc.ID, Qty: 1, Status: models.ReservationStatusConfirmed, ExpiresAt: future()},
+		{OrderCode: "o-mix-expired", TicketClassID: tc.ID, Qty: 1, Status: models.ReservationStatusExpired, ExpiresAt: future()},
+		{OrderCode: "o-mix-cancelled", TicketClassID: tc.ID, Qty: 1, Status: models.ReservationStatusCancelled, ExpiresAt: future()},
+	}
+	for i := range seed {
+		must(t, repo.Create(context.Background(), &seed[i]))
+	}
+
+	if err := repo.GetDB().Transaction(func(tx *gorm.DB) error {
+		return deleteTerminalReservations(tx, tc.ID)
+	}); err != nil {
+		t.Fatalf("deleteTerminalReservations: %v", err)
+	}
+
+	var remaining []models.Reservation
+	if err := repo.WithContext(context.Background()).
+		Where("ticket_class_id = ?", tc.ID).Find(&remaining).Error; err != nil {
+		t.Fatalf("reload remaining reservations: %v", err)
+	}
+	if len(remaining) != 2 {
+		t.Fatalf("remaining reservations = %d, want 2 (ACTIVE + CONFIRMED must survive)", len(remaining))
+	}
+	for _, r := range remaining {
+		if r.Status != models.ReservationStatusActive && r.Status != models.ReservationStatusConfirmed {
+			t.Fatalf("surviving reservation has status %s, want ACTIVE or CONFIRMED", r.Status)
+		}
 	}
 }

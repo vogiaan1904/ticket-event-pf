@@ -50,7 +50,18 @@ func (r *Repository) Update(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Save(model).Error
 }
 
-// Delete soft deletes a record
+// Delete deletes a record.
+//
+// Deprecated: this is a hard delete (neither model has a DeletedAt field, so
+// there is no soft-delete to speak of) that takes no lock on the row being
+// deleted and performs no state check before deleting it. Calling this on a
+// ticket_class is exactly the unguarded, unlocked delete that let
+// DeleteTicketClass silently destroy live reservations, including paid
+// (CONFIRMED) ones -- the bug the FK RESTRICT and the in-service guard now
+// exist to prevent. Callers must instead follow the guarded pattern in
+// internal/services/ticketclass.go's implTicketClassService.Delete: lock the
+// parent row FOR UPDATE, check for non-terminal children, and only then
+// delete.
 func (r *Repository) Delete(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Delete(model).Error
 }
