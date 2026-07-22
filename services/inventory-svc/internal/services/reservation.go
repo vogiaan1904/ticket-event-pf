@@ -150,9 +150,9 @@ func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
 }
 
 // sortedInt64Keys returns the map keys in ascending order, so every operation
-// that updates multiple ticket_class rows locks them in the same (ascending id)
-// order — preserving the deadlock-freedom invariant.
-func sortedInt64Keys(m map[int64]int) []int64 {
+// that updates multiple ticket_class rows locks them in the same (ascending
+// id) order -- preserving the deadlock-freedom invariant.
+func sortedInt64Keys[V any](m map[int64]V) []int64 {
 	keys := make([]int64, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -166,6 +166,14 @@ func (s implReservationService) Confirm(ctx context.Context, oCode string) error
 		return s.confirmReservationTx(ctx, tx, oCode)
 	})
 	return err
+}
+
+// confirmDelta is how much of a ticket class's confirm comes from the hold
+// this order still owns, versus how much has to be taken back out of free
+// stock because the expiry worker already released it.
+type confirmDelta struct {
+	fromReserved int
+	fromFree     int
 }
 
 func (s implReservationService) confirmReservationTx(ctx context.Context, tx *gorm.DB, oCode string) error {
@@ -193,34 +201,71 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 		return nil
 	}
 
-	now := time.Now().UTC()
-	tcUps := make(map[int64]int)
+	deltas := make(map[int64]*confirmDelta, len(rs))
 	rIDs := make([]int64, 0, len(rs))
 	for _, r := range rs {
-		if r.Status != models.ReservationStatusActive || now.After(r.ExpiresAt) {
-			s.l.Warnf(ctx, "service.reservation.Confirm: conflict for reservation %d (status=%s, timeExpired=%v)",
-				r.ID, r.Status, now.After(r.ExpiresAt))
+		d := deltas[r.TicketClassID]
+		if d == nil {
+			d = &confirmDelta{}
+			deltas[r.TicketClassID] = d
+		}
+
+		switch r.Status {
+		case models.ReservationStatusActive:
+			// Still holding its quantity in `reserved`, even if past
+			// expires_at -- the worker just has not swept it yet. Confirming
+			// is a pure reserved -> sold move and is always safe.
+			d.fromReserved += r.Qty
+
+		case models.ReservationStatusExpired:
+			// The worker already handed the stock back. Payment succeeded
+			// anyway, so try to take it again out of what is free.
+			s.l.Warnf(ctx, "service.reservation.Confirm: reservation %d for order_code=%s was already expired; attempting re-acquire of qty=%d",
+				r.ID, oCode, r.Qty)
+			d.fromFree += r.Qty
+
+		default:
+			// CONFIRMED mixed with unconfirmed, or CANCELLED: an order half
+			// applied or explicitly released. Never guess -- surface it.
+			s.l.Warnf(ctx, "service.reservation.Confirm: conflict for reservation %d (status=%s)", r.ID, r.Status)
 			return ErrStateConflict
 		}
-		tcUps[r.TicketClassID] += r.Qty
 		rIDs = append(rIDs, r.ID)
 	}
 
-	for _, tcID := range sortedInt64Keys(tcUps) {
-		qty := tcUps[tcID]
-		result := tx.Model(&models.TicketClass{}).
-			Where("id = ? AND reserved >= ?", tcID, qty).
-			Updates(map[string]any{
-				"reserved": gorm.Expr("reserved - ?", qty),
-				"sold":     gorm.Expr("sold + ?", qty),
-			})
-		if result.Error != nil {
-			s.l.Errorf(ctx, "service.reservation.Confirm.UpdateTicketClass: ticket_class_id=%d: %v", tcID, result.Error)
-			return result.Error
+	for _, tcID := range sortedInt64Keys(deltas) {
+		d := deltas[tcID]
+
+		if d.fromReserved > 0 {
+			result := tx.Model(&models.TicketClass{}).
+				Where("id = ? AND reserved >= ?", tcID, d.fromReserved).
+				Updates(map[string]any{
+					"reserved": gorm.Expr("reserved - ?", d.fromReserved),
+					"sold":     gorm.Expr("sold + ?", d.fromReserved),
+				})
+			if result.Error != nil {
+				s.l.Errorf(ctx, "service.reservation.Confirm.UpdateTicketClass: ticket_class_id=%d: %v", tcID, result.Error)
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				s.l.Errorf(ctx, "service.reservation.Confirm: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, d.fromReserved)
+				return ErrInventoryDrift
+			}
 		}
-		if result.RowsAffected == 0 {
-			s.l.Errorf(ctx, "service.reservation.Confirm: insufficient reserved for ticket_class_id=%d (needed=%d)", tcID, qty)
-			return ErrInventoryDrift
+
+		if d.fromFree > 0 {
+			result := tx.Model(&models.TicketClass{}).
+				Where("id = ? AND total - reserved - sold >= ?", tcID, d.fromFree).
+				Update("sold", gorm.Expr("sold + ?", d.fromFree))
+			if result.Error != nil {
+				s.l.Errorf(ctx, "service.reservation.Confirm.ReacquireTicketClass: ticket_class_id=%d: %v", tcID, result.Error)
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				s.l.Errorf(ctx, "service.reservation.Confirm: cannot re-acquire %d for ticket_class_id=%d on order_code=%s -- stock is gone, order needs a refund",
+					d.fromFree, tcID, oCode)
+				return ErrStateConflict
+			}
 		}
 	}
 
