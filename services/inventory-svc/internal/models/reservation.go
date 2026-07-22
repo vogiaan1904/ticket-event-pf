@@ -16,6 +16,9 @@ type Reservation struct {
 	UpdatedAt     time.Time
 
 	// Relations
+	//
+	// RESTRICT, matching TicketClass.Reservations above -- see the comment
+	// there.
 	TicketClass TicketClass `gorm:"constraint:OnDelete:RESTRICT"`
 }
 

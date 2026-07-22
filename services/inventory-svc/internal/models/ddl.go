@@ -31,5 +31,39 @@ func PostMigrateStatements() []string {
 		   ALTER TABLE reservation ADD CONSTRAINT chk_reservation_qty_positive
 		     CHECK (qty > 0) NOT VALID;
 		 EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+
+		// fk_ticket_class_reservations was created with contradictory OnDelete
+		// tags on the two sides of the GORM relation (CASCADE on
+		// TicketClass.Reservations, RESTRICT on Reservation.TicketClass).
+		// AutoMigrate creates the constraint once, the first time either model
+		// is migrated and it does not yet exist, and never revisits it after
+		// that -- so whichever side was migrated first (TicketClass, in
+		// main.go's AutoMigrate call) won, and every database ever bootstrapped
+		// against these tags is stuck on CASCADE. That let DeleteTicketClass
+		// silently destroy every reservation referencing it, including
+		// CONFIRMED ones (paid orders). The struct tags are now both RESTRICT,
+		// but changing them does not touch an already-migrated database, so
+		// this statement repairs one in place.
+		//
+		// Guarded: dropping and re-adding a foreign key constraint takes
+		// ACCESS EXCLUSIVE on both tables, which on a busy reservation table
+		// would queue behind in-flight transactions and then block new ones
+		// behind it. Only run that DDL when confdeltype is actually wrong
+		// ('c' = CASCADE, 'a' = NO ACTION) -- the already-correct case
+		// ('r' = RESTRICT) does a plain catalog SELECT and takes no lock.
+		`DO $$
+		   DECLARE
+		     current_action "char";
+		   BEGIN
+		     SELECT confdeltype INTO current_action
+		       FROM pg_constraint
+		      WHERE conname = 'fk_ticket_class_reservations';
+
+		     IF current_action IS NOT NULL AND current_action <> 'r' THEN
+		       ALTER TABLE reservation DROP CONSTRAINT fk_ticket_class_reservations;
+		       ALTER TABLE reservation ADD CONSTRAINT fk_ticket_class_reservations
+		         FOREIGN KEY (ticket_class_id) REFERENCES ticket_class (id) ON DELETE RESTRICT;
+		     END IF;
+		   END $$`,
 	}
 }

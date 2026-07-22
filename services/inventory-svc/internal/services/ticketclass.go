@@ -133,22 +133,53 @@ func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketCla
 }
 
 func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
-	var tc models.TicketClass
-	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			s.l.Warnf(ctx, "service.ticketclass.Delete: ticket class %d not found, no-op", id)
-			return nil
+	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the row: this both makes the not-found check and the
+		// reservation guard below consistent with a concurrent Reserve (which
+		// locks the same ticket_class row FOR UPDATE before creating a new
+		// hold), so nothing can slip a live reservation in between our guard
+		// check and the delete.
+		var tc models.TicketClass
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tc, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.l.Warnf(ctx, "service.ticketclass.Delete: ticket class %d not found, no-op", id)
+				return nil
+			}
+			s.l.Errorf(ctx, "service.ticketclass.Delete.Lock: %v", err)
+			return err
 		}
-		s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
-		return err
-	}
 
-	if err := s.repo.Delete(ctx, &tc); err != nil {
-		s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
-		return err
-	}
+		var liveCount int64
+		if err := tx.Model(&models.Reservation{}).
+			Where("ticket_class_id = ? AND status IN ?", id,
+				[]models.ReservationStatus{models.ReservationStatusActive, models.ReservationStatusConfirmed}).
+			Count(&liveCount).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete.CountLiveReservations: %v", err)
+			return err
+		}
+		if liveCount > 0 {
+			s.l.Warnf(ctx, "service.ticketclass.Delete: refusing to delete ticket_class_id=%d, %d non-terminal reservation(s) remain", id, liveCount)
+			return ErrStateConflict
+		}
 
-	return nil
+		// Every remaining reservation, if any, is terminal (EXPIRED/CANCELLED).
+		// The FK is RESTRICT precisely so this is an explicit, deliberate
+		// decision here rather than an automatic CASCADE that could just as
+		// easily take a live reservation with it -- clear them before the
+		// parent row.
+		if err := tx.Where("ticket_class_id = ?", id).Delete(&models.Reservation{}).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete.DeleteTerminalReservations: %v", err)
+			return err
+		}
+
+		if err := tx.Delete(&tc).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
+			return err
+		}
+
+		s.l.Infof(ctx, "service.ticketclass.Delete: deleted ticket_class_id=%d", id)
+		return nil
+	})
 }
 
 func (s *implTicketClassService) GetAvailableCount(ctx context.Context, id int64) (int, error) {
