@@ -354,20 +354,16 @@ func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gor
 	return nil
 }
 
-func (s implReservationService) BatchExpireReservations(ctx context.Context, batchSize int) (int, error) {
+func (s implReservationService) BatchExpireReservations(ctx context.Context, batchSize int) (expired int, err error) {
 	if batchSize <= 0 || batchSize > 1000 {
 		batchSize = 500 // Default batch size
 	}
 
-	totalExpired := 0
-
-	return totalExpired, s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
-		s.l.Infof(ctx, "service.reservation.BatchExpireReservations: checking for expired reservations (now=%s, timezone=%s)",
-			now.Format(time.RFC3339), now.Location())
 
 		var rs []models.Reservation
-		err := tx.Clauses(clause.Locking{
+		if err := tx.Clauses(clause.Locking{
 			Strength: "UPDATE",
 			Options:  "SKIP LOCKED",
 		}).
@@ -375,69 +371,67 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 			Where("status = ? AND expires_at <= ?", models.ReservationStatusActive, now).
 			Order("expires_at").
 			Limit(batchSize).
-			Find(&rs).Error
-
-		if err != nil {
+			Find(&rs).Error; err != nil {
 			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.LockReservations: %v", err)
 			return err
 		}
 
 		if len(rs) == 0 {
-			s.l.Infof(ctx, "service.reservation.BatchExpireReservations: no expired reservations found")
 			return nil
 		}
 
-		s.l.Infof(ctx, "service.reservation.BatchExpireReservations: found %d expired reservations (first expires_at=%s)",
-			len(rs), rs[0].ExpiresAt.Format(time.RFC3339))
-
-		tsQtyMap := make(map[int64]int)
-		rIDs := make([]int64, 0, len(rs))
-
+		qtyByTC := make(map[int64]int, len(rs))
 		for _, r := range rs {
-			tsQtyMap[r.TicketClassID] += r.Qty
-			rIDs = append(rIDs, r.ID)
+			qtyByTC[r.TicketClassID] += r.Qty
 		}
 
-		for _, tcID := range sortedInt64Keys(tsQtyMap) {
-			totalQty := tsQtyMap[tcID]
+		// Ticket classes whose counter could not absorb the decrement. Their
+		// reservations stay ACTIVE so the drift stays visible instead of
+		// being erased, and so one bad row cannot stall the whole batch.
+		drifted := make(map[int64]bool)
+
+		for _, tcID := range sortedInt64Keys(qtyByTC) {
+			totalQty := qtyByTC[tcID]
 			result := tx.Model(&models.TicketClass{}).
-				Where("id = ?", tcID).
-				Where("reserved >= ?", totalQty). // Safety check
+				Where("id = ? AND reserved >= ?", tcID, totalQty).
 				Update("reserved", gorm.Expr("reserved - ?", totalQty))
 
 			if result.Error != nil {
-				s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.DecrementReserved: ticket_class_id=%d, qty=%d, error=%v",
+				s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.DecrementReserved: ticket_class_id=%d, qty=%d: %v",
 					tcID, totalQty, result.Error)
 				return result.Error
 			}
-
 			if result.RowsAffected == 0 {
-				s.l.Warnf(ctx, "service.reservation.BatchExpireReservations: insufficient reserved for ticket_class_id=%d (needed=%d)",
-					tcID, totalQty)
+				s.l.Errorf(ctx, "service.reservation.BatchExpireReservations: %v: reserved is below the %d held by expiring reservations on ticket_class_id=%d; leaving them ACTIVE for investigation",
+					ErrInventoryDrift, totalQty, tcID)
+				drifted[tcID] = true
+				continue
 			}
-
-			s.l.Infof(ctx, "service.reservation.BatchExpireReservations: released %d tickets for ticket_class_id=%d",
-				totalQty, tcID)
 		}
 
-		result := tx.Model(&models.Reservation{}).
-			Where("id IN ?", rIDs).
-			Update("status", models.ReservationStatusExpired)
-
-		if result.Error != nil {
-			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.UpdateStatus: %v", result.Error)
-			return result.Error
+		expiredIDs := make([]int64, 0, len(rs))
+		for _, r := range rs {
+			if drifted[r.TicketClassID] {
+				continue
+			}
+			expiredIDs = append(expiredIDs, r.ID)
+		}
+		if len(expiredIDs) == 0 {
+			return nil
 		}
 
-		totalExpired = len(rIDs)
+		if err := tx.Model(&models.Reservation{}).
+			Where("id IN ?", expiredIDs).
+			Update("status", models.ReservationStatusExpired).Error; err != nil {
+			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.UpdateStatus: %v", err)
+			return err
+		}
 
-		// Step 5: Publish Kafka events (TODO: implement Kafka producer)
-		// TODO: Publish batch reservation.expired event
-		// Event payload: {reservation_ids, ticket_class_summary, expired_at, total_count}
-
-		s.l.Infof(ctx, "service.reservation.BatchExpireReservations: successfully expired %d reservations across %d ticket classes",
-			totalExpired, len(tsQtyMap))
-
+		expired = len(expiredIDs)
+		s.l.Infof(ctx, "service.reservation.BatchExpireReservations: expired %d reservations across %d ticket classes (%d skipped for drift)",
+			expired, len(qtyByTC)-len(drifted), len(drifted))
 		return nil
 	})
+
+	return expired, err
 }
