@@ -76,7 +76,12 @@ func main() {
 	}
 
 	grpcSvr := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.GrpcLoggingInterceptor(l)),
+		// Recovery must be outermost so it also catches panics raised inside
+		// the interceptors that follow it.
+		grpc.ChainUnaryInterceptor(
+			interceptors.GrpcRecoveryInterceptor(l),
+			interceptors.GrpcLoggingInterceptor(l),
+		),
 	)
 	invpb.RegisterInventoryServiceServer(grpcSvr, grpcSvc)
 
