@@ -78,16 +78,17 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 		now := time.Now().UTC()
 		for _, id := range ids {
 			tc := byID[id]
-			if tc.Status != models.TicketClassStatusActive {
-				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
-				return ErrSaleClosed
-			}
-			if tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt) {
-				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
-				return ErrSaleClosed
-			}
-			if tc.SaleEndAt != nil && now.After(*tc.SaleEndAt) {
-				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
+			if !onSale(tc, now) {
+				// onSale only decides; log here so the reason (INACTIVE vs.
+				// before-start vs. after-end) survives for diagnostics.
+				switch {
+				case tc.Status != models.TicketClassStatusActive:
+					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
+				case tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt):
+					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
+				case tc.SaleEndAt != nil && now.After(*tc.SaleEndAt):
+					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
+				}
 				return ErrSaleClosed
 			}
 
@@ -125,6 +126,24 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 		s.l.Infof(ctx, "service.reservation.Reserve: created %d reservations for order_code=%s", len(rs), in.OrderCode)
 		return nil
 	})
+}
+
+// onSale reports whether tc is currently eligible for sale: Status must be
+// ACTIVE and now must fall within [SaleStartAt, SaleEndAt], where either
+// bound may be nil (nil = unbounded on that side). Both ends are inclusive.
+// Shared by Reserve (inside its locked transaction) and CheckAvailability (a
+// pre-check) so the two can never silently disagree.
+func onSale(tc models.TicketClass, now time.Time) bool {
+	if tc.Status != models.TicketClassStatusActive {
+		return false
+	}
+	if tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt) {
+		return false
+	}
+	if tc.SaleEndAt != nil && now.After(*tc.SaleEndAt) {
+		return false
+	}
+	return true
 }
 
 // aggregateDemand collapses items to one entry per ticket class (summing qty)

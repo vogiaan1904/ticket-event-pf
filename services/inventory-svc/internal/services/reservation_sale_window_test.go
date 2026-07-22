@@ -108,3 +108,37 @@ func TestCheckAvailability_InactiveTicketClass_Rejects(t *testing.T) {
 		t.Fatal("accept = true, want false for an INACTIVE ticket class")
 	}
 }
+
+func TestCheckAvailability_BeforeSaleStart_Rejects(t *testing.T) {
+	repo := newTestDB(t)
+	tcSvc := NewTicketClassService(newTestLogger(), repo)
+	start := time.Now().UTC().Add(1 * time.Hour)
+	tc := seedTicketClassWindow(t, repo, models.TicketClassStatusActive, &start, nil)
+
+	ok, err := tcSvc.CheckAvailability(context.Background(), []CheckAvailabilityInput{
+		{TicketClassID: tc.ID, Qty: 1},
+	})
+	if err != nil {
+		t.Fatalf("CheckAvailability: %v", err)
+	}
+	if ok {
+		t.Fatal("accept = true, want false before the sale window opens")
+	}
+}
+
+func TestCheckAvailability_AfterSaleEnd_Rejects(t *testing.T) {
+	repo := newTestDB(t)
+	tcSvc := NewTicketClassService(newTestLogger(), repo)
+	end := time.Now().UTC().Add(-1 * time.Hour)
+	tc := seedTicketClassWindow(t, repo, models.TicketClassStatusActive, nil, &end)
+
+	ok, err := tcSvc.CheckAvailability(context.Background(), []CheckAvailabilityInput{
+		{TicketClassID: tc.ID, Qty: 1},
+	})
+	if err != nil {
+		t.Fatalf("CheckAvailability: %v", err)
+	}
+	if ok {
+		t.Fatal("accept = true, want false after the sale window closes")
+	}
+}

@@ -194,9 +194,7 @@ func (s *implTicketClassService) CheckAvailability(ctx context.Context, ins []Ch
 
 	now := time.Now().UTC()
 	for _, tc := range tcs {
-		if tc.Status != models.TicketClassStatusActive ||
-			(tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt)) ||
-			(tc.SaleEndAt != nil && now.After(*tc.SaleEndAt)) {
+		if !onSale(tc, now) {
 			s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: ticket_class_id=%d is not on sale (status=%s)", tc.ID, tc.Status)
 			return false, nil
 		}
