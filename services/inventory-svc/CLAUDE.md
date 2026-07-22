@@ -6,12 +6,12 @@ This is the **Inventory** service for TicketBottle V2. For the system-wide pictu
 
 ## Role
 
-High-throughput, gRPC-only ticket inventory (port **50057**, PostgreSQL via GORM). It is the correctness-critical heart of overselling prevention: every quantity change goes through a **`SELECT ... FOR UPDATE`** pessimistic lock inside a transaction (`tx.Clauses(clause.Locking{Strength: "UPDATE"})` in `internal/services/reservation.go`).
+High-throughput, gRPC-only ticket inventory (port **50057**, PostgreSQL via GORM). It is the correctness-critical heart of overselling prevention: every write to a `ticket_class` counter (`reserved`/`sold`) either runs inside a **`SELECT ... FOR UPDATE`** pessimistic-lock transaction (`tx.Clauses(clause.Locking{Strength: "UPDATE"})`), or is a **guarded conditional `UPDATE`** whose `WHERE` predicate makes the write incapable of violating the capacity constraint (`internal/services/reservation.go`).
 
 ## Three-step reservation flow
 
 ```
-Reserve  → lock ticket rows, hold quantity for ~15 min, create Reservation
+Reserve  → lock ticket rows, hold quantity for ~9 min (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
 Confirm  → convert a held reservation into a sale (decrement reserved, increment sold)
 Release  → free a held reservation
 ```
@@ -26,9 +26,11 @@ Keyed by **order code**. A background `ReservationExpiryWorker` (`internal/worke
 make run          # go run cmd/api/main.go
 make protoc       # regenerate protobuf
 make update-proto # regenerate gRPC stubs from the root proto/
-go test ./...     # run tests (go test ./internal/services/... for one package)
+make test         # run tests against a live Postgres (see below; go test ./internal/services/... for one package)
 go build ./...
 ```
+
+Use `make test`, not bare `go test ./...`: without a reachable Postgres on 5435, `go test ./...` silently `t.Skipf`s every DB-backed test and reports PASS having asserted nothing. `make test` runs `test-db` first (creates `ticketbottle_inventory_test` against the `ticketbottle-inventory` container) so the suite actually executes. `setup_test.go` also hard-fails instead of skipping when the `CI` env var is set, but that guard is currently unreachable in practice — this repo has no root `.github/workflows`, so nothing ever sets `CI` here. Treat it as aspirational until a CI workflow exists.
 
 On boot `main.go` runs GORM `AutoMigrate` for `TicketClass` and `Reservation`, then applies `models.PostMigrateStatements()` (`internal/models/ddl.go`) — the single source of DDL that AutoMigrate cannot express. That is the partial index `idx_reservation_active_expiry` plus three `CHECK` constraints:
 
@@ -49,7 +51,7 @@ All of this is still interim — versioned migrations are the target. Default Po
 ## Conventions
 
 - Logging uses the zap wrapper with ctx-first `f`-suffixed methods: `s.l.Errorf(ctx, "service.reservation.Reserve: %v", err)`. Prefix messages with `package.type.Method` as the existing code does.
-- Never read-modify-write a quantity outside the `FOR UPDATE` transaction — that is the invariant preventing oversell.
+- The real invariant is not "always `FOR UPDATE`": `Confirm`, `Release`, and `BatchExpireReservations` lock `reservation` rows `FOR UPDATE` but mutate `ticket_class` via a **guarded conditional `UPDATE`** (e.g. `WHERE id = ? AND reserved >= ?`), not a locked read-then-write of `ticket_class` itself. A `ticket_class` counter write must be inside a `FOR UPDATE` transaction on that row, **or** be a guarded conditional `UPDATE` whose predicate makes the write incapable of violating the capacity constraint — never a bare read-modify-write of `reserved`/`sold`/`total` outside either.
 - When locking multiple `ticket_class` rows, always lock in ascending id order.
 - **Errors crossing the service boundary are domain errors**, never GORM sentinels: `ErrInsufficientStock`, `ErrNotFound`, `ErrStateConflict`, `ErrSaleClosed`, `ErrInventoryDrift` (`internal/services/errors.go`). `internal/delivery/grpc/errors.go` maps them to gRPC codes. Returning `gorm.ErrInvalidData` to mean "sold out" is how this service used to mistranslate unrelated driver failures into `ResourceExhausted`.
 - **`ErrInventoryDrift` means corruption, not a user error** — `reserved` is lower than the holds claiming it, which can only happen if something wrote a quantity outside a locked transaction. The expiry worker skips drifted ticket classes and leaves their reservations `ACTIVE` so the evidence survives and the error log repeats every tick.
