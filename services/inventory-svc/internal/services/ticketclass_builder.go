@@ -4,20 +4,33 @@ import (
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 )
 
-func (s implTicketClassService) buildUpdate(in UpdateTicketClassInput, model *models.TicketClass) {
-	if in.Name != "" {
-		model.Name = in.Name
+// updateColumns turns a partial update into the exact set of columns to write.
+// Counter columns (reserved, sold) are never included: writing them outside a
+// locked reservation transaction is what silently erases live holds.
+func (s implTicketClassService) updateColumns(in UpdateTicketClassInput) map[string]any {
+	cols := make(map[string]any, 7)
+	if in.Name != nil {
+		cols["name"] = *in.Name
 	}
 	if in.PriceCents != nil {
-		model.PriceCents = *in.PriceCents
+		cols["price_cents"] = *in.PriceCents
 	}
-	model.Currency = in.Currency
-	model.Total = in.Total
-	model.SaleStartAt = in.SaleStartAt
-	model.SaleEndAt = in.SaleEndAt
+	if in.Currency != nil {
+		cols["currency"] = *in.Currency
+	}
+	if in.Total != nil {
+		cols["total"] = *in.Total
+	}
+	if in.SaleStartAt != nil {
+		cols["sale_start_at"] = *in.SaleStartAt
+	}
+	if in.SaleEndAt != nil {
+		cols["sale_end_at"] = *in.SaleEndAt
+	}
 	if in.Status != nil {
-		model.Status = models.TicketClassStatus(*in.Status)
+		cols["status"] = models.TicketClassStatus(*in.Status)
 	}
+	return cols
 }
 
 func (s implTicketClassService) buildModel(in CreateTicketClassInput) models.TicketClass {

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -41,21 +42,6 @@ func TestConfirm_Idempotent_SecondCallNoOp(t *testing.T) {
 	}
 }
 
-func TestConfirm_Expired_ReturnsConflict(t *testing.T) {
-	svc, repo := reserveSvc(t)
-	tc := seedTicketClass(t, repo, 100, 0, 0)
-	// Reserve already-expired.
-	must(t, svc.Reserve(context.Background(), ReserveInput{
-		OrderCode: "o-exp", ExpiresAt: time.Now().UTC().Add(-1 * time.Minute),
-		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 5}},
-	}))
-
-	err := svc.Confirm(context.Background(), "o-exp")
-	if err != ErrStateConflict {
-		t.Fatalf("Confirm on expired hold = %v, want ErrStateConflict", err)
-	}
-}
-
 func TestConfirm_NoReservations_ReturnsNotFound(t *testing.T) {
 	svc, _ := reserveSvc(t)
 	if err := svc.Confirm(context.Background(), "nope"); err == nil {
@@ -80,5 +66,83 @@ func TestConfirm_MixedState_ReturnsConflict(t *testing.T) {
 
 	if err := svc.Confirm(context.Background(), "o-mixed"); err != ErrStateConflict {
 		t.Fatalf("Confirm on mixed state = %v, want ErrStateConflict", err)
+	}
+}
+
+// An ACTIVE hold past its expires_at still holds its reserved quantity --
+// the worker has not swept it yet. Confirming it is exactly correct, and
+// refusing was the bug that left payments captured with no seat.
+func TestConfirm_ActivePastExpiry_Succeeds(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-past-exp", ExpiresAt: time.Now().UTC().Add(-1 * time.Minute),
+		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 5}},
+	}))
+
+	if err := svc.Confirm(context.Background(), "o-past-exp"); err != nil {
+		t.Fatalf("Confirm on an unswept past-expiry hold: %v", err)
+	}
+	got := ticketClassByID(t, repo, tc.ID)
+	if got.Reserved != 0 || got.Sold != 5 {
+		t.Fatalf("reserved=%d sold=%d, want 0/5", got.Reserved, got.Sold)
+	}
+}
+
+// The worker already released the hold, but the seats are still there:
+// re-acquire them rather than fail a paid order.
+func TestConfirm_ExpiredByWorker_ReacquiresWhenStockAvailable(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-reacq", ExpiresAt: time.Now().UTC().Add(-1 * time.Minute),
+		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 5}},
+	}))
+	if _, err := svc.BatchExpireReservations(context.Background(), 500); err != nil {
+		t.Fatalf("BatchExpireReservations: %v", err)
+	}
+	if got := ticketClassByID(t, repo, tc.ID); got.Reserved != 0 {
+		t.Fatalf("precondition reserved=%d, want 0 after the worker swept", got.Reserved)
+	}
+
+	if err := svc.Confirm(context.Background(), "o-reacq"); err != nil {
+		t.Fatalf("Confirm on a swept hold with stock still free: %v", err)
+	}
+	got := ticketClassByID(t, repo, tc.ID)
+	if got.Reserved != 0 || got.Sold != 5 {
+		t.Fatalf("reserved=%d sold=%d, want 0/5 (stock re-acquired)", got.Reserved, got.Sold)
+	}
+
+	var r models.Reservation
+	repo.WithContext(context.Background()).Where("order_code = ?", "o-reacq").First(&r)
+	if r.Status != models.ReservationStatusConfirmed {
+		t.Fatalf("status = %s, want CONFIRMED", r.Status)
+	}
+}
+
+// The seats really are gone -- the caller must learn that and refund.
+func TestConfirm_ExpiredByWorker_ConflictsWhenSoldOut(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 5, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-soldout", ExpiresAt: time.Now().UTC().Add(-1 * time.Minute),
+		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 5}},
+	}))
+	if _, err := svc.BatchExpireReservations(context.Background(), 500); err != nil {
+		t.Fatalf("BatchExpireReservations: %v", err)
+	}
+	// Somebody else took every seat in the meantime.
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-winner", ExpiresAt: future(),
+		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 5}},
+	}))
+	must(t, svc.Confirm(context.Background(), "o-winner"))
+
+	if err := svc.Confirm(context.Background(), "o-soldout"); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("Confirm on a swept hold with no stock left = %v, want ErrStateConflict", err)
+	}
+	got := ticketClassByID(t, repo, tc.ID)
+	if got.Sold != 5 {
+		t.Fatalf("sold = %d, want 5 (the failed re-acquire must not oversell)", got.Sold)
 	}
 }

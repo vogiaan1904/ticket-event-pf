@@ -21,7 +21,12 @@ type TicketClass struct {
 	UpdatedAt   time.Time
 
 	// Relations
-	Reservations []Reservation `gorm:"constraint:OnDelete:CASCADE"`
+	//
+	// RESTRICT, matching Reservation.TicketClass below -- the two sides of
+	// this FK must never disagree. A reservation is a record of a hold or a
+	// paid order; the database must refuse to delete a ticket class out from
+	// under one rather than silently cascading the deletion onto it.
+	Reservations []Reservation `gorm:"constraint:OnDelete:RESTRICT"`
 }
 
 // TableName specifies the table name for TicketClass

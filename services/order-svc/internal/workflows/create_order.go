@@ -49,7 +49,7 @@ func GetCreateOrderWorkflowID(oCode string) string {
 // 1. Check Availability - Verify sufficient inventory
 // 2. Create Order - Persist order record (saga begins)
 // 3. Create Order Items - Persist order items (saga tracked)
-// 4. Reserve Tickets - Lock inventory for 15 min (saga tracked)
+// 4. Reserve Tickets - Hold inventory for PaymentTimeout + ReservationHoldGrace (saga tracked)
 // 5. Create Payment Intent - Generate payment URL
 // Compensation on failure: Release inventory -> Delete items -> Delete order
 func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrderWorkflowResult, error) {
@@ -94,7 +94,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 	compensations.AddCompensation(oActs.DeleteOrderItems, code)
 
 	// 4. Reserve inventory
-	expAt := util.TimeToISO8601Str(workflow.Now(ctx).Add(PaymentTimeout))
+	expAt := util.TimeToISO8601Str(reservationExpiry(workflow.Now(ctx)))
 	err = reserveInventory(ctx, code, expAt, in.Items)
 	if err != nil {
 		return nil, err

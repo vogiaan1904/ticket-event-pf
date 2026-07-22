@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -120,5 +121,45 @@ func TestReserve_Concurrent_NoOversell(t *testing.T) {
 	}
 	if okCount != 10 {
 		t.Fatalf("successful reserves = %d, want exactly 10", okCount)
+	}
+}
+
+// Reserve -> Release -> Reserve must not report success while holding
+// nothing. The old count-any-status short-circuit saw the CANCELLED rows and
+// no-oped, handing back an order with zero inventory behind it.
+func TestReserve_AfterRelease_ReturnsConflict(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	in := ReserveInput{
+		OrderCode: "o-rereserve",
+		ExpiresAt: future(),
+		Items:     []ReserveItem{{TicketClassID: tc.ID, Qty: 4}},
+	}
+	must(t, svc.Reserve(context.Background(), in))
+	must(t, svc.Release(context.Background(), "o-rereserve"))
+
+	if err := svc.Reserve(context.Background(), in); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("Reserve after Release = %v, want ErrStateConflict", err)
+	}
+	if got := ticketClassByID(t, repo, tc.ID); got.Reserved != 0 {
+		t.Fatalf("reserved = %d, want 0 (the rejected re-reserve must hold nothing)", got.Reserved)
+	}
+}
+
+func TestReserve_AfterExpiry_ReturnsConflict(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	in := ReserveInput{
+		OrderCode: "o-reexpire",
+		ExpiresAt: time.Now().UTC().Add(-1 * time.Minute),
+		Items:     []ReserveItem{{TicketClassID: tc.ID, Qty: 4}},
+	}
+	must(t, svc.Reserve(context.Background(), in))
+	if _, err := svc.BatchExpireReservations(context.Background(), 500); err != nil {
+		t.Fatalf("BatchExpireReservations: %v", err)
+	}
+
+	if err := svc.Reserve(context.Background(), in); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("Reserve after expiry = %v, want ErrStateConflict", err)
 	}
 }

@@ -32,12 +32,22 @@ func newTestDB(t *testing.T) *pkgGorm.Repository {
 		ConnMaxIdleTime: 10 * time.Minute,
 	})
 	if err != nil {
+		// A missing database must never let the suite report success in CI --
+		// these tests are the only thing standing between a refactor and an
+		// oversell. Locally, skipping keeps `go test ./...` usable.
+		if os.Getenv("CI") != "" {
+			t.Fatalf("CI requires a reachable test postgres (%s): %v", dsn, err)
+		}
 		t.Skipf("skipping: cannot reach test postgres (%s): %v", dsn, err)
 	}
 	if err := db.AutoMigrate(&models.TicketClass{}, &models.Reservation{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
-	db.Exec("CREATE INDEX IF NOT EXISTS idx_reservation_active_expiry ON reservation (status, expires_at) WHERE status = 'ACTIVE'")
+	for _, stmt := range models.PostMigrateStatements() {
+		if err := db.Exec(stmt).Error; err != nil {
+			t.Fatalf("post-migrate statement %q: %v", stmt, err)
+		}
+	}
 	t.Cleanup(func() {
 		db.Exec("TRUNCATE reservation, ticket_class RESTART IDENTITY CASCADE")
 		if sqlDB, err := db.DB.DB(); err == nil {

@@ -37,4 +37,5 @@ var (
 	ErrUnavailable       = NewGRPCError(codes.Unavailable, "service unavailable")
 	ErrInsufficientStock = NewGRPCError(codes.ResourceExhausted, "insufficient stock")
 	ErrConflict          = NewGRPCError(codes.FailedPrecondition, "reservation state conflict")
+	ErrSaleClosed        = NewGRPCError(codes.FailedPrecondition, "ticket class not on sale")
 )

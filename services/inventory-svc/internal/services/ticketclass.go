@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
 	pkgLog "github.com/vogiaan/ticketbottle-inventory/pkg/logger"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type TicketClassService interface {
@@ -42,18 +45,48 @@ func (s implTicketClassService) Create(ctx context.Context, in CreateTicketClass
 }
 
 func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateTicketClassInput) (models.TicketClass, error) {
-	var tc models.TicketClass
-	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.Update: %v", err)
-		}
-		s.l.Errorf(ctx, "service.ticketclass.Update: %v", err)
-		return models.TicketClass{}, err
-	}
+	cols := s.updateColumns(in)
 
-	s.buildUpdate(in, &tc)
-	if err := s.repo.Update(ctx, &tc); err != nil {
-		s.l.Errorf(ctx, "service.ticketclass.Update: %v", err)
+	var tc models.TicketClass
+	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the row so the capacity check below sees a stable
+		// reserved/sold, and so a concurrent Reserve on this ticket class
+		// serialises behind us instead of racing the write.
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&tc, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.l.Warnf(ctx, "service.ticketclass.Update: ticket class %d not found", id)
+				return ErrNotFound
+			}
+			s.l.Errorf(ctx, "service.ticketclass.Update.Lock: %v", err)
+			return err
+		}
+
+		if in.Total != nil && *in.Total < tc.Reserved+tc.Sold {
+			s.l.Warnf(ctx, "service.ticketclass.Update: refusing total=%d below committed reserved=%d sold=%d for ticket_class_id=%d",
+				*in.Total, tc.Reserved, tc.Sold, id)
+			return ErrStateConflict
+		}
+
+		if len(cols) == 0 {
+			return nil
+		}
+
+		if err := tx.Model(&models.TicketClass{}).Where("id = ?", id).
+			Updates(cols).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Update.Write: %v", err)
+			return err
+		}
+
+		// Re-read inside the transaction so the caller gets the row as
+		// committed, counters included.
+		if err := tx.First(&tc, id).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Update.Reload: %v", err)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return models.TicketClass{}, err
 	}
 
@@ -63,8 +96,9 @@ func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateT
 func (s implTicketClassService) GetByID(ctx context.Context, id int64) (models.TicketClass, error) {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.GetByID: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.GetByID: ticket class %d not found", id)
+			return models.TicketClass{}, ErrNotFound
 		}
 		s.l.Errorf(ctx, "service.ticketclass.GetByID: %v", err)
 		return models.TicketClass{}, err
@@ -99,29 +133,75 @@ func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketCla
 }
 
 func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
-	var tc models.TicketClass
-	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.Delete: %v", err)
-			return nil
+	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Lock the row: this both makes the not-found check and the
+		// reservation guard below consistent with a concurrent Reserve (which
+		// locks the same ticket_class row FOR UPDATE before creating a new
+		// hold), so nothing can slip a live reservation in between our guard
+		// check and the delete.
+		var tc models.TicketClass
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tc, id).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				s.l.Warnf(ctx, "service.ticketclass.Delete: ticket class %d not found, no-op", id)
+				return nil
+			}
+			s.l.Errorf(ctx, "service.ticketclass.Delete.Lock: %v", err)
+			return err
 		}
-		s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
-		return err
-	}
 
-	if err := s.repo.Delete(ctx, &tc); err != nil {
-		s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
-		return err
-	}
+		var liveCount int64
+		if err := tx.Model(&models.Reservation{}).
+			Where("ticket_class_id = ? AND status IN ?", id,
+				[]models.ReservationStatus{models.ReservationStatusActive, models.ReservationStatusConfirmed}).
+			Count(&liveCount).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete.CountLiveReservations: %v", err)
+			return err
+		}
+		if liveCount > 0 {
+			s.l.Warnf(ctx, "service.ticketclass.Delete: refusing to delete ticket_class_id=%d, %d non-terminal reservation(s) remain", id, liveCount)
+			return ErrStateConflict
+		}
 
-	return nil
+		// Every remaining reservation, if any, is terminal (EXPIRED/CANCELLED).
+		// The FK is RESTRICT precisely so this is an explicit, deliberate
+		// decision here rather than an automatic CASCADE that could just as
+		// easily take a live reservation with it -- clear them before the
+		// parent row.
+		if err := deleteTerminalReservations(tx, id); err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete.DeleteTerminalReservations: %v", err)
+			return err
+		}
+
+		if err := tx.Delete(&tc).Error; err != nil {
+			s.l.Errorf(ctx, "service.ticketclass.Delete: %v", err)
+			return err
+		}
+
+		s.l.Infof(ctx, "service.ticketclass.Delete: deleted ticket_class_id=%d", id)
+		return nil
+	})
+}
+
+// deleteTerminalReservations removes only the terminal (EXPIRED/CANCELLED)
+// reservation rows for a ticket class inside tx. The caller's liveCount guard
+// already refuses Delete whenever an ACTIVE/CONFIRMED row exists, but scoping
+// this statement to terminal statuses too keeps the FK RESTRICT backstop
+// load-bearing: if a future code path ever creates a reservation without
+// taking the ticket_class lock first, this statement leaves it in place and
+// the parent delete below hits a genuine FK violation instead of silently
+// removing it alongside the terminal rows.
+func deleteTerminalReservations(tx *gorm.DB, id int64) error {
+	return tx.Where("ticket_class_id = ? AND status IN ?", id,
+		[]models.ReservationStatus{models.ReservationStatusExpired, models.ReservationStatusCancelled}).
+		Delete(&models.Reservation{}).Error
 }
 
 func (s *implTicketClassService) GetAvailableCount(ctx context.Context, id int64) (int, error) {
 	var tc models.TicketClass
 	if err := s.repo.FindByID(ctx, &tc, id); err != nil {
-		if err == gorm.ErrRecordNotFound {
-			s.l.Warnf(ctx, "service.ticketclass.GetAvailableCount: %v", err)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.ticketclass.GetAvailableCount: ticket class %d not found", id)
+			return 0, ErrNotFound
 		}
 		s.l.Errorf(ctx, "service.ticketclass.GetAvailableCount: %v", err)
 		return 0, err
@@ -135,36 +215,37 @@ func (s *implTicketClassService) CheckAvailability(ctx context.Context, ins []Ch
 		return true, nil
 	}
 
-	// Extract all ticket class IDs
-	ids := make([]int64, 0, len(ins))
-	qtyMap := make(map[int64]int)
-
-	for _, in := range ins {
-		ids = append(ids, in.TicketClassID)
-		qtyMap[in.TicketClassID] = in.Qty
+	// Collapse duplicate line items exactly the way Reserve does -- a
+	// pre-check that disagrees with the real gate is worse than no pre-check.
+	items := make([]ReserveItem, len(ins))
+	for i, in := range ins {
+		items[i] = ReserveItem{TicketClassID: in.TicketClassID, Qty: in.Qty}
 	}
+	ids, qtyByID := aggregateDemand(items)
 
-	// Fetch all ticket classes at once
-	var ticketClasses []models.TicketClass
+	var tcs []models.TicketClass
 	if err := s.repo.WithContext(ctx).
 		Model(&models.TicketClass{}).
 		Where("id IN ?", ids).
-		Find(&ticketClasses).Error; err != nil {
+		Find(&tcs).Error; err != nil {
 		s.l.Errorf(ctx, "service.ticketclass.CheckAvailability: %v", err)
 		return false, err
 	}
 
-	// Check if we found all requested ticket classes
-	if len(ticketClasses) != len(ins) {
-		s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: requested %d ticket classes, found %d", len(ins), len(ticketClasses))
+	if len(tcs) != len(ids) {
+		s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: requested %d distinct ticket classes, found %d", len(ids), len(tcs))
 		return false, nil
 	}
 
-	// Check availability for each ticket class
-	for _, tc := range ticketClasses {
-		requestedQty := qtyMap[tc.ID]
-		availableQty := tc.Total - tc.Reserved - tc.Sold
+	now := time.Now().UTC()
+	for _, tc := range tcs {
+		if !onSale(tc, now) {
+			s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: ticket_class_id=%d is not on sale (status=%s)", tc.ID, tc.Status)
+			return false, nil
+		}
 
+		requestedQty := qtyByID[tc.ID]
+		availableQty := tc.Total - tc.Reserved - tc.Sold
 		if availableQty < requestedQty {
 			s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
 				tc.ID, availableQty, requestedQty)
