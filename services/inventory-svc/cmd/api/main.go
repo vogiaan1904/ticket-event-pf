@@ -50,11 +50,12 @@ func main() {
 	}
 	l.Info(ctx, "Database tables migrated successfully")
 
-	if err := db.Exec(
-		"CREATE INDEX IF NOT EXISTS idx_reservation_active_expiry ON reservation (status, expires_at) WHERE status = 'ACTIVE'",
-	).Error; err != nil {
-		l.Fatalf(ctx, "Failed to create active-expiry index: %v", err)
+	for _, stmt := range models.PostMigrateStatements() {
+		if err := db.Exec(stmt).Error; err != nil {
+			l.Fatalf(ctx, "Failed to apply post-migrate statement: %v", err)
+		}
 	}
+	l.Info(ctx, "Post-migrate statements applied successfully")
 
 	repo := pkgGorm.NewRepository(db)
 

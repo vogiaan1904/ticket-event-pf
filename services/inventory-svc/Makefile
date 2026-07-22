@@ -19,8 +19,10 @@ run:
 	go run cmd/api/main.go
 
 test-db:
-	@docker exec ticketbottle-postgres-inventory psql -U root -d ticketbottle_inventory \
+	@docker exec ticketbottle-inventory psql -U root -d ticketbottle \
 		-c "CREATE DATABASE ticketbottle_inventory_test" 2>/dev/null || true
+	@docker exec ticketbottle-inventory psql -U root -d ticketbottle_inventory_test \
+		-c "SELECT 1" >/dev/null
 
 test: test-db
 	go test ./internal/... -race -count=1
