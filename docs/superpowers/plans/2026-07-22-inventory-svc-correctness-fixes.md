@@ -1017,7 +1017,7 @@ func TestCheckAvailability_UnknownID_Rejects(t *testing.T) {
 cd /Users/vogiaan/coding/projects/TicketEventPF/services/inventory-svc && go test ./internal/services/ -run 'TestCheckAvailability_' -count=1 -v 2>&1 | tail -20
 ```
 
-Expected: `TestCheckAvailability_DuplicateIDs_SumsQuantities` FAILs with `accept = true, want false` (the overwrite hides the 3), and `TestCheckAvailability_DuplicateIDsWithinCapacity_Accepts` FAILs with `accept = false, want true` (the row-count check misfires).
+Expected: `TestCheckAvailability_DuplicateIDsWithinCapacity_Accepts` FAILs with `accept = false, want true` — the row-count check misfires. **That test is the only RED-phase discriminator, and this is inherent to the bug's shape.** Both defects fire on the same input, and the row-count check short-circuits first: with `ids = [5, 5]`, `Where("id IN ?", ids)` returns one row, so `len(ticketClasses)=1 != len(ins)=2` returns `(false, nil)` before the qty loop is ever reached. Any duplicate-id test that *expects rejection* therefore passes on the broken code by accident. `TestCheckAvailability_DuplicateIDs_SumsQuantities` passes both before and after the fix; keep it as a regression guard on the summing behaviour, but do not read its RED-phase pass as evidence of anything.
 
 - [ ] **Step 3: Reuse `aggregateDemand`**
 
