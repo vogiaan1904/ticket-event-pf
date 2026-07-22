@@ -19,6 +19,8 @@ func (s *grpcService) mapError(err error) error {
 		return pkgErrors.ErrNotFound
 	case errors.Is(err, svc.ErrInsufficientStock):
 		return pkgErrors.ErrInsufficientStock
+	case errors.Is(err, svc.ErrSaleClosed):
+		return pkgErrors.ErrSaleClosed
 	case errors.Is(err, svc.ErrStateConflict):
 		return pkgErrors.ErrConflict
 	case errors.Is(err, svc.ErrInventoryDrift):

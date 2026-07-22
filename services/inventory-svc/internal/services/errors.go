@@ -21,4 +21,8 @@ var (
 	// corruption, not a user error: it means something wrote a quantity
 	// outside a locked transaction. Always alarm-worthy.
 	ErrInventoryDrift = errors.New("inventory counter drift detected")
+
+	// ErrSaleClosed signals the ticket class is not currently on sale --
+	// INACTIVE, or outside its [sale_start_at, sale_end_at] window.
+	ErrSaleClosed = errors.New("ticket class not on sale")
 )

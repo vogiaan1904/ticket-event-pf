@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
@@ -191,7 +192,15 @@ func (s *implTicketClassService) CheckAvailability(ctx context.Context, ins []Ch
 		return false, nil
 	}
 
+	now := time.Now().UTC()
 	for _, tc := range tcs {
+		if tc.Status != models.TicketClassStatusActive ||
+			(tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt)) ||
+			(tc.SaleEndAt != nil && now.After(*tc.SaleEndAt)) {
+			s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: ticket_class_id=%d is not on sale (status=%s)", tc.ID, tc.Status)
+			return false, nil
+		}
+
 		requestedQty := qtyByID[tc.ID]
 		availableQty := tc.Total - tc.Reserved - tc.Sold
 		if availableQty < requestedQty {

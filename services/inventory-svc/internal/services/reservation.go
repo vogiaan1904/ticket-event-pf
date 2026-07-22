@@ -74,9 +74,23 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 		}
 		byID := indexByID(tcs)
 
-		// Validate availability against the locked rows.
+		// Validate sale eligibility and availability against the locked rows.
+		now := time.Now().UTC()
 		for _, id := range ids {
 			tc := byID[id]
+			if tc.Status != models.TicketClassStatusActive {
+				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
+				return ErrSaleClosed
+			}
+			if tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt) {
+				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
+				return ErrSaleClosed
+			}
+			if tc.SaleEndAt != nil && now.After(*tc.SaleEndAt) {
+				s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
+				return ErrSaleClosed
+			}
+
 			q := qtyByID[id]
 			if tc.Total-tc.Reserved-tc.Sold < q {
 				s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
