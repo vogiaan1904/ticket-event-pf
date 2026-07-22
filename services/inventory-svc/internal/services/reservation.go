@@ -362,76 +362,109 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 	err = s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		now := time.Now().UTC()
 
-		var rs []models.Reservation
-		if err := tx.Clauses(clause.Locking{
-			Strength: "UPDATE",
-			Options:  "SKIP LOCKED",
-		}).
-			Select("id", "ticket_class_id", "qty", "expires_at").
-			Where("status = ? AND expires_at <= ?", models.ReservationStatusActive, now).
-			Order("expires_at").
-			Limit(batchSize).
-			Find(&rs).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.LockReservations: %v", err)
+		expiredIDs, drifted, err := s.selectAndExpireBatch(ctx, tx, now, batchSize, nil)
+		if err != nil {
 			return err
 		}
 
-		if len(rs) == 0 {
-			return nil
-		}
-
-		qtyByTC := make(map[int64]int, len(rs))
-		for _, r := range rs {
-			qtyByTC[r.TicketClassID] += r.Qty
-		}
-
-		// Ticket classes whose counter could not absorb the decrement. Their
-		// reservations stay ACTIVE so the drift stays visible instead of
-		// being erased, and so one bad row cannot stall the whole batch.
-		drifted := make(map[int64]bool)
-
-		for _, tcID := range sortedInt64Keys(qtyByTC) {
-			totalQty := qtyByTC[tcID]
-			result := tx.Model(&models.TicketClass{}).
-				Where("id = ? AND reserved >= ?", tcID, totalQty).
-				Update("reserved", gorm.Expr("reserved - ?", totalQty))
-
-			if result.Error != nil {
-				s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.DecrementReserved: ticket_class_id=%d, qty=%d: %v",
-					tcID, totalQty, result.Error)
-				return result.Error
+		// A drifted ticket class's reservations never leave ACTIVE and their
+		// expires_at never moves, so Order("expires_at") keeps surfacing them
+		// as the oldest rows forever. Once enough of them accumulate to fill
+		// a whole batch by themselves, every subsequent selection on this
+		// same predicate is 100% drift -- expired would stay 0 forever and no
+		// reservation anywhere, healthy or not, would ever expire again.
+		// Retry once, excluding the poisoned classes, so the worker still
+		// makes forward progress on everything behind them.
+		if len(expiredIDs) == 0 && len(drifted) > 0 {
+			excludeTCIDs := sortedInt64Keys(drifted)
+			expiredIDs, _, err = s.selectAndExpireBatch(ctx, tx, now, batchSize, excludeTCIDs)
+			if err != nil {
+				return err
 			}
-			if result.RowsAffected == 0 {
-				s.l.Errorf(ctx, "service.reservation.BatchExpireReservations: %v: reserved is below the %d held by expiring reservations on ticket_class_id=%d; leaving them ACTIVE for investigation",
-					ErrInventoryDrift, totalQty, tcID)
-				drifted[tcID] = true
-				continue
-			}
-		}
-
-		expiredIDs := make([]int64, 0, len(rs))
-		for _, r := range rs {
-			if drifted[r.TicketClassID] {
-				continue
-			}
-			expiredIDs = append(expiredIDs, r.ID)
-		}
-		if len(expiredIDs) == 0 {
-			return nil
-		}
-
-		if err := tx.Model(&models.Reservation{}).
-			Where("id IN ?", expiredIDs).
-			Update("status", models.ReservationStatusExpired).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.UpdateStatus: %v", err)
-			return err
 		}
 
 		expired = len(expiredIDs)
-		s.l.Infof(ctx, "service.reservation.BatchExpireReservations: expired %d reservations across %d ticket classes (%d skipped for drift)",
-			expired, len(qtyByTC)-len(drifted), len(drifted))
 		return nil
 	})
 
 	return expired, err
+}
+
+// selectAndExpireBatch locks up to batchSize ACTIVE, past-expiry reservations
+// (oldest first, skipping rows locked elsewhere), decrements the reserved
+// counter of every ticket class they touch, and flips the non-drifted ones to
+// EXPIRED. Ticket classes in excludeTCIDs are left out of the selection
+// entirely, so a caller can retry past a page that turned out to be
+// poisoned. It must run inside the same transaction as its caller.
+func (s implReservationService) selectAndExpireBatch(ctx context.Context, tx *gorm.DB, now time.Time, batchSize int, excludeTCIDs []int64) (expiredIDs []int64, drifted map[int64]bool, err error) {
+	q := tx.Clauses(clause.Locking{
+		Strength: "UPDATE",
+		Options:  "SKIP LOCKED",
+	}).
+		Select("id", "ticket_class_id", "qty", "expires_at").
+		Where("status = ? AND expires_at <= ?", models.ReservationStatusActive, now)
+	if len(excludeTCIDs) > 0 {
+		q = q.Where("ticket_class_id NOT IN ?", excludeTCIDs)
+	}
+
+	var rs []models.Reservation
+	if err := q.Order("expires_at").Limit(batchSize).Find(&rs).Error; err != nil {
+		s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.LockReservations: %v", err)
+		return nil, nil, err
+	}
+
+	if len(rs) == 0 {
+		return nil, nil, nil
+	}
+
+	qtyByTC := make(map[int64]int, len(rs))
+	for _, r := range rs {
+		qtyByTC[r.TicketClassID] += r.Qty
+	}
+
+	// Ticket classes whose counter could not absorb the decrement. Their
+	// reservations stay ACTIVE so the drift stays visible instead of
+	// being erased, and so one bad row cannot stall the whole batch.
+	drifted = make(map[int64]bool)
+
+	for _, tcID := range sortedInt64Keys(qtyByTC) {
+		totalQty := qtyByTC[tcID]
+		result := tx.Model(&models.TicketClass{}).
+			Where("id = ? AND reserved >= ?", tcID, totalQty).
+			Update("reserved", gorm.Expr("reserved - ?", totalQty))
+
+		if result.Error != nil {
+			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.DecrementReserved: ticket_class_id=%d, qty=%d: %v",
+				tcID, totalQty, result.Error)
+			return nil, nil, result.Error
+		}
+		if result.RowsAffected == 0 {
+			s.l.Errorf(ctx, "service.reservation.BatchExpireReservations: %v: reserved is below the %d held by expiring reservations on ticket_class_id=%d; leaving them ACTIVE for investigation",
+				ErrInventoryDrift, totalQty, tcID)
+			drifted[tcID] = true
+			continue
+		}
+	}
+
+	expiredIDs = make([]int64, 0, len(rs))
+	for _, r := range rs {
+		if drifted[r.TicketClassID] {
+			continue
+		}
+		expiredIDs = append(expiredIDs, r.ID)
+	}
+	if len(expiredIDs) == 0 {
+		return expiredIDs, drifted, nil
+	}
+
+	if err := tx.Model(&models.Reservation{}).
+		Where("id IN ?", expiredIDs).
+		Update("status", models.ReservationStatusExpired).Error; err != nil {
+		s.l.Errorf(ctx, "service.reservation.BatchExpireReservations.UpdateStatus: %v", err)
+		return nil, nil, err
+	}
+
+	s.l.Infof(ctx, "service.reservation.BatchExpireReservations: expired %d reservations across %d ticket classes (%d skipped for drift)",
+		len(expiredIDs), len(qtyByTC)-len(drifted), len(drifted))
+	return expiredIDs, drifted, nil
 }
