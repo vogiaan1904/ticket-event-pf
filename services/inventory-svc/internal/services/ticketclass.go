@@ -169,36 +169,31 @@ func (s *implTicketClassService) CheckAvailability(ctx context.Context, ins []Ch
 		return true, nil
 	}
 
-	// Extract all ticket class IDs
-	ids := make([]int64, 0, len(ins))
-	qtyMap := make(map[int64]int)
-
-	for _, in := range ins {
-		ids = append(ids, in.TicketClassID)
-		qtyMap[in.TicketClassID] = in.Qty
+	// Collapse duplicate line items exactly the way Reserve does -- a
+	// pre-check that disagrees with the real gate is worse than no pre-check.
+	items := make([]ReserveItem, len(ins))
+	for i, in := range ins {
+		items[i] = ReserveItem{TicketClassID: in.TicketClassID, Qty: in.Qty}
 	}
+	ids, qtyByID := aggregateDemand(items)
 
-	// Fetch all ticket classes at once
-	var ticketClasses []models.TicketClass
+	var tcs []models.TicketClass
 	if err := s.repo.WithContext(ctx).
 		Model(&models.TicketClass{}).
 		Where("id IN ?", ids).
-		Find(&ticketClasses).Error; err != nil {
+		Find(&tcs).Error; err != nil {
 		s.l.Errorf(ctx, "service.ticketclass.CheckAvailability: %v", err)
 		return false, err
 	}
 
-	// Check if we found all requested ticket classes
-	if len(ticketClasses) != len(ins) {
-		s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: requested %d ticket classes, found %d", len(ins), len(ticketClasses))
+	if len(tcs) != len(ids) {
+		s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: requested %d distinct ticket classes, found %d", len(ids), len(tcs))
 		return false, nil
 	}
 
-	// Check availability for each ticket class
-	for _, tc := range ticketClasses {
-		requestedQty := qtyMap[tc.ID]
+	for _, tc := range tcs {
+		requestedQty := qtyByID[tc.ID]
 		availableQty := tc.Total - tc.Reserved - tc.Sold
-
 		if availableQty < requestedQty {
 			s.l.Warnf(ctx, "service.ticketclass.CheckAvailability: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
 				tc.ID, availableQty, requestedQty)
