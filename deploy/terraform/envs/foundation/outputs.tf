@@ -21,3 +21,7 @@ output "dynamodb_table_name" {
 output "dynamodb_table_arn" {
   value = module.dynamodb.table_arn
 }
+
+output "ci_role_arn" {
+  value = module.iam_ci.ci_role_arn
+}

@@ -68,3 +68,9 @@ module "dynamodb" {
   source = "../../modules/dynamodb"
   tags   = local.tags
 }
+
+module "iam_ci" {
+  source      = "../../modules/iam-ci"
+  github_repo = var.github_repo
+  tags        = local.tags
+}
