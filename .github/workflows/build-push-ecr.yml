@@ -1,0 +1,73 @@
+name: build-push-ecr
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/**"
+      - "deploy/adapters/**"
+      - ".github/workflows/build-push-ecr.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-push-ecr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # runtime images (repo, context, dockerfile, target)
+          - { repo: ticketbottle/user,           context: services/user-svc,      dockerfile: services/user-svc/Dockerfile,             target: "" }
+          - { repo: ticketbottle/event,          context: services/event-svc,     dockerfile: services/event-svc/Dockerfile,            target: "" }
+          - { repo: ticketbottle/payment,        context: services/payment-svc,   dockerfile: services/payment-svc/Dockerfile,          target: "" }
+          - { repo: ticketbottle/inventory,      context: services/inventory-svc, dockerfile: services/inventory-svc/Dockerfile,         target: "" }
+          - { repo: ticketbottle/waitroom,       context: services/waitroom-svc,  dockerfile: services/waitroom-svc/Dockerfile,          target: "" }
+          - { repo: ticketbottle/order-api,      context: services/order-svc,     dockerfile: services/order-svc/cmd/api/Dockerfile,     target: "" }
+          - { repo: ticketbottle/order-consumer, context: services/order-svc,     dockerfile: services/order-svc/cmd/consumer/Dockerfile, target: "" }
+          - { repo: ticketbottle/gateway,        context: services/api-gateway,   dockerfile: services/api-gateway/Dockerfile,           target: "" }
+          - { repo: ticketbottle/outbox-relay,   context: services/payment-svc,   dockerfile: services/payment-svc/outbox-relay/Dockerfile, target: "" }
+          - { repo: ticketbottle/payment-events, context: deploy/adapters/payment-events, dockerfile: deploy/adapters/payment-events/Dockerfile, target: "" }
+          # prisma migrate images (builder stage of the same Dockerfile)
+          - { repo: ticketbottle/user-migrate,    context: services/user-svc,     dockerfile: services/user-svc/Dockerfile,    target: builder }
+          - { repo: ticketbottle/event-migrate,   context: services/event-svc,    dockerfile: services/event-svc/Dockerfile,   target: builder }
+          - { repo: ticketbottle/payment-migrate, context: services/payment-svc,  dockerfile: services/payment-svc/Dockerfile, target: builder }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.repo }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}:latest
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.repo }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.repo }}
