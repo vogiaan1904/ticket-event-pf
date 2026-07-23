@@ -63,3 +63,8 @@ module "ecr" {
   image_names = local.image_names
   tags        = local.tags
 }
+
+module "dynamodb" {
+  source = "../../modules/dynamodb"
+  tags   = local.tags
+}
