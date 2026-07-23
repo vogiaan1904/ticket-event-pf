@@ -1068,20 +1068,24 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.repo }}
 ```
 
-- [ ] **Step 3: Commit and push to trigger the workflow**
+- [ ] **Step 3: Get the workflow onto the *default branch* (`main`)**
+  ⚠️ **`workflow_dispatch`/`gh workflow run` only work if the workflow file exists on the repository's default branch.** A workflow that lives only on a feature branch is invisible to GitHub — `gh workflow list` is empty and `gh workflow run … --ref main` returns **404 Not Found** (this is *not* a private-repo/permissions problem; `gh auth status` will show `repo`+`workflow` scopes just fine). So the file must land on `main` at least once before it can be triggered.
 ```bash
-git add .github/workflows/build-push-ecr.yml
-git commit -m "feat(aws-phase0): CI builds all images and pushes to ECR via OIDC"
-git push -u origin docs/aws-mac-offload-plan   # or merge to main; note the workflow triggers on main
+# fast-forward the feature branch into main (main is a strict ancestor), then publish main:
+git checkout main
+git merge --ff-only <feature-branch>
+git push origin main
 ```
-Note: the workflow triggers on **push to `main`**. To test from this branch without merging, run it via **workflow_dispatch** (next step) or temporarily add the branch to the `on.push.branches` list.
+  Because the pushed commits include `services/**`, this **also auto-triggers** the workflow via `on: push` — so Step 4 is often unnecessary; it's only needed for re-runs. (If you truly cannot merge yet, the minimal alternative is `git checkout main && git checkout <branch> -- .github/workflows/build-push-ecr.yml && git commit && git push origin main` — the workflow still must reach `main`.)
 
-- [ ] **Step 4: Trigger + watch the run**
+- [ ] **Step 4: Trigger (if not already auto-triggered) + watch the run**
 ```bash
-gh workflow run build-push-ecr.yml --ref main    # or the branch if you added it
+gh workflow list                                 # the workflow now appears — was empty before Step 3
+gh workflow run build-push-ecr.yml --ref main
 gh run watch
 ```
 Expected: the matrix runs 13 parallel jobs; all succeed. First run is slow (cold `gha` cache); the empty `target: ""` is a no-op for runtime images.
+  ⚠️ **Next failure to expect (Task 5 trust policy):** once the 404 is gone, the *Configure AWS credentials (OIDC)* step fails if the CI role's trust `sub` condition doesn't match this ref. Have the role's trust policy open — matching `repo:<owner>/<repo>:ref:refs/heads/main` (or `:*`) against the ref you dispatched is the Lab 04 lesson.
 
 - [ ] **Step 5: Verify images landed in ECR**
 ```bash
