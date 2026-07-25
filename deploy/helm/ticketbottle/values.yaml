@@ -1,6 +1,11 @@
 # Shared defaults. Overlays (values-local/-k3s/-eks) override per target.
 namespace: ticketbottle
 
+image:
+  registry: ""          # "" for kind; "<account>.dkr.ecr.us-east-1.amazonaws.com/" for k3s (set via --set)
+  tag: local            # "local" for kind; "latest"/"sha-..." for k3s
+  pullPolicy: IfNotPresent
+
 apps:
   # Set false (via --set) for an infra-only install — e.g. running a service
   # locally against in-cluster Postgres/Kafka/Temporal instead of in-pod.

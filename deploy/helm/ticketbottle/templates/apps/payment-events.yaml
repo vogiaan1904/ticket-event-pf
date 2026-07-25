@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: payment-webhook
-          image: ticketbottle/payment-events:local
-          imagePullPolicy: IfNotPresent
+          image: {{ include "tb.image" (dict "ctx" . "repo" "ticketbottle/payment-events") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["node", "webhook.js"]
           envFrom:
             - configMapRef: { name: payment-config }

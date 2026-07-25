@@ -17,8 +17,8 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: ticketbottle/{{ $svc }}-migrate:local
-          imagePullPolicy: IfNotPresent
+          image: {{ include "tb.image" (dict "ctx" $ "repo" (printf "ticketbottle/%s-migrate" $svc)) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           command: ["sh","-c","npx prisma migrate deploy"]
           envFrom:
             - configMapRef: { name: {{ $svc }}-config }

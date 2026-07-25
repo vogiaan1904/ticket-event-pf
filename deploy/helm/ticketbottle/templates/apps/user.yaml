@@ -1,1 +1,1 @@
-{{ include "tb.appService" (dict "ctx" . "name" "user-service" "image" "ticketbottle/user:local" "port" 50052 "config" "user-config" "svcName" "user-service" "probe" "tcp") }}
+{{ include "tb.appService" (dict "ctx" . "name" "user-service" "image" "ticketbottle/user" "port" 50052 "config" "user-config" "svcName" "user-service" "probe" "tcp") }}

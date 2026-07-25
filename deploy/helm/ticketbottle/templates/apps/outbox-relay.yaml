@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: outbox-relay
-          image: ticketbottle/outbox-relay:local
-          imagePullPolicy: IfNotPresent
+          image: {{ include "tb.image" (dict "ctx" . "repo" "ticketbottle/outbox-relay") }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           envFrom:
             - configMapRef: { name: payment-config }
 {{- end }}

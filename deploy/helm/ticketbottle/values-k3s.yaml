@@ -1,0 +1,30 @@
+target: k3s
+
+image:
+  # registry is injected at deploy time via --set (keeps the account id out of git)
+  tag: latest
+  pullPolicy: Always
+
+# Use REAL AWS DynamoDB (no in-cluster dynamodb-local pod).
+dynamodb:
+  enabled: false
+
+order:
+  dynamodbEndpoint: ""     # empty -> default AWS endpoint
+  awsRegion: us-east-1
+  awsAccessKeyId: ""       # empty -> config.yaml omits creds -> instance-profile chain
+  awsSecretAccessKey: ""
+
+# In-cluster payment path (simulated webhook + relay), same as Gate 1.
+paymentEvents:
+  enabled: true
+outboxRelay:
+  enabled: true
+
+# Modest PVCs sized for the real box.
+postgres:
+  storage: 5Gi
+redpanda:
+  storage: 5Gi
+redis:
+  storage: 1Gi
