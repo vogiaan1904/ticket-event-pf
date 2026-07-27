@@ -167,7 +167,6 @@ src/
 
 ### Docker Support
 - Dockerfile for containerization
-- `docker-compose.dev.yml` for local development (PostgreSQL)
 
 ### Health & Monitoring
 - Winston logging for production monitoring
