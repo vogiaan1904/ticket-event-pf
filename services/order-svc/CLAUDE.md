@@ -48,4 +48,4 @@ go build ./...
 ## Layout
 
 - `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
-- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`. See `SYSTEM.md` for a deeper design write-up.
+- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`. See `docs/SYSTEM.md` for a deeper design write-up.
