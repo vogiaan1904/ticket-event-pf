@@ -30,10 +30,11 @@ variable "policy_json" {
 }
 
 variable "policy_arns" {
-  type        = list(string)
-  default     = []
-  description = "Managed policy ARNs to attach."
+  type        = map(string)
+  default     = {}
+  description = "Managed policies to attach, keyed by a STATIC label. The key must be known at plan time; the ARN value may be computed."
 }
+
 
 variable "tags" {
   type    = map(string)
