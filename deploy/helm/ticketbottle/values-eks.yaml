@@ -1,0 +1,63 @@
+# Rung 3 (ephemeral EKS). Layer on base values.yaml:
+#   ./deploy/scripts/eks-deploy.sh
+# which generates a second -f file carrying the account-specific bits
+# (ECR registry, IRSA role ARN, ALB subnets, your IP).
+target: eks
+
+image:
+  # registry injected at deploy time (keeps the account id out of git)
+  tag: latest
+  pullPolicy: Always
+
+# EKS has no working default StorageClass; deploy/k8s/eks/storageclass-gp3.yaml
+# creates this one (EBS CSI, WaitForFirstConsumer, Delete).
+storageClass: gp3
+
+# Real AWS DynamoDB — no in-cluster dynamodb-local pod.
+dynamodb:
+  enabled: false
+
+order:
+  dynamodbEndpoint: ""     # empty -> default AWS endpoint
+  awsRegion: us-east-1
+  awsAccessKeyId: ""       # empty -> config.yaml omits creds -> web-identity (IRSA)
+  awsSecretAccessKey: ""
+
+serviceAccount:
+  order:
+    create: true
+    name: order-service
+    roleArn: ""            # injected at deploy time
+
+# The gateway is fronted by an ALB, not a NodePort.
+gateway:
+  nodePort: null
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # "ip" targets pod IPs directly via the VPC CNI — no NodePort hop.
+    alb.ingress.kubernetes.io/target-type: ip
+    # The gateway serves under APP_GLOBAL_PREFIX=api; "/" would 404 and every
+    # target would be marked unhealthy.
+    alb.ingress.kubernetes.io/healthcheck-path: /api
+    alb.ingress.kubernetes.io/healthcheck-port: traffic-port
+    alb.ingress.kubernetes.io/success-codes: 200-399
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=60
+  subnets: ""              # injected at deploy time
+  inboundCidrs: ""         # injected at deploy time — the ALB is NOT world-open
+
+# In-cluster payment path (simulated webhook + relay), same as Gates 1 and 2.
+paymentEvents:
+  enabled: true
+outboxRelay:
+  enabled: true
+
+postgres:
+  storage: 5Gi
+redpanda:
+  storage: 5Gi
+redis:
+  storage: 1Gi

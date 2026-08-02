@@ -15,6 +15,9 @@ spec:
     metadata:
       labels: { app: {{ .name }} }
     spec:
+      {{- if .serviceAccount }}
+      serviceAccountName: {{ .serviceAccount }}
+      {{- end }}
       containers:
         - name: {{ .name }}
           image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}

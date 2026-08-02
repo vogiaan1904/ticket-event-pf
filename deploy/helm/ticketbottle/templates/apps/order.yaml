@@ -1,3 +1,5 @@
-{{ include "tb.appService" (dict "ctx" . "name" "order-service" "image" "ticketbottle/order-api" "port" 50054 "config" "order-config" "svcName" "order-service" "probe" "tcp") }}
+{{- /* Both order workloads talk to DynamoDB, so both need the IRSA identity. */ -}}
+{{- $sa := ternary .Values.serviceAccount.order.name "" .Values.serviceAccount.order.create -}}
+{{ include "tb.appService" (dict "ctx" . "name" "order-service" "image" "ticketbottle/order-api" "port" 50054 "config" "order-config" "svcName" "order-service" "probe" "tcp" "serviceAccount" $sa) }}
 ---
-{{ include "tb.appService" (dict "ctx" . "name" "order-consumer" "image" "ticketbottle/order-consumer" "port" 0 "config" "order-config" "probe" "none") }}
+{{ include "tb.appService" (dict "ctx" . "name" "order-consumer" "image" "ticketbottle/order-consumer" "port" 0 "config" "order-config" "probe" "none" "serviceAccount" $sa) }}

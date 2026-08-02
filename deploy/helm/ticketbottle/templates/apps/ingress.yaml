@@ -1,0 +1,30 @@
+{{- if and .Values.apps.enabled .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-gateway
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+  annotations:
+    {{- range $k, $v := .Values.ingress.annotations }}
+    {{ $k }}: {{ $v | quote }}
+    {{- end }}
+    {{- if .Values.ingress.subnets }}
+    alb.ingress.kubernetes.io/subnets: {{ .Values.ingress.subnets | quote }}
+    {{- end }}
+    {{- if .Values.ingress.inboundCidrs }}
+    alb.ingress.kubernetes.io/inbound-cidrs: {{ .Values.ingress.inboundCidrs | quote }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app-gateway
+                port:
+                  number: 3000
+{{- end }}
