@@ -13,6 +13,12 @@ spec:
     metadata:
       labels: { app: redpanda }
     spec:
+      # A dynamically provisioned EBS volume arrives root:root; the redpanda image runs
+      # as non-root and cannot write its data dir. kind/k3s local-path happened to create
+      # world-writable directories, which hid this. fsGroup makes the chart portable.
+      securityContext:
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: redpanda
           image: {{ .Values.redpanda.image }}
