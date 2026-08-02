@@ -46,3 +46,30 @@ module "eks" {
   node_disk_gb        = var.node_disk_gb
   tags                = local.tags
 }
+
+# ------------------------------- AWS Load Balancer Controller identity ---------
+# The controller's IAM policy is long and AWS revises it; fetch the upstream one
+# rather than pasting a copy that silently goes stale. A learning cluster tracking
+# `main` is the right trade — production would pin the tag matching its chart
+# version and review the diff.
+data "http" "lbc_policy" {
+  url = var.lbc_iam_policy_url
+}
+
+resource "aws_iam_policy" "lbc" {
+  name        = "${var.cluster_name}-alb-controller"
+  description = "Upstream AWS Load Balancer Controller policy"
+  policy      = data.http.lbc_policy.response_body
+  tags        = local.tags
+}
+
+module "lbc_irsa" {
+  source            = "../../modules/irsa-role"
+  role_name         = "${var.cluster_name}-alb-controller"
+  oidc_provider_arn = module.eks.cluster_oidc_provider_arn
+  oidc_provider_url = module.eks.cluster_oidc_provider_url
+  namespace         = "kube-system"
+  service_account   = "aws-load-balancer-controller"
+  policy_arns       = { alb_controller = aws_iam_policy.lbc.arn }
+  tags              = local.tags
+}

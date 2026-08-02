@@ -43,3 +43,9 @@ variable "node_disk_gb" {
   type    = number
   default = 30
 }
+
+variable "lbc_iam_policy_url" {
+  type        = string
+  default     = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json"
+  description = "Upstream IAM policy for the AWS Load Balancer Controller."
+}

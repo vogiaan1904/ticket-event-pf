@@ -18,3 +18,11 @@ output "alb_subnets" {
 output "my_ip_cidr" {
   value = var.my_ip_cidr
 }
+
+output "lbc_role_arn" {
+  value = module.lbc_irsa.role_arn
+}
+
+output "vpc_id" {
+  value = data.terraform_remote_state.foundation.outputs.vpc_id
+}
