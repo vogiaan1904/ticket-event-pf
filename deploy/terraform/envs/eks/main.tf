@@ -73,3 +73,41 @@ module "lbc_irsa" {
   policy_arns       = { alb_controller = aws_iam_policy.lbc.arn }
   tags              = local.tags
 }
+
+# ------------------------------------------- order-service identity (the point) -
+# Exactly one workload may touch the orders table, and it proves who it is with a
+# ServiceAccount token — not with a key, and not by inheriting the node's role
+# (which has no DynamoDB permission at all).
+data "aws_iam_policy_document" "order_dynamodb" {
+  statement {
+    sid    = "Dynamo"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:DeleteItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+      "dynamodb:BatchGetItem",
+      "dynamodb:BatchWriteItem",
+      "dynamodb:ConditionCheckItem",
+      "dynamodb:DescribeTable",
+    ]
+    resources = [
+      data.terraform_remote_state.foundation.outputs.dynamodb_table_arn,
+      "${data.terraform_remote_state.foundation.outputs.dynamodb_table_arn}/index/*",
+    ]
+  }
+}
+
+module "order_irsa" {
+  source            = "../../modules/irsa-role"
+  role_name         = "${var.cluster_name}-order-service"
+  oidc_provider_arn = module.eks.cluster_oidc_provider_arn
+  oidc_provider_url = module.eks.cluster_oidc_provider_url
+  namespace         = "ticketbottle"
+  service_account   = "order-service"
+  policy_json       = data.aws_iam_policy_document.order_dynamodb.json
+  tags              = local.tags
+}

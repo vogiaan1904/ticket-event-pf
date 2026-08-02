@@ -26,3 +26,7 @@ output "lbc_role_arn" {
 output "vpc_id" {
   value = data.terraform_remote_state.foundation.outputs.vpc_id
 }
+
+output "order_role_arn" {
+  value = module.order_irsa.role_arn
+}
