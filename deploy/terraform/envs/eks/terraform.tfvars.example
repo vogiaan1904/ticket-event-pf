@@ -1,0 +1,6 @@
+state_bucket = "ticketbottle-tfstate-REPLACE_WITH_ACCOUNT_ID"
+my_ip_cidr   = "REPLACE_WITH_YOUR_IP/32"
+cluster_name = "ticketbottle-eks"
+# kubernetes_version intentionally omitted -> current EKS default (standard support)
+node_instance_types = ["t3.large", "t3a.large"]
+node_desired_size   = 2
