@@ -47,6 +47,9 @@ spec:
     - metadata: { name: data }
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- if .Values.storageClass }}
+        storageClassName: {{ .Values.storageClass }}
+        {{- end }}
         resources: { requests: { storage: "{{ .Values.redpanda.storage }}" } }
 ---
 apiVersion: v1

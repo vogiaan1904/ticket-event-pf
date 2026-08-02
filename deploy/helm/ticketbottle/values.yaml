@@ -11,6 +11,10 @@ apps:
   # locally against in-cluster Postgres/Kafka/Temporal instead of in-pod.
   enabled: true
 
+# "" -> the cluster's default StorageClass (kind: standard, k3s: local-path).
+# EKS names "gp3" explicitly; see deploy/k8s/eks/storageclass-gp3.yaml.
+storageClass: ""
+
 postgres:
   image: postgres:15-alpine
   storage: 2Gi
