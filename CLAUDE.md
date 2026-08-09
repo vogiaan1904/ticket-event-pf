@@ -8,7 +8,7 @@ TicketBottle V2 is a polyglot microservices platform for high-traffic ticket sal
 
 Each service has its own `CLAUDE.md` with service-specific detail — read that file when working inside a service.
 
-See `README.md` for the full prose architecture and the end-to-end purchase data flow. `docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md` is the **AWS deployment plan of record** — a learning-right-sized local→k3s→EKS ladder (the older `aws/ARC.md`/`aws/PLAN.md` production plan was retired in favor of it). `REVIEW.md` (repo root) is a standing architecture review with the current cleanup backlog.
+See `README.md` for the architecture overview and the end-to-end purchase data flow, and `docs/ARCHITECTURE.md` for the longer design walkthrough of each decision. `deploy/README.md` covers the Helm chart, its per-target values overlays, and the Terraform under `deploy/terraform/`.
 
 ## Services & ports
 
@@ -50,9 +50,7 @@ make -C deploy cluster-down # tear it all down
 
 Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
 
-**Rung 1.5 (local AWS simulation)** layers a host-side LocalStack over the same cluster to exercise real DynamoDB + the payment Lambdas — see `deploy/localstack/README.md`.
-
-**Target operating model (planned, not yet built — see Appendix B of `docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md`):** to take the heavy stack off the dev Mac, the plan of record moves full-stack dev to **k3s on a stoppable EC2** with **real DynamoDB** (retiring the LocalStack simulation), builds images in **CI → ECR**, and keeps `kind` only as a $0 offline fallback. Until Phase A lands, `kind` + the commands above remain the working full-stack path.
+**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR. `deploy/localstack/` is a retired local AWS simulation kept only for reference — do not build on it.
 
 ## Proto contracts & generation
 
@@ -72,6 +70,6 @@ Do **not** reintroduce the old redundant copies (`protos/`, `protos-submodule/`)
     - One `dto/` per module — do **not** split into parallel `dtos/req`+`dtos/resp`+`controllers/grpc/dtos` trees.
     - Prefer the generated proto types/enums directly; avoid redefining domain enums and hand-writing enum↔proto mappers.
     - Don't scaffold empty layers. A small service (e.g. `user-svc`) should not carry the same folder depth as the gateway. Collapse single-file `common/`/`shared/` folders into flat files.
-  - The three TS services currently use **three different** module/DTO conventions — converging them on the above is tracked in `REVIEW.md` (P2).
+  - The three TS services currently use **three different** module/DTO conventions. `event-svc` is the converged reference implementation; bring the others onto it when you touch them.
 
 When you change a system-wide rule or invariant, update this file.

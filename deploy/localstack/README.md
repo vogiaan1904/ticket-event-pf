@@ -1,4 +1,7 @@
-# Rung 1.5 — Local AWS Simulation (kind + host LocalStack)
+# Local AWS Simulation (kind + host LocalStack) — retired
+
+> **Status: retired.** Superseded by deploying against real DynamoDB on the AWS
+> targets. Kept for reference only; do not build new work on this path.
 
 Runs the TicketBottle purchase flow on the **existing kind cluster** with only the
 **AWS-native pieces** moved to a host-side **LocalStack Pro**: order's datastore →
@@ -7,8 +10,7 @@ Runs the TicketBottle purchase flow on the **existing kind cluster** with only t
 invoke) instead of the Phase-0 `payment-events` adapter.
 
 Delivered as a `values-localstack.yaml` overlay on the same Helm chart — no infra is
-duplicated, kind keeps running everything else. See the design:
-`docs/superpowers/specs/2026-07-15-localstack-rung-design.md`.
+duplicated, kind keeps running everything else.
 
 ## Architecture — 3 cross-boundary hops
 

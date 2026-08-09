@@ -1,304 +1,217 @@
-# TicketBottle V2 - Distributed Ticket Selling Platform
+# TicketBottle
 
-<p align="center">
-  <strong>A high-performance, scalable microservices-based ticket selling system designed to handle high-traffic ticket sales with virtual queuing, real-time inventory management, and reliable payment processing.</strong>
-</p>
+A distributed ticket-selling platform built for high-demand on-sales, where thousands of buyers compete for the same inventory in the same few seconds.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)](https://golang.org/)
-[![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
-[![Temporal](https://img.shields.io/badge/Temporal-000000?logo=temporal&logoColor=white)](https://temporal.io/)
+[![Go](https://img.shields.io/badge/Go%201.25-00ADD8?logo=go&logoColor=white)](https://golang.org/)
+[![NestJS](https://img.shields.io/badge/NestJS%2011-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![gRPC](https://img.shields.io/badge/gRPC-4285F4?logo=google&logoColor=white)](https://grpc.io/)
-[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)](https://www.mongodb.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![Temporal](https://img.shields.io/badge/Temporal-000000?logo=temporal&logoColor=white)](https://temporal.io/)
 [![Kafka](https://img.shields.io/badge/Kafka-231F20?logo=apachekafka&logoColor=white)](https://kafka.apache.org/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Terraform](https://img.shields.io/badge/Terraform-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
 
 ---
 
-## 📋 Table of Contents
+## Contents
 
 - [Overview](#overview)
-- [System Architecture](#system-architecture)
+- [Architecture](#architecture)
 - [Services](#services)
-- [Technology Stack](#technology-stack)
-- [Key Features](#key-features)
-- [Data Flow](#data-flow)
-- [Communication Patterns](#communication-patterns)
-- [Getting Started](#getting-started)
-- [Design Patterns](#design-patterns)
-- [Observability & Security](#observability--security)
+- [The purchase flow](#the-purchase-flow)
+- [Communication patterns](#communication-patterns)
+- [Design decisions](#design-decisions)
+- [Repository layout](#repository-layout)
+- [Running it locally](#running-it-locally)
+- [gRPC contracts](#grpc-contracts)
+- [Deployment](#deployment)
+- [Observability and security](#observability-and-security)
+- [License](#license)
 
 ---
 
 ## Overview
 
-TicketBottle V2 is a production-ready, distributed ticket selling platform built with microservices architecture. The system is designed to handle high-demand ticket sales scenarios (concerts, sports events, conferences) with:
+A ticket on-sale is a worst-case concurrency problem: demand arrives as a spike, the inventory is finite and non-fungible, and every oversell is a refund and a support ticket. TicketBottle addresses that with four mechanisms working in sequence.
 
-- **Virtual Waiting Room** - Fair queue management for high-traffic ticket sales
-- **Real-time Inventory Management** - Atomic ticket reservation with pessimistic locking
-- **Multi-provider Payment Processing** - ZaloPay, PayOS, VNPay integration
-- **Temporal Workflows** - Reliable saga orchestration for distributed transactions
-- **Event-Driven Architecture** - Asynchronous event processing with Kafka
-- **Polyglot Microservices** - Go for performance-critical services, TypeScript/NestJS for business logic
+- **Virtual waiting room.** Buyers are queued fairly and admitted into checkout a bounded number at a time, so the services behind never see the full spike.
+- **Atomic inventory.** Every quantity change happens under a row lock inside a transaction, with a timed hold that abandoned carts release automatically. Two buyers cannot claim the same seat.
+- **Orchestrated saga.** A purchase spans three services and three databases, so no single ACID transaction can cover it. A durable Temporal workflow runs the steps and compensates precisely if any of them fails.
+- **Transactional outbox.** Payment writes its state change and its outgoing event in the same transaction, so a crash between the two cannot lose the event.
+
+The platform is polyglot by design: Go for the concurrency- and latency-sensitive path, TypeScript/NestJS for the richer business domains.
 
 ---
 
-## System Architecture
+## Architecture
 
-![system architecture](/images/service_communication.png)
+A single HTTP gateway is the only public entry point; every service behind it speaks gRPC. Cross-service notifications travel over Kafka. The diagram below shows the system as deployed on AWS — the workload topology is identical wherever it runs, since one Helm chart serves every target.
+
+![TicketBottle architecture on AWS](assets/architecture-aws.png)
 
 ---
 
 ## Services
 
-### 1. **API Gateway** (TypeScript/NestJS)
-**Port:** 3000 | **Protocol:** HTTP/REST
+Seven services plus two workloads that carry the payment event path.
 
-Unified entry point providing REST APIs, JWT authentication, rate limiting, request validation, and gRPC client management. Includes Swagger documentation for all endpoints.
+| Service | Directory | Stack | Port | Protocol | Datastore |
+|---------|-----------|-------|------|----------|-----------|
+| API Gateway | `services/api-gateway` | TypeScript / NestJS | 3000 | HTTP + REST | none (gRPC client to all) |
+| User | `services/user-svc` | TypeScript / NestJS | 50052 | gRPC | PostgreSQL (Prisma) |
+| Event | `services/event-svc` | TypeScript / NestJS | 50053 | gRPC | PostgreSQL (Prisma) |
+| Order | `services/order-svc` | Go / Temporal | 50054 | gRPC | DynamoDB |
+| Payment | `services/payment-svc` | TypeScript / NestJS | 50055 | gRPC | PostgreSQL (Prisma) |
+| Waitroom | `services/waitroom-svc` | Go | 50056 | gRPC | Redis |
+| Inventory | `services/inventory-svc` | Go / GORM | 50057 | gRPC | PostgreSQL |
 
----
+**API Gateway** terminates HTTP, validates requests, enforces JWT authentication and rate limits, maps gRPC status codes onto HTTP responses, and translates REST into internal gRPC calls. It owns no database.
 
-### 2. **User Service** (TypeScript/NestJS)
-**Port:** 50051 | **Protocol:** gRPC | **Database:** PostgreSQL
+**User** handles registration, authentication, profiles, and email verification.
 
-Handles user registration, authentication, profile management, and email verification.
+**Event** manages events, organizers, and configuration, with a lifecycle of `DRAFT → CONFIGURED → APPROVED → PUBLISHED` and role-based access control.
 
----
+**Order** is the saga orchestrator. Temporal workflows (`CreateOrder`, `ConfirmOrder`) coordinate Event, Inventory, and Payment, and compensate automatically at whatever point a purchase fails. It runs as two workloads — an API server and a Kafka consumer — against a single-table DynamoDB design.
 
-### 3. **Event Service** (TypeScript/NestJS)
-**Port:** 50053 | **Protocol:** gRPC | **Database:** PostgreSQL
+**Payment** integrates ZaloPay, PayOS, and VNPay behind one interface, handles provider webhooks idempotently, and records outgoing events in an outbox table written in the same transaction as the payment update.
 
-Manages events, organizers, and configurations. Implements event lifecycle (DRAFT → CONFIGURED → APPROVED → PUBLISHED) and role-based access control.
+**Waitroom** implements the virtual queue on Redis sorted sets. A background processor admits users as checkout slots free up and issues short-lived checkout tokens.
 
----
-
-### 4. **Inventory Service** (Go/GORM)
-**Port:** 50054 | **Protocol:** gRPC | **Database:** PostgreSQL
-
-High-performance ticket inventory management using pessimistic locking for atomic operations. Implements three-step reservation flow: `Reserve → Confirm/Release` with automatic cleanup of expired reservations.
-
-**Key Operations:**
-- `Reserve` - Lock tickets with 15-minute hold
-- `Confirm` - Convert reservation to sale
-- `Release` - Free reserved tickets
+**Inventory** holds ticket classes and quantities. Its three-step `Reserve → Confirm | Release` flow runs under `SELECT … FOR UPDATE`, with a sweeper that expires stale holds.
 
 ---
 
-### 5. **Order Service** (Go/MongoDB/Temporal)
-**Port:** 50055 | **Protocol:** gRPC | **Database:** MongoDB
+## The purchase flow
 
-**Saga Orchestrator** using **Temporal workflows** to coordinate distributed transactions across Event, Inventory, and Payment services.
+| # | Step | What happens | Where |
+|---|------|--------------|-------|
+| 1 | Join the queue | Buyer enters the waiting room and receives a fair position | Waitroom, Redis sorted set |
+| 2 | Get admitted | A background loop admits N buyers and issues a checkout token | Waitroom, `queue.ready` |
+| 3 | Create order | Gateway calls Order; the `CreateOrder` workflow begins | Order, Temporal |
+| 4 | Reserve tickets | Inventory locks the rows and holds the quantity | Inventory, `SELECT … FOR UPDATE` |
+| 5 | Payment intent | Payment creates the intent and returns a payment URL | Payment, gRPC |
+| 6 | Pay and call back | The provider webhook marks the payment paid; an outbox row is written in the same transaction | Payment, outbox |
+| 7 | Confirm | The relay publishes the outbox row to Kafka; `ConfirmOrder` confirms inventory and completes the order | Kafka, Temporal |
+| 8 | Free the slot | Order signals the waiting room to release the checkout slot | `checkout.completed` |
 
-**Temporal Workflows:**
-- `CreateOrder` - Multi-step saga with automatic compensation
-- `ConfirmOrder` - Asynchronous order confirmation from payment events
-
-**Saga Flow:**
-1. Check availability → Reserve tickets → Create order → Create payment intent
-2. On payment success: Confirm inventory → Update order status → Publish events
-3. On failure: Automatic compensation (release tickets, delete order)
-
-**Compensation Tracking:** Temporal workflow state ensures accurate rollback at any failure point.
-
----
-
-### 6. **Payment Service** (TypeScript/NestJS)
-**Port:** 50052 | **Protocol:** gRPC | **Database:** PostgreSQL
-
-Multi-provider payment processing (ZaloPay, PayOS, VNPay) with **Outbox Pattern** for reliable event delivery. Atomically saves payment updates and events in the same transaction, with background workers publishing to Kafka.
+**On failure.** A payment failure or timeout drives Temporal compensation: reserved tickets are released, the order is marked failed, and the checkout slot is freed. Insufficient inventory fails fast, before any reservation is taken.
 
 ---
 
-### 7. **Waitroom Service** (Go/Redis/Kafka)
-**Port:** 50056 | **Protocol:** gRPC | **Database:** Redis
+## Communication patterns
 
-Virtual queue management using Redis sorted sets for FIFO ordering. Background processor admits users when checkout slots are available (max 100 concurrent, configurable).
+**gRPC — when the caller needs an answer.** Reserving inventory or creating a payment intent must return a result before the flow can continue. Protocol Buffers give typed contracts and generated stubs that keep every service in step with the contract.
 
-**Key Features:**
-- JWT-based checkout tokens with 15-minute expiration
-- Real-time position updates
-- Automatic session cleanup
-- Kafka event publishing for queue lifecycle
+**Kafka — when the caller must not wait.** Once a payment succeeds, the order confirms and the waiting room frees a slot, but none of those should block on each other.
 
----
+| Topic | Producer | Consumer |
+|-------|----------|----------|
+| `payment.completed`, `payment.failed`, `payment.cancelled` | Payment | Order |
+| `checkout.completed`, `checkout.failed`, `checkout.expired` | Order | Waitroom |
+| `queue.joined`, `queue.left`, `queue.ready` | Waitroom | — |
 
-## Technology Stack
+Delivery is at-least-once, so every consumer is idempotent. Messages that exhaust their retries are parked on a `<topic>.dlq` companion topic rather than dropped.
 
-### Languages & Frameworks
-
-| Service           | Language   | Framework | Key Libraries                               |
-| ----------------- | ---------- | --------- | ------------------------------------------- |
-| API Gateway       | TypeScript | NestJS    | `@nestjs/microservices`, `@nestjs/jwt`      |
-| User Service      | TypeScript | NestJS    | Prisma, bcryptjs                            |
-| Event Service     | TypeScript | NestJS    | Prisma, `@nestjs/cqrs`                      |
-| Payment Service   | TypeScript | NestJS    | Prisma, KafkaJS, `@nestjs/schedule`         |
-| Inventory Service | Go 1.25    | -         | GORM, gRPC                                  |
-| Order Service     | Go 1.25    | -         | Temporal, MongoDB Driver, Sarama (Kafka)    |
-| Waitroom Service  | Go 1.25    | -         | Redis, Sarama (Kafka), JWT                  |
-
-### Infrastructure & Communication
-
-- **Temporal** - Workflow orchestration and saga management
-- **gRPC** - Inter-service synchronous communication
-- **Kafka** - Event streaming and asynchronous messaging
-- **PostgreSQL** - User, Event, Inventory, Payment data
-- **MongoDB** - Order data (document-based for flexibility)
-- **Redis** - Waitroom sessions, queue management, caching
-- **Docker** - Containerization
+**Temporal workflows — when the process is long-running and must survive a crash.** Workflow state is durable, steps are retried automatically, and compensation is explicit.
 
 ---
 
-## ✨ Key Features
+## Design decisions
 
-### **Virtual Waiting Room**
-Fair FIFO queue management using Redis sorted sets, automatic admission when slots available, JWT-based checkout tokens.
+**Saga with Temporal, not two-phase commit.** A purchase touches three databases owned by three services. Temporal supplies durable execution, automatic retries, and an explicit compensation path; the cost is a workflow engine to operate and an idempotency requirement on every activity.
 
-### **Atomic Inventory Management**
-Pessimistic locking with three-step flow (Reserve → Confirm/Release), automatic cleanup of expired reservations.
+**Transactional outbox in Payment.** Updating the database and publishing an event are two writes to two systems, and a crash between them loses the event. Writing the event into an outbox table inside the payment transaction removes that window; a long-lived relay drains the table to Kafka, claiming rows with `FOR UPDATE SKIP LOCKED` and waking on `LISTEN/NOTIFY`.
 
-### **Temporal Workflow Orchestration**
-Saga pattern implementation using Temporal for distributed transactions, automatic compensation on failures, durable execution state.
+**Pessimistic locking in Inventory.** Under contention for the same rows, optimistic concurrency degrades into a retry storm. Row locks are the cheaper choice here, at the cost of reduced concurrency on a hot ticket class.
 
-### **Outbox Pattern for Events**
-Exactly-once event delivery by atomically saving business data and events in the same transaction.
+**Polyglot persistence.** PostgreSQL where locking and ACID matter (users, events, payments, inventory), DynamoDB for orders queried by known keys, Redis for the queue where latency dominates. The trade-off is several engines to operate and no cross-store joins.
 
-### **Multi-Provider Payments**
-ZaloPay, PayOS, VNPay integration with webhook handling and idempotent operations.
-
-### **Event-Driven Architecture**
-Asynchronous event processing with Kafka for loose coupling and horizontal scalability.
+**One HTTP front door.** Centralizing authentication, validation, and rate limiting at the gateway keeps internal services private and free of edge concerns, at the cost of a component that must stay available.
 
 ---
 
-## Data Flow
+## Repository layout
 
-### Complete Ticket Purchase Flow
+```
+proto/                     gRPC contracts — the single source of truth
+services/
+  api-gateway/             HTTP entry point (NestJS)
+  user-svc/  event-svc/    business domains (NestJS + Prisma)
+  payment-svc/
+  order-svc/               saga orchestrator (Go + Temporal)
+  inventory-svc/           atomic inventory (Go + GORM)
+  waitroom-svc/            virtual queue (Go + Redis)
+deploy/
+  helm/ticketbottle/       one chart, per-target values overlays
+  terraform/               infrastructure as code
+  scripts/                 bootstrap, deploy, and acceptance scripts
+docs/ARCHITECTURE.md       design walkthrough, decision by decision
+```
 
-**1. Join Waitroom**
-User → Waitroom Service → Create Redis session → Add to queue (sorted set) → Return position
-
-**2. Queue Processing (Background - 1s interval)**
-Waitroom Service → Check available slots → Pop users from queue → Generate JWT tokens → Update to "admitted" → Publish `QUEUE_READY` event
-
-**3. Checkout Admitted**
-User polls status → Receives checkout token → Navigates to checkout page
-
-**4. Create Order (Temporal Workflow)**
-API Gateway → Order Service → Temporal `CreateOrder` workflow:
-- Check availability (Inventory Service)
-- Reserve tickets atomically (Inventory Service)
-- Create order record (MongoDB)
-- Create payment intent (Payment Service)
-- Return payment URL to user
-
-**5. Payment Processing**
-User → Payment Provider → Complete payment → Webhook → Payment Service:
-- Atomic transaction: Update payment + Save to Outbox
-- Background worker: Publish `PAYMENT_COMPLETED` to Kafka
-
-**6. Order Confirmation (Kafka Consumer)**
-Order Service consumes `PAYMENT_COMPLETED` → Temporal `ConfirmOrder` workflow:
-- Confirm inventory (decrement reserved, increment sold)
-- Update order status → COMPLETED
-- Publish `CHECKOUT_COMPLETED` event
-
-**7. Waitroom Cleanup**
-Waitroom Service consumes `CHECKOUT_COMPLETED` → Free checkout slot → Admit next user
-
-### Error Handling
-
-**Payment Failure/Timeout:** Temporal workflow compensation → Release inventory → Update order status → Free checkout slot
-
-**Insufficient Inventory:** Fail fast before reservation → Return error to user
+Each service carries its own `CLAUDE.md` with service-specific conventions.
 
 ---
 
-## Communication Patterns
+## Running it locally
 
-### **Synchronous (gRPC)**
-Used for request-response operations requiring immediate feedback. Protocol Buffers provide type safety and better performance than REST.
+The full stack runs on a local [kind](https://kind.sigs.k8s.io/) cluster via the same Helm chart used in the cloud.
 
-**Examples:** Order → Inventory (reserve tickets), Order → Payment (create intent), API Gateway → User/Event services
+**Prerequisites:** Docker, `kubectl`, `helm`, `kind`, and `make`. Working on a service directly also needs Go 1.25+ or Node.js 20+.
 
-### **Asynchronous (Kafka)**
-Used for event notifications and eventual consistency. Enables loose coupling and horizontal scalability.
+```bash
+make -C deploy cluster-up    # create the kind cluster
+make -C deploy infra-up      # PostgreSQL, Redis, Redpanda, DynamoDB-local, Temporal
+make -C deploy apps-up       # build the images and deploy the app tier
+make -C deploy gate1         # end-to-end purchase-flow acceptance test
+make -C deploy cluster-down  # tear it all down
+```
 
-**Topics:** `payment-events`, `order-events`, `queue-events`, `inventory-events`
+The gateway is then reachable at `http://localhost:3000/api`, with Swagger UI at `http://localhost:3000/api/docs` in development.
 
-**Examples:** Payment → Order (payment completed), Order → Waitroom (checkout completed)
-
-### **Temporal Workflows**
-Used for long-running, stateful processes requiring automatic compensation and retry logic.
-
-**Examples:** `CreateOrder` workflow, `ConfirmOrder` workflow
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Docker** >= 20.10
-- **Docker Compose** >= 2.0
-- **Node.js** >= 18.x (for TypeScript services)
-- **Go** >= 1.25 (for Go services)
-- **PostgreSQL** >= 14
-- **MongoDB** >= 5.0
-- **Redis** >= 7.0
-- **Kafka** >= 3.0
-- **Temporal** >= 1.24
-
-### Environment Setup
-
-_To be updated_
+Per-service configuration lives in the chart's ConfigMaps, not in `.env` files. For inner-loop work on a single service, each service ships a `docker-compose.dev.yml` that starts only its datastore, so the service itself can run natively with hot reload.
 
 ---
 
-## Design Patterns
+## gRPC contracts
 
-### **Saga Pattern with Temporal** (Order Service)
-Manages distributed transactions across multiple services with automatic compensation. Temporal provides durable execution state, automatic retries, and compensation orchestration.
+All six contracts live in `proto/` and are the single source of truth. Generated stubs are committed, so a fresh checkout builds without a code generator installed.
 
-**Implementation:** `CreateOrder` and `ConfirmOrder` workflows coordinate Event, Inventory, and Payment services. On failure, Temporal automatically executes compensating activities (release tickets → delete order items → delete order).
+```bash
+make proto        # regenerate every consumer
+make proto-go     # Go services only
+make proto-ts     # TypeScript services only
+```
 
-### **Outbox Pattern** (Payment Service)
-Ensures exactly-once event delivery by atomically saving business data and events in the same database transaction. Background workers publish events from the outbox to Kafka.
-
-### **Repository Pattern** (All Services)
-Abstracts data access logic from business logic for testability and flexibility.
-
-### **CQRS** (Event Service)
-Separates read and write operations for independent scaling and optimization.
+Edit the contract in `proto/`, regenerate, and commit the result. Never hand-edit generated code.
 
 ---
 
 ## Deployment
 
-_To be updated_
+One Helm chart deploys the platform to every target. The workload topology never changes; the target is selected by a values overlay plus an infrastructure delta, never by forking a manifest.
+
+| Target | Overlay | Images | Orders store | Ingress |
+|--------|---------|--------|--------------|---------|
+| Local `kind` | `values.yaml` | built locally | DynamoDB-local | NodePort |
+| k3s on a single instance | `values-k3s.yaml` | ECR | DynamoDB | NodePort |
+| Amazon EKS | `values-eks.yaml` | ECR | DynamoDB | ALB |
+
+Infrastructure is Terraform, split into composable modules under `deploy/terraform/`. Images are built in GitHub Actions and pushed to ECR.
+
+**No workload holds a long-lived AWS credential.** CI authenticates through GitHub OIDC federation, instances through an EC2 instance profile, and pods on EKS through IRSA. The EKS node role is deliberately granted no DynamoDB access, so a working purchase flow is itself proof that the pod-level identity is what authenticated.
+
+See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure detail.
 
 ---
 
-## Observability & Security
+## Observability and security
 
-### Logging
-- **TypeScript Services:** Winston with structured logging
-- **Go Services:** Uber Zap for high-performance logging
-- **Temporal:** Built-in workflow execution history and observability
+**Logging.** Structured logs throughout — Winston in the TypeScript services, Uber Zap in the Go services. Temporal contributes full workflow execution history for the saga.
 
-### Security
-- JWT authentication with role-based access control
-- Rate limiting on API Gateway
-- Input validation, parameterized queries, password hashing (bcrypt)
-- CORS and security headers (Helmet)
+**Security.** JWT authentication with role-based access control, rate limiting at the gateway, request validation on every endpoint, parameterized queries, bcrypt password hashing, and CORS plus security headers via Helmet.
 
 ---
 
-## License & Contact
+## License
 
-**License:** MIT
-
-**Author:** Vo Gia An (vogiaan1904@gmail.com)
-
-**Built with:** NestJS, Go, Temporal, Kafka, gRPC, Prisma, and the open-source community
+MIT. Author: Vo Gia An (<vogiaan1904@gmail.com>).

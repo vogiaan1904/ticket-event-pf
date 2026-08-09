@@ -1,18 +1,26 @@
-# TicketBottle Deployment (Rung 1: local kind)
+# TicketBottle Deployment
 
-Portable Helm chart for the TicketBottle stack. Rung 1 runs everything on a local
-`kind` cluster for $0. See the spec:
-`docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md`.
+Portable Helm chart for the TicketBottle stack. One chart deploys to every target;
+the target is selected by a `values-*.yaml` overlay, never by forking a template.
+
+| Target | Overlay | Images | Orders store | Ingress |
+|--------|---------|--------|--------------|---------|
+| Local `kind` | `values.yaml` | built locally | DynamoDB-local | NodePort 30000 |
+| k3s on EC2 | `values-k3s.yaml` | ECR | DynamoDB | NodePort |
+| Amazon EKS | `values-eks.yaml` | ECR | DynamoDB | ALB |
+
+Infrastructure for the AWS targets lives in `deploy/terraform/`.
 
 ## Prerequisites
 docker (daemon running), kubectl, helm, kind.
 
-## Bring up the infra tier (Phase 0A)
+## Bring up the local stack
 ```bash
 cd deploy
 make cluster-up     # one-time: create the kind cluster
 make infra-up       # install Postgres, Redis, Redpanda, DynamoDB-local, Temporal
-make smoke          # verify every component
+make apps-up        # build + load the app images, deploy the app tier
+make gate1          # end-to-end purchase-flow acceptance test
 ```
 
 ## Tear down
@@ -30,4 +38,5 @@ make cluster-down   # delete the cluster entirely
 | DynamoDB-local | dynamodb:8000 | orders table (PK/SK + GSI1 + GSI2) |
 | Temporal | temporal:7233 | Postgres visibility, no Elasticsearch |
 
-App services (8) + the two payment lambda-replacements land in Phase 0B.
+The app tier adds the eight services plus the `outbox-relay` and `payment-events`
+workloads that carry the payment event path.

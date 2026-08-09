@@ -1,6 +1,6 @@
 # TicketBottle V2 — Architecture Field Guide
 
-*A learning-oriented walkthrough of **how this system is built and why**, with the concepts to study for each decision. For the authoritative prose architecture and ports, see [`README.md`](../README.md); for the standing architect's review and cleanup backlog, see [`REVIEW.md`](../REVIEW.md).*
+*A walkthrough of **how this system is built and why** — each decision with its trade-off and the concepts behind it. For the architecture summary, service table, and ports, see [`README.md`](../README.md).*
 
 ---
 
@@ -87,15 +87,15 @@ This is the hardest part: a purchase spans services **and** databases, so a sing
 
 ### 6 · Running it — containers, Kubernetes, and a cost-aware cloud ladder
 
-*(This is the deployment work tracked in [`docs/superpowers/specs`](./superpowers/specs) and [`docs/superpowers/plans`](./superpowers/plans).)*
+*(The chart, the values overlays, and the Terraform behind this live in [`deploy/`](../deploy/README.md).)*
 
 **Every service is a container Kubernetes runs.** Each service ships as an *image*; Kubernetes runs, heals, and scales them the same way regardless of language. Stateful stores use *StatefulSets* with persistent volumes; stateless services use *Deployments*; *Services* handle discovery; config comes from ConfigMaps/Secrets.
 - **Trade-off:** Kubernetes is a large surface to learn and operate — but it's the industry lingua franca for exactly this.
 - **Learn:** `container / Docker image` · `pod` · `Deployment` · `StatefulSet` · `Service` · `PVC` · `ConfigMap / Secret` · `readiness probe` · `Helm chart`
 
-**The local → k3s → EKS ladder + IaC.** One portable Helm chart runs three places: *kind* locally ($0) to learn, a single stoppable *k3s* EC2 box (~$10–20/mo) as the everyday cloud, and *ephemeral EKS* to prove real managed Kubernetes. Terraform makes all of it reproducible and destroyable; you switch it off when idle.
-- **Trade-off:** three targets to keep working, and real cloud spend needs discipline (turn it off, use spot, alarm on budget).
-- **Learn:** `IaC / Terraform` · `kind / k3s / EKS` · `spot instances` · `managed services (RDS/DynamoDB)` · `VPC / IAM` · `declarative config` · `cost control`
+**One chart, several targets, all of it in code.** The same Helm chart deploys to a local *kind* cluster, to *k3s* on a single EC2 instance, and to *Amazon EKS* — the target is chosen by a values overlay plus a Terraform delta, never by forking a manifest. Terraform makes every environment reproducible and destroyable, and no workload ever holds a long-lived AWS key: CI authenticates by GitHub OIDC, nodes by instance profile, pods by IRSA.
+- **Trade-off:** several targets to keep working, and each identity mechanism is its own thing to understand.
+- **Learn:** `IaC / Terraform` · `Helm values overlay` · `kind / k3s / EKS` · `OIDC federation` · `IRSA` · `VPC / IAM` · `declarative config`
 
 ---
 
@@ -103,9 +103,9 @@ This is the hardest part: a purchase spans services **and** databases, so a sing
 
 A portfolio system is a living thing. Knowing where it's real versus where it's stubbed is part of understanding it.
 
-- **✅ Sound — the macro-architecture.** The queue → inventory → saga → payment shape is the right tool for high-traffic ticketing. The earlier "over-engineered" feeling was mostly migration scar tissue — a cleanup job, not a redesign (see `REVIEW.md`).
-- **⚠️ Gap — inventory isn't seeded by the app.** Nothing calls `CreateTicketClass` yet: the gateway's inventory module is an empty stub and the event service never links to inventory (its Kafka publish is a `// TODO`). End-to-end today needs tickets seeded directly — a real feature to finish.
-- **⚠️ Gap — payment events live in AWS Lambdas.** Webhook handling and outbox publishing were split into SAM-coupled Lambdas. The Kubernetes deployment re-homes that logic as a small in-cluster adapter so the flow works off AWS too.
+- **Sound — the macro-architecture.** The queue → inventory → saga → payment shape is the right tool for high-traffic ticketing.
+- **Gap — inventory isn't seeded by the app.** Nothing calls `CreateTicketClass` yet: the gateway's inventory module is an empty stub and the event service never links to inventory (its Kafka publish is a `// TODO`). End-to-end today needs tickets seeded directly — a real feature to finish.
+- **Gap — payment events originated as AWS Lambdas.** Webhook handling and outbox publishing were split into SAM-coupled Lambdas. The Kubernetes deployment re-homes that logic as in-cluster workloads so the flow runs off AWS too.
 
 ---
 
@@ -151,10 +151,8 @@ Roughly sequential — each level assumes the one before it. You don't need mast
 
 | File | What's in it |
 |------|--------------|
-| [`README.md`](../README.md) | Prose architecture + full data flow |
-| [`REVIEW.md`](../REVIEW.md) | Architect's review & cleanup backlog |
+| [`README.md`](../README.md) | Architecture summary, services, ports, data flow |
+| [`deploy/README.md`](../deploy/README.md) | Helm chart, values overlays, Terraform |
 | `CLAUDE.md` (root + per service) | Conventions & gotchas |
-| [`docs/superpowers/specs`](./superpowers/specs) | The affordable-deployment ladder design |
-| [`docs/superpowers/plans`](./superpowers/plans) | Phase 0A / 0B-1 / 0B-2 implementation plans |
 
 > The best way to cement any concept here: find where it lives in the code, change one thing, and watch what breaks.
