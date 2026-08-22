@@ -36,15 +36,13 @@ One Helm chart, three targets. The **application topology never changes** — th
 
 | Piece | Where |
 |---|---|
-| Plan of record (design + Appendices A/B) | `docs/superpowers/specs/2026-07-09-aws-affordable-deployment-ladder-design.md` |
-| Phase A implementation plan (what built Rung 2) | `docs/superpowers/plans/2026-07-20-aws-deploy-phaseA-k3s-ec2-gate2.md` |
-| Hands-on labs for Rung 2 (7 labs, concept-first) | `docs/labs/aws-rung2/` |
+| Why the ladder is shaped this way (rungs, trade-offs) | [references/rung2-ec2-k3s.md](references/rung2-ec2-k3s.md), [references/rung3-eks.md](references/rung3-eks.md) |
 | Account-wide infra (budget, VPC, ECR, DynamoDB, CI IAM) | `deploy/terraform/envs/foundation/` |
 | The k3s box itself | `deploy/terraform/envs/k3s/` + `deploy/terraform/modules/ec2-k3s/` |
 | Helm chart + per-target overlays | `deploy/helm/ticketbottle/` |
 | Image build → ECR | `.github/workflows/build-push-ecr.yml` |
 | Day-to-day operations (stop/start/kubeconfig/gate) | `deploy/Makefile` (Rung 2 section) |
-| Architecture diagram | `docs/diagrams/` |
+| Architecture diagram | `assets/architecture-aws.png` (drawio source is local-only, gitignored) |
 
 ## The three invariants
 
