@@ -50,30 +50,52 @@ gate1:                 ## Run the full purchase-flow acceptance test (Phase 0B-2
 
 # --- Rung 2: k3s on EC2 -------------------------------------------------------
 K3S_ENV := terraform/envs/k3s
+K3S_VALUES := $(CHART)/values-k3s.yaml
 KUBECONFIG_FILE := /tmp/k3s.yaml
+SSH_OPTS := -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
 
-.PHONY: k3s-ip k3s-instance stop-ec2-k3s start-ec2-k3s tunnel k3s-kubeconfig k3s-deploy k3s-gate2
+# The instance id is stable, so Terraform state is a fine source for it. The
+# public IP is not — EC2 reassigns it on every stop/start — so read it live from
+# the API. `terraform refresh` refreshes resource attributes but leaves the
+# persisted root outputs stale, which is what made `ssh_command` wrong; use the
+# `k3s-refresh` target below when the Terraform outputs themselves need syncing.
+K3S_ID := $$(cd $(K3S_ENV) && terraform output -raw instance_id)
+K3S_IP := $$(aws ec2 describe-instances --instance-ids $(K3S_ID) --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
+K3S_TUNNEL := ssh $(SSH_OPTS) -L 6443:127.0.0.1:6443 -L 3000:127.0.0.1:30000 ec2-user@
 
-k3s-ip:            ## Print the current public IP of the k3s box
-	@cd $(K3S_ENV) && terraform output -raw public_ip
+.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2
+
+k3s-ip:            ## Print the current public IP of the k3s box (live from EC2)
+	@echo "$(K3S_IP)"
 
 k3s-instance:      ## Print the instance id
-	@cd $(K3S_ENV) && terraform output -raw instance_id
+	@echo "$(K3S_ID)"
+
+k3s-refresh:       ## Sync Terraform's stored outputs with reality (changes no infra)
+	@cd $(K3S_ENV) && terraform apply -refresh-only -auto-approve
 
 stop-ec2-k3s:              ## Stop the k3s EC2 (halts all compute; EBS + data survive)
-	aws ec2 stop-instances --instance-ids $$(cd $(K3S_ENV) && terraform output -raw instance_id)
+	aws ec2 stop-instances --instance-ids $(K3S_ID)
 	@echo "stopping — billing for compute halts once 'stopped'"
 
 start-ec2-k3s:             ## Start the k3s EC2 and print the new SSH tunnel command
-	aws ec2 start-instances --instance-ids $$(cd $(K3S_ENV) && terraform output -raw instance_id)
-	aws ec2 wait instance-running --instance-ids $$(cd $(K3S_ENV) && terraform output -raw instance_id)
-	@echo "started. Refresh outputs + open the tunnel:"
-	@cd $(K3S_ENV) && terraform refresh >/dev/null && terraform output -raw ssh_command; echo
+	aws ec2 start-instances --instance-ids $(K3S_ID)
+	aws ec2 wait instance-running --instance-ids $(K3S_ID)
+	@echo "started. Open the tunnel with:"
+	@echo "  $(K3S_TUNNEL)$(K3S_IP)"
+
+tunnel-ec2-k3s:            ## Open the SSH tunnel to the box (blocks — run in its own terminal)
+	$(K3S_TUNNEL)$(K3S_IP)
 
 k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
-	scp -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
-	  ec2-user@$$(cd $(K3S_ENV) && terraform output -raw public_ip):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
+	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
+
+k3s-deploy:        ## Deploy the chart to k3s from ECR (tunnel must be open)
+	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
+	  -f $(K3S_VALUES) \
+	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
+	  --wait --timeout 10m
 
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
