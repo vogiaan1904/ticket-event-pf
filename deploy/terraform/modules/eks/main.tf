@@ -140,7 +140,7 @@ module "ebs_csi_irsa" {
   oidc_provider_url = local.oidc_host
   namespace         = "kube-system"
   service_account   = "ebs-csi-controller-sa"
-  policy_arns = { ebs_csi = "${local.managed_policy_prefix}/service-role/AmazonEBSCSIDriverPolicy" }
+  policy_arns       = { ebs_csi = "${local.managed_policy_prefix}/service-role/AmazonEBSCSIDriverPolicy" }
   tags              = var.tags
 }
 

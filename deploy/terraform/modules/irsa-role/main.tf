@@ -40,7 +40,7 @@ resource "aws_iam_role_policy" "inline" {
 }
 
 resource "aws_iam_role_policy_attachment" "managed" {
-  for_each   = var.policy_arns          # was: toset(var.policy_arns)
+  for_each   = var.policy_arns # was: toset(var.policy_arns)
   role       = aws_iam_role.this.name
   policy_arn = each.value
 }
