@@ -99,3 +99,60 @@ k3s-deploy:        ## Deploy the chart to k3s from ECR (tunnel must be open)
 
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
+
+
+# --- Rung 3: ephemeral EKS ----------------------------------------------------
+# Weekend sprint, never an everyday environment. There is NO stop switch: the
+# control plane bills $0.10/hr from `eks-up` until `eks-down`.
+EKS_ENV     := terraform/envs/eks
+EKS_VALUES  := $(CHART)/values-eks.yaml
+EKS_CLUSTER := ticketbottle-eks
+REGION      := us-east-1
+
+.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down
+
+eks-guard:         ## Refuse to proceed unless the k3s box is stopped (never both)
+	@state=$$(aws ec2 describe-instances --instance-ids $(K3S_ID) \
+	   --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo unknown); \
+	 if [ "$$state" != "stopped" ] && [ "$$state" != "terminated" ]; then \
+	   echo "REFUSING: the k3s box is '$$state'. Run 'make stop-ec2-k3s' first — never run both."; \
+	   exit 1; \
+	 fi; \
+	 echo "k3s box is $$state — safe to proceed"
+
+eks-status:        ## Is anything billing? (the only honest answer is from AWS)
+	@echo "clusters: $$(aws eks list-clusters --region $(REGION) --query 'clusters' --output text)"
+	@echo "load balancers: $$(aws elbv2 describe-load-balancers --region $(REGION) --query 'LoadBalancers[].LoadBalancerName' --output text)"
+	@echo "k3s box: $$(aws ec2 describe-instances --instance-ids $(K3S_ID) --query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo none)"
+
+eks-up: eks-guard  ## terraform apply — STARTS the $0.10/hr meter
+	@date
+	cd $(EKS_ENV) && terraform apply
+	@echo "meter running. End the session with: make -C deploy eks-down"
+
+eks-kubeconfig:    ## Point kubectl at the cluster
+	aws eks update-kubeconfig --region $(REGION) --name $(EKS_CLUSTER)
+
+eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC + LB controller)
+	./scripts/eks-bootstrap.sh
+
+eks-deploy:        ## Deploy the chart from ECR and wait for the ALB to serve
+	./scripts/eks-deploy.sh
+
+eks-url:           ## Print the ALB hostname
+	@kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+
+eks-gate3:         ## Gate 3a — purchase flow through the ALB
+	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
+	  ./scripts/gate1-purchase-flow.sh
+
+eks-teardown:      ## Ordered cleanup then terraform destroy (prompts)
+	./scripts/eks-teardown.sh
+
+eks-leak-check:    ## Gate 3b — assert nothing billable survived
+	./scripts/eks-leak-check.sh
+
+eks-sweep-orphans: ## Recovery: delete an ALB/volumes stranded by a destroy that skipped cleanup
+	./scripts/eks-sweep-orphans.sh
+
+eks-down: eks-teardown eks-leak-check  ## THE off switch: teardown + leak check. End every session with this.
