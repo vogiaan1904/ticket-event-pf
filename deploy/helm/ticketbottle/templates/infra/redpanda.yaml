@@ -22,6 +22,7 @@ spec:
       containers:
         - name: redpanda
           image: {{ .Values.redpanda.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "redpanda") | nindent 10 }}
           # NOTE: use args (not command) so the image ENTRYPOINT (/entrypoint.sh -> rpk)
           # is preserved. `rpk redpanda start` understands --mode/--kafka-addr; the raw
           # `redpanda` broker binary does not. Overriding command bypasses rpk and fails.

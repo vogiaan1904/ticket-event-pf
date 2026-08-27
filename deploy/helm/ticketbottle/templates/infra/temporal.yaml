@@ -15,6 +15,7 @@ spec:
       containers:
         - name: temporal
           image: {{ .Values.temporal.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "temporal") | nindent 10 }}
           # auto-setup creates the temporal + temporal_visibility databases and schema
           # in the shared Postgres (needs the root superuser), then registers "default".
           env:

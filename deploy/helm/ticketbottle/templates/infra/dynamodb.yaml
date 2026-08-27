@@ -16,6 +16,7 @@ spec:
       containers:
         - name: dynamodb
           image: {{ .Values.dynamodb.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "dynamodb") | nindent 10 }}
           # -inMemory keeps it light; data is recreated by the init Job each install.
           command: ["java","-jar","DynamoDBLocal.jar","-inMemory","-sharedDb"]
           ports: [{ containerPort: 8000 }]
