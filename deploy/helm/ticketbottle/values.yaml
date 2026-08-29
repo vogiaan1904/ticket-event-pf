@@ -134,3 +134,16 @@ resources:
 # Static replica counts. A workload with autoscaling enabled (Lab 02) omits
 # `replicas` from its manifest entirely - see the note in _appservice.tpl.
 replicas: {}
+
+# Off everywhere by default; values-eks.yaml opts app-gateway in.
+# Requires metrics-server (bundled in k3s, installed by eks-bootstrap.sh on EKS,
+# absent from kind until you add it).
+autoscaling:
+  app-gateway:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+    # Kubernetes' own default. Named explicitly because Gate 4a asserts the
+    # scale-DOWN, and a gate that polls sooner than this will always fail.
+    scaleDownStabilizationSeconds: 300
