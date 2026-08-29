@@ -1,5 +1,5 @@
 // One virtual user = one attempted purchase through the real chain:
-//   authenticate -> waitroom join -> mint checkout token -> create order
+//   authenticate -> waitroom join -> wait for admission -> create order
 //   -> fire the payment webhook -> poll until COMPLETED
 //
 // The event, its config and the ticket class are seeded ONCE by
@@ -15,9 +15,9 @@ const GW              = __ENV.GW;                 // http://app-gateway:3000/api
 const WEBHOOK         = __ENV.WEBHOOK;            // http://payment-webhook:8080
 const EVENT_ID        = __ENV.EVENT_ID;
 const TICKET_CLASS_ID = __ENV.TICKET_CLASS_ID;
-const JWT_SECRET      = __ENV.JWT_SECRET;         // order-svc: checkout token
 const ACCESS_SECRET   = __ENV.ACCESS_SECRET;      // gateway: access token
 const USER_PREFIX     = __ENV.USER_PREFIX;        // set => buyers are pre-seeded, skip signup
+const ADMIT_POLLS     = Number(__ENV.ADMIT_POLLS || 180);
 
 const completed  = new Counter('tb_orders_completed');
 const soldOut    = new Counter('tb_sold_out_4xx');
@@ -52,14 +52,6 @@ function sign(payload, secret) {
   return `${h}.${p}.${crypto.hmac('sha256', secret, `${h}.${p}`, 'base64rawurl')}`;
 }
 
-function mintCheckoutToken(sessionId, userId, eventId) {
-  const now = Math.floor(Date.now() / 1000);
-  return sign({
-    session_id: sessionId, user_id: userId, event_id: eventId,
-    iat: now - 10, exp: now + 900,
-  }, JWT_SECRET);
-}
-
 export default function () {
   const json = { headers: { 'Content-Type': 'application/json' } };
 
@@ -88,21 +80,35 @@ export default function () {
   const auth = { headers: { 'Content-Type': 'application/json',
                             Authorization: `Bearer ${accessToken}` } };
 
-  // 2. join the waitroom
+  // 2. join the waitroom and wait to be admitted. Forging the checkout token
+  //    here would bypass admission control and put every VU into checkout at
+  //    once — the exact concurrency the queue exists to prevent.
   const jr = http.post(`${GW}/waitroom/join`,
     JSON.stringify({ eventId: EVENT_ID }), auth);
   const sessionId = jr.json('data.sessionId');
   if (!sessionId) { unexpected.add(1, { step: 'waitroom', status: jr.status }); return; }
 
-  // 3. create the order. order-svc only verifies the checkout token
-  //    cryptographically (HS256, shared JWT_SECRET), so minting it here is
-  //    byte-equivalent to what waitroom signs — see gate1-purchase-flow.sh.
+  let checkoutToken;
+  for (let i = 0; i < ADMIT_POLLS; i++) {
+    const st = http.get(`${GW}/waitroom/status/${sessionId}`, auth);
+    checkoutToken = st.json('data.checkoutToken');
+    if (checkoutToken) break;
+    const status = st.json('data.status');
+    if (status === 'EXPIRED' || status === 'CANCELLED' || status === 'FAILED') {
+      unexpected.add(1, { step: 'admission', status });
+      return;
+    }
+    sleep(1);
+  }
+  if (!checkoutToken) { unexpected.add(1, { step: 'admission-timeout' }); return; }
+
+  // 3. create the order
   const or = http.post(`${GW}/orders`, JSON.stringify({
     eventId: EVENT_ID, userFullname: `Load VU${__VU}`, userEmail: email,
     userPhone: '0900000000', paymentMethod: 'ZALOPAY',
     items: [{ ticketClassId: TICKET_CLASS_ID, quantity: 1 }],
     currency: 'VND',
-    checkoutToken: mintCheckoutToken(sessionId, userId, EVENT_ID),
+    checkoutToken,
     redirectUrl: 'https://example.com/done',
   }), auth);
 

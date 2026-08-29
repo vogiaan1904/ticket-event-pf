@@ -30,9 +30,6 @@ spec:
             - { name: TICKET_CLASS_ID, value: "${TICKET_CLASS_ID}" }
             - { name: VUS,             value: "${VUS}" }
             - { name: USER_PREFIX,     value: "${USER_PREFIX}" }
-            - name: JWT_SECRET
-              valueFrom:
-                configMapKeyRef: { name: order-config, key: JWT_SECRET }
             - name: ACCESS_SECRET
               valueFrom:
                 configMapKeyRef: { name: gateway-config, key: JWT_ACCESS_SECRET }
