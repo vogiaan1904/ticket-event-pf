@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"errors"
+
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/service"
 	pkgErrors "github.com/vogiaan1904/ticketbottle-waitroom/pkg/errors"
 )
@@ -17,23 +19,26 @@ var (
 	ErrWaitRoomNotAllowed  = pkgErrors.NewGRPCError("WTR009", "Wait room is not allowed")
 )
 
+// Matched with errors.Is, not ==: a wrapped sentinel would otherwise fall to
+// default, which ParseGRPCError renders as codes.Internal — a 500 for what is
+// usually an ordinary rejection.
 func (svc *grpcService) mapGRPCError(err error) error {
-	switch err {
-	case service.ErrSessionNotFound:
+	switch {
+	case errors.Is(err, service.ErrSessionNotFound):
 		return ErrSessionNotFound
-	case service.ErrSessionExpired:
+	case errors.Is(err, service.ErrSessionExpired):
 		return ErrSessionExpired
-	case service.ErrSessionAlreadyExists:
+	case errors.Is(err, service.ErrSessionAlreadyExists):
 		return ErrSessionAlreadyExists
-	case service.ErrInvalidSessionStatus:
+	case errors.Is(err, service.ErrInvalidSessionStatus):
 		return ErrInvalidSessionStatus
-	case service.ErrQueueFull:
+	case errors.Is(err, service.ErrQueueFull):
 		return ErrQueueFull
-	case service.ErrEventNotFound:
+	case errors.Is(err, service.ErrEventNotFound):
 		return ErrEventNotFound
-	case service.ErrEventConfigNotFound:
+	case errors.Is(err, service.ErrEventConfigNotFound):
 		return ErrEventConfigNotFound
-	case service.ErrWaitRoomNotAllowed:
+	case errors.Is(err, service.ErrWaitRoomNotAllowed):
 		return ErrWaitRoomNotAllowed
 	default:
 		return err
