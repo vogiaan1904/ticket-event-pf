@@ -54,6 +54,7 @@ outboxRelay:
   replicas: 1
 
 order:
+  createTimeout: 60s
   dynamodbEndpoint: http://dynamodb:8000
   awsRegion: us-east-1
   awsAccessKeyId: local

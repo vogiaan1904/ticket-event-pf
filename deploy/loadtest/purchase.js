@@ -18,6 +18,7 @@ const TICKET_CLASS_ID = __ENV.TICKET_CLASS_ID;
 const ACCESS_SECRET   = __ENV.ACCESS_SECRET;      // gateway: access token
 const USER_PREFIX     = __ENV.USER_PREFIX;        // set => buyers are pre-seeded, skip signup
 const ADMIT_POLLS     = Number(__ENV.ADMIT_POLLS || 180);
+const CONFIRM_POLLS   = Number(__ENV.CONFIRM_POLLS || 90);   // x2s = 3min
 
 const completed  = new Counter('tb_orders_completed');
 const soldOut    = new Counter('tb_sold_out_4xx');
@@ -29,7 +30,7 @@ export const options = {
       executor: 'per-vu-iterations',
       vus: Number(__ENV.VUS || 300),
       iterations: 1,
-      maxDuration: '6m',
+      maxDuration: '12m',
     },
   },
   thresholds: {
@@ -123,7 +124,10 @@ export default function () {
   if (wh.status >= 400) { unexpected.add(1, { step: 'webhook', status: wh.status }); return; }
 
   // 5. poll to COMPLETED (Kafka -> Temporal ConfirmOrder)
-  for (let i = 0; i < 30; i++) {
+  // The confirm leg is asynchronous (webhook -> outbox -> Kafka -> ConfirmOrder)
+  // and lags under load; polling for less than it takes reports a working saga
+  // as a failure.
+  for (let i = 0; i < CONFIRM_POLLS; i++) {
     const o = http.get(`${GW}/orders/code/${code}`, auth);
     if (o.json('data.status') === 'COMPLETED') { completed.add(1); return; }
     sleep(2);

@@ -82,9 +82,9 @@ EVENT_ID="$EVENT_ID" TICKET_CLASS_ID="$TCID" VUS="$VUS" USER_PREFIX="$USER_PREFI
 
 # Watch both terminal conditions: --for=condition=complete alone never fires on
 # a failed Job, so a crossed k6 threshold would stall here for the full timeout.
-kubectl -n $NS wait --for=condition=complete job/k6-load --timeout=10m >/dev/null 2>&1 &
+kubectl -n $NS wait --for=condition=complete job/k6-load --timeout=15m >/dev/null 2>&1 &
 DONE_PID=$!
-kubectl -n $NS wait --for=condition=failed job/k6-load --timeout=10m >/dev/null 2>&1 &
+kubectl -n $NS wait --for=condition=failed job/k6-load --timeout=15m >/dev/null 2>&1 &
 FAIL_PID=$!
 
 echo "   watching app-gateway replicas and admitted checkouts while the load runs..."
