@@ -1,5 +1,5 @@
 // One virtual user = one attempted purchase through the real chain:
-//   signup -> waitroom join -> mint checkout token -> create order
+//   authenticate -> waitroom join -> mint checkout token -> create order
 //   -> fire the payment webhook -> poll until COMPLETED
 //
 // The event, its config and the ticket class are seeded ONCE by
@@ -15,7 +15,9 @@ const GW              = __ENV.GW;                 // http://app-gateway:3000/api
 const WEBHOOK         = __ENV.WEBHOOK;            // http://payment-webhook:8080
 const EVENT_ID        = __ENV.EVENT_ID;
 const TICKET_CLASS_ID = __ENV.TICKET_CLASS_ID;
-const JWT_SECRET      = __ENV.JWT_SECRET;
+const JWT_SECRET      = __ENV.JWT_SECRET;         // order-svc: checkout token
+const ACCESS_SECRET   = __ENV.ACCESS_SECRET;      // gateway: access token
+const USER_PREFIX     = __ENV.USER_PREFIX;        // set => buyers are pre-seeded, skip signup
 
 const completed  = new Counter('tb_orders_completed');
 const soldOut    = new Counter('tb_sold_out_4xx');
@@ -44,32 +46,45 @@ function jwtClaims(token) {
   return JSON.parse(encoding.b64decode(payload, 'rawurl', 's'));
 }
 
+function sign(payload, secret) {
+  const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
+  const p = b64url(JSON.stringify(payload));
+  return `${h}.${p}.${crypto.hmac('sha256', secret, `${h}.${p}`, 'base64rawurl')}`;
+}
+
 function mintCheckoutToken(sessionId, userId, eventId) {
   const now = Math.floor(Date.now() / 1000);
-  const h = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
-  const p = b64url(JSON.stringify({
+  return sign({
     session_id: sessionId, user_id: userId, event_id: eventId,
     iat: now - 10, exp: now + 900,
-  }));
-  const sig = crypto.hmac('sha256', JWT_SECRET, `${h}.${p}`, 'base64rawurl');
-  return `${h}.${p}.${sig}`;
+  }, JWT_SECRET);
 }
 
 export default function () {
   const json = { headers: { 'Content-Type': 'application/json' } };
 
-  // 1. signup — a unique user per VU per run
-  const email = `load-${__VU}-${Date.now()}@example.com`;
-  const su = http.post(`${GW}/auth/signup`, JSON.stringify({
-    firstName: 'Load', lastName: `VU${__VU}`, email, password: 'Password123!',
-  }), json);
-  if (su.status !== 201 && su.status !== 200) {
-    unexpected.add(1, { step: 'signup', status: su.status });
-    return;
+  // 1. authenticate. With USER_PREFIX the buyer already exists and the token is
+  //    minted here — signing up in-band costs a bcrypt hash per VU and saturates
+  //    the gateway before inventory is ever contended.
+  let userId, email, accessToken;
+  if (USER_PREFIX) {
+    const now = Math.floor(Date.now() / 1000);
+    userId = `${USER_PREFIX}${__VU}`;
+    email = `${userId}@example.com`;
+    accessToken = sign({ sub: userId, email, iat: now - 10, exp: now + 3600 }, ACCESS_SECRET);
+  } else {
+    email = `load-${__VU}-${Date.now()}@example.com`;
+    const su = http.post(`${GW}/auth/signup`, JSON.stringify({
+      firstName: 'Load', lastName: `VU${__VU}`, email, password: 'Password123!',
+    }), json);
+    if (su.status !== 201 && su.status !== 200) {
+      unexpected.add(1, { step: 'signup', status: su.status });
+      return;
+    }
+    accessToken = su.json('data.accessToken');
+    if (!accessToken) { unexpected.add(1, { step: 'signup-token' }); return; }
+    userId = jwtClaims(accessToken).sub;
   }
-  const accessToken = su.json('data.accessToken');
-  if (!accessToken) { unexpected.add(1, { step: 'signup-token' }); return; }
-  const userId = jwtClaims(accessToken).sub;
   const auth = { headers: { 'Content-Type': 'application/json',
                             Authorization: `Bearer ${accessToken}` } };
 

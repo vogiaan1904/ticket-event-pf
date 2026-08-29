@@ -29,9 +29,13 @@ spec:
             - { name: EVENT_ID,        value: "${EVENT_ID}" }
             - { name: TICKET_CLASS_ID, value: "${TICKET_CLASS_ID}" }
             - { name: VUS,             value: "${VUS}" }
+            - { name: USER_PREFIX,     value: "${USER_PREFIX}" }
             - name: JWT_SECRET
               valueFrom:
                 configMapKeyRef: { name: order-config, key: JWT_SECRET }
+            - name: ACCESS_SECRET
+              valueFrom:
+                configMapKeyRef: { name: gateway-config, key: JWT_ACCESS_SECRET }
           # k6 with 300 VUs is itself a workload. Requesting nothing would let it
           # be scheduled onto a node it then starves — measuring the load
           # generator instead of the system.
