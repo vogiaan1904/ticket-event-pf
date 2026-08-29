@@ -28,6 +28,7 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "postgres") | nindent 10 }}
           ports: [{ containerPort: 5432 }]
           env:
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }

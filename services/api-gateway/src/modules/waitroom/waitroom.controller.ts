@@ -3,8 +3,8 @@ import { ResponseDto } from '@/common/interceptors/transfrom.interceptor';
 import { RequestWithUser } from '@/shared/types/request-user.type';
 import { Body, Controller, Get, Param, Post, Req, Sse, UseGuards } from '@nestjs/common';
 import { JoinQueueDto, LeaveQueueDto } from './dtos/req';
-import { JoinQueueRespDto, LeaveQueueRespDto } from './dtos/resp';
-import { JoinQueueMapper, LeaveQueueMapper, StreamPositionMapper } from './mappers';
+import { JoinQueueRespDto, LeaveQueueRespDto, QueueStatusRespDto } from './dtos/resp';
+import { JoinQueueMapper, LeaveQueueMapper, QueueStatusMapper, StreamPositionMapper } from './mappers';
 import { WaitroomService } from './waitroom.service';
 import { from, map, Observable } from 'rxjs';
 
@@ -32,6 +32,15 @@ export class WaitroomController {
   async leaveQueue(@Body() dto: LeaveQueueDto): Promise<LeaveQueueRespDto> {
     const protoResponse = await this.waitroomService.leaveQueue(dto);
     return LeaveQueueMapper.toDto(protoResponse);
+  }
+
+  // Pollable counterpart to the SSE stream below, for clients that cannot hold
+  // an open connection.
+  @Get('status/:sessionId')
+  @UseGuards(AccessGuard)
+  @ResponseDto(QueueStatusRespDto)
+  async getStatus(@Param('sessionId') sessionId: string): Promise<QueueStatusRespDto> {
+    return QueueStatusMapper.toDto(await this.waitroomService.getQueueStatus(sessionId));
   }
 
   @Get('position/:sessionId')

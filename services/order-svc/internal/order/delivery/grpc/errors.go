@@ -5,6 +5,7 @@ import (
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	pkgErrors "github.com/vogiaan1904/ticketbottle-order/pkg/errors"
+	"google.golang.org/grpc/codes"
 )
 
 var (
@@ -29,6 +30,8 @@ var (
 
 	// Checkout errors
 	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError("ORD016", "Invalid checkout token")
+
+	ErrGRPCRequestTimeout = pkgErrors.NewGRPCErrorWithStatus(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
 )
 
 // mapError turns a domain error into its wire equivalent. Matching uses
@@ -68,6 +71,8 @@ func (s *grpcService) mapError(err error) error {
 		return ErrGRPCEventConfigNotFound
 	case errors.Is(err, order.ErrInvalidCheckoutToken):
 		return ErrGRPCInvalidCheckoutToken
+	case errors.Is(err, order.ErrRequestTimeout):
+		return ErrGRPCRequestTimeout
 	default:
 		return err
 	}

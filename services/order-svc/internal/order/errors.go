@@ -20,6 +20,8 @@ var (
 	ErrEventConfigNotFound  = errors.New("event config not found")
 
 	ErrInvalidCheckoutToken = errors.New("invalid checkout token")
+
+	ErrRequestTimeout = errors.New("order creation timed out")
 )
 
 // Temporal ApplicationError type strings.

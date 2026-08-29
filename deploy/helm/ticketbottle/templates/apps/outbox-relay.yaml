@@ -17,6 +17,7 @@ spec:
         - name: outbox-relay
           image: {{ include "tb.image" (dict "ctx" . "repo" "ticketbottle/outbox-relay") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- include "tb.resources" (dict "ctx" . "name" "outbox-relay") | nindent 10 }}
           envFrom:
             - configMapRef: { name: payment-config }
 {{- end }}

@@ -16,6 +16,7 @@ spec:
       containers:
         - name: redis
           image: {{ .Values.redis.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "redis") | nindent 10 }}
           ports: [{ containerPort: 6379 }]
           volumeMounts: [{ name: data, mountPath: /data }]
           readinessProbe:

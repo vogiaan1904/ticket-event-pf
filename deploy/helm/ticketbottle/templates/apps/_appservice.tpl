@@ -8,7 +8,14 @@ metadata:
   namespace: {{ include "tb.namespace" $ }}
   labels: {{- include "tb.labels" $ | nindent 4 }}
 spec:
-  replicas: 1
+  {{- $hpa := index ($.Values.autoscaling | default dict) .name | default dict }}
+  {{- if not $hpa.enabled }}
+  {{- /* When an HPA owns this Deployment, `replicas` MUST be omitted. Leaving it
+         in means every `helm upgrade` resets the Deployment to the static count
+         and the HPA has to scale back out from scratch — a slow, confusing fight
+         between two controllers, and one of the most common Helm+HPA bugs. */}}
+  replicas: {{ index $.Values.replicas .name | default 1 }}
+  {{- end }}
   selector:
     matchLabels: { app: {{ .name }} }
   template:
@@ -22,6 +29,7 @@ spec:
         - name: {{ .name }}
           image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}
           imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          {{- include "tb.resources" (dict "ctx" $ "name" .name) | nindent 10 }}
           envFrom:
             - configMapRef: { name: {{ .config }} }
           {{- if gt (int .port) 0 }}

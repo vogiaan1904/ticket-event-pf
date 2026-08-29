@@ -11,3 +11,15 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- $ := .ctx -}}
 {{- printf "%s%s:%s" $.Values.image.registry .repo $.Values.image.tag -}}
 {{- end -}}
+
+{{/*
+Render a `resources:` block for a workload, or nothing if the values file has no
+entry for it. Call as: {{ include "tb.resources" (dict "ctx" $ "name" "app-gateway") }}
+*/}}
+{{- define "tb.resources" -}}
+{{- $res := index (.ctx.Values.resources | default dict) .name | default dict -}}
+{{- with $res }}
+resources:
+{{ toYaml . | indent 2 }}
+{{- end -}}
+{{- end -}}

@@ -58,14 +58,14 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 	var eCfg *event.EventConfig
 	g, gCtx := errgroup.WithContext(ctx)
 
+	// event-svc's status codes don't survive as our sentinels, and returning its
+	// error raw leaves the delivery layer nothing to match on. Which call failed
+	// is what identifies the rejection.
 	g.Go(func() error {
 		out, err := s.eSvc.FindOne(gCtx, &event.FindOneEventRequest{
 			Id: in.EventID,
 		})
-		if err != nil {
-			return err
-		}
-		if out.Event == nil {
+		if err != nil || out.Event == nil {
 			return ErrEventNotFound
 		}
 		return nil
@@ -75,10 +75,7 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		cfgOut, err := s.eSvc.GetConfig(gCtx, &event.GetEventConfigRequest{
 			EventId: in.EventID,
 		})
-		if err != nil {
-			return err
-		}
-		if cfgOut.EventConfig == nil {
+		if err != nil || cfgOut.EventConfig == nil {
 			return ErrEventConfigNotFound
 		}
 		eCfg = cfgOut.EventConfig

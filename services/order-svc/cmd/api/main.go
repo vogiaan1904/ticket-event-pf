@@ -121,7 +121,7 @@ func main() {
 	}()
 
 	// Initialize services
-	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli)
+	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
 	// Initialize gRpc services
 	oGrpc := oGrpc.NewGrpcService(oSvc, l)

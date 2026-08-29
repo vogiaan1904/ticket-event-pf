@@ -17,6 +17,7 @@ spec:
         - name: payment-webhook
           image: {{ include "tb.image" (dict "ctx" . "repo" "ticketbottle/payment-events") }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- include "tb.resources" (dict "ctx" . "name" "payment-webhook") | nindent 10 }}
           command: ["node", "webhook.js"]
           envFrom:
             - configMapRef: { name: payment-config }

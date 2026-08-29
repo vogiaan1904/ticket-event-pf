@@ -1,0 +1,32 @@
+{{- if .Values.apps.enabled }}
+{{- range $name, $cfg := .Values.autoscaling }}
+{{- if $cfg.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "tb.namespace" $ }}
+  labels: {{- include "tb.labels" $ | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ $name }}
+  minReplicas: {{ $cfg.minReplicas }}
+  maxReplicas: {{ $cfg.maxReplicas }}
+  metrics:
+    # `Utilization` is a percentage OF THE REQUEST. With no request in
+    # .Values.resources.<name>, this reports <unknown> and never scales.
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ $cfg.targetCPUUtilizationPercentage }}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: {{ $cfg.scaleDownStabilizationSeconds | default 300 }}
+{{- end }}
+{{- end }}
+{{- end }}
