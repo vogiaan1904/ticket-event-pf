@@ -2,6 +2,7 @@ import {
   JoinQueueResponse,
   LeaveQueueResponse,
   PositionUpdate,
+  QueueStatusResponse,
   WAITROOM_SERVICE_NAME,
   WaitroomServiceClient,
 } from '@/protogen/waitroom.pb';
@@ -48,6 +49,10 @@ export class WaitroomService {
     );
 
     return leaveQueueResp;
+  }
+
+  async getQueueStatus(sessionId: string): Promise<QueueStatusResponse> {
+    return firstValueFrom(this.waitroomService.getQueueStatus({ sessionId }));
   }
 
   streamQueuePosition(sessionId: string): Observable<PositionUpdate> {
