@@ -23,6 +23,14 @@ make apps-up        # build + load the app images, deploy the app tier
 make gate1          # end-to-end purchase-flow acceptance test
 ```
 
+`apps-up` is `apps-build` (10 images, ~10 min) then `apps-deploy` (`helm upgrade`). When you have
+changed only the chart — templates, values — run `apps-deploy` on its own; the images are already in
+the kind node and `pullPolicy` is `IfNotPresent`.
+
+```bash
+make apps-deploy    # chart-only: skip the image build
+```
+
 ## Tear down
 ```bash
 make infra-down     # remove the chart, keep the cluster

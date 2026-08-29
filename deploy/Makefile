@@ -32,11 +32,15 @@ infra-down:            ## Uninstall the chart (keeps the cluster)
 smoke:                 ## Verify every infra component end-to-end
 	./scripts/smoke-infra.sh
 
-.PHONY: apps-up smoke-apps
+.PHONY: apps-up apps-build apps-deploy smoke-apps
 
-apps-up:               ## Build+load images and deploy the app tier
+apps-build:            ## Build the app images and load them into kind
 	./scripts/build-images.sh
+
+apps-deploy:           ## Deploy/upgrade the chart only (no image build)
 	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --wait --timeout 8m
+
+apps-up: apps-build apps-deploy   ## Build+load images and deploy the app tier
 
 smoke-apps:            ## Verify the app tier (pods Ready + signup)
 	./scripts/smoke-apps.sh
@@ -109,7 +113,7 @@ EKS_VALUES  := $(CHART)/values-eks.yaml
 EKS_CLUSTER := ticketbottle-eks
 REGION      := us-east-1
 
-.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down
+.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down eks-metrics eks-gate4a
 
 eks-guard:         ## Refuse to proceed unless the k3s box is stopped (never both)
 	@state=$$(aws ec2 describe-instances --instance-ids $(K3S_ID) \
@@ -156,3 +160,12 @@ eks-sweep-orphans: ## Recovery: delete an ALB/volumes stranded by a destroy that
 	./scripts/eks-sweep-orphans.sh
 
 eks-down: eks-teardown eks-leak-check  ## THE off switch: teardown + leak check. End every session with this.
+
+eks-metrics:       ## Show live CPU/memory per pod (needs metrics-server)
+	@kubectl top nodes
+	@echo
+	@kubectl top pods -n $(NS) --sort-by=cpu
+
+eks-gate4a:        ## Gate 4a — concurrency: no oversell, HPA scales out and back in
+	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
+	  ./scripts/gate4a-load.sh
