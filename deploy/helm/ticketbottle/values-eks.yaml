@@ -5,9 +5,9 @@
 target: eks
 
 image:
-  # registry injected at deploy time (keeps the account id out of git)
-  tag: latest
-  pullPolicy: Always
+  # registry and tag are injected at deploy time by eks-deploy.sh: the account id
+  # stays out of git, and the tag is the immutable sha- build CI pushed.
+  pullPolicy: IfNotPresent
 
 # EKS has no working default StorageClass; deploy/k8s/eks/storageclass-gp3.yaml
 # creates this one (EBS CSI, WaitForFirstConsumer, Delete).
