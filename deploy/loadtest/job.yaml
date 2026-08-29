@@ -1,0 +1,45 @@
+# Applied by gate4a-load.sh, which substitutes the ${...} values with envsubst.
+# The script is carried as a ConfigMap so the image stays the stock grafana/k6.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-purchase
+  namespace: ticketbottle
+data:
+  purchase.js: |
+${PURCHASE_JS}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-load
+  namespace: ticketbottle
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.54.0
+          args: ["run", "/scripts/purchase.js", "--summary-export=/dev/stdout"]
+          env:
+            - { name: GW,              value: "http://app-gateway:3000/api" }
+            - { name: WEBHOOK,         value: "http://payment-webhook:8080" }
+            - { name: EVENT_ID,        value: "${EVENT_ID}" }
+            - { name: TICKET_CLASS_ID, value: "${TICKET_CLASS_ID}" }
+            - { name: VUS,             value: "${VUS}" }
+            - name: JWT_SECRET
+              valueFrom:
+                configMapKeyRef: { name: order-config, key: JWT_SECRET }
+          # k6 with 300 VUs is itself a workload. Requesting nothing would let it
+          # be scheduled onto a node it then starves — measuring the load
+          # generator instead of the system.
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits:   { cpu: "1",  memory: 512Mi }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+      volumes:
+        - name: scripts
+          configMap: { name: k6-purchase }
