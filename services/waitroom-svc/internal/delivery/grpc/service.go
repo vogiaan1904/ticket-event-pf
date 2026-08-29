@@ -57,15 +57,24 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 		return nil, resp.ParseGRPCError(err)
 	}
 
-	return &waitroompb.QueueStatusResponse{
+	res := &waitroompb.QueueStatusResponse{
 		SessionId:     out.SessionID,
+		Status:        convertSessionStatusToProto(out.Status),
 		Position:      out.Position,
 		QueueLength:   out.QueueLength,
 		QueuedAt:      util.TimeToISO8601Str(out.QueuedAt),
 		ExpiresAt:     util.TimeToISO8601Str(out.ExpiresAt),
 		CheckoutToken: out.CheckoutToken,
 		CheckoutUrl:   out.CheckoutURL,
-	}, nil
+	}
+	if out.CheckoutExpiresAt != nil {
+		res.CheckoutExpiresAt = util.TimeToISO8601Str(*out.CheckoutExpiresAt)
+	}
+	if out.AdmittedAt != nil {
+		res.AdmittedAt = util.TimeToISO8601Str(*out.AdmittedAt)
+	}
+
+	return res, nil
 }
 
 func (s *grpcService) LeaveQueue(ctx context.Context, req *waitroompb.LeaveQueueRequest) (*waitroompb.LeaveQueueResponse, error) {
