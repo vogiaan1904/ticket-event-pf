@@ -75,7 +75,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 		return nil, err
 	}
 	if !available {
-		return nil, ErrInsufficientInventory
+		return nil, NewInsufficientInventoryError(ErrInsufficientInventory)
 	}
 
 	// 2. Create order

@@ -1,6 +1,8 @@
 package grpc
 
 import (
+	"errors"
+
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	pkgErrors "github.com/vogiaan1904/ticketbottle-order/pkg/errors"
 )
@@ -29,37 +31,42 @@ var (
 	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError("ORD016", "Invalid checkout token")
 )
 
+// mapError turns a domain error into its wire equivalent. Matching uses
+// errors.Is rather than == so a sentinel still resolves after it has been
+// wrapped on the way up; a bare switch on err sends every wrapped error to
+// default, which response.GrpcError renders as codes.Internal — a 500 for what
+// may well be an ordinary business rejection.
 func (s *grpcService) mapError(err error) error {
-	switch err {
-	case order.ErrOrderNotFound:
+	switch {
+	case errors.Is(err, order.ErrOrderNotFound):
 		return ErrGRPCOrderNotFound
-	case order.ErrOrderAlreadyExists:
+	case errors.Is(err, order.ErrOrderAlreadyExists):
 		return ErrGRPCOrderAlreadyExists
-	case order.ErrInvalidOrderStatus:
+	case errors.Is(err, order.ErrInvalidOrderStatus):
 		return ErrGRPCInvalidOrderStatus
-	case order.ErrOrderCreationFailed:
+	case errors.Is(err, order.ErrOrderCreationFailed):
 		return ErrGRPCOrderCreationFailed
-	case order.ErrOrderUpdateFailed:
+	case errors.Is(err, order.ErrOrderUpdateFailed):
 		return ErrGRPCOrderUpdateFailed
-	case order.ErrOrderCancellationFailed:
+	case errors.Is(err, order.ErrOrderCancellationFailed):
 		return ErrGRPCOrderCancellationFailed
-	case order.ErrOrderNotPending:
+	case errors.Is(err, order.ErrOrderNotPending):
 		return ErrGRPCOrderNotPending
-	case order.ErrPaymentAmountMismatch:
+	case errors.Is(err, order.ErrPaymentAmountMismatch):
 		return ErrGRPCPaymentAmountMismatch
-	case order.ErrEventNotFound:
+	case errors.Is(err, order.ErrEventNotFound):
 		return ErrGRPCEventNotFound
-	case order.ErrEventNotReadyForSale:
+	case errors.Is(err, order.ErrEventNotReadyForSale):
 		return ErrGRPCEventNotReadyForSale
-	case order.ErrTicketClassNotFound:
+	case errors.Is(err, order.ErrTicketClassNotFound):
 		return ErrGRPCTicketClassNotFound
-	case order.ErrTicketSoldOut:
+	case errors.Is(err, order.ErrTicketSoldOut):
 		return ErrGRPCTicketSoldOut
-	case order.ErrNotEnoughTickets:
+	case errors.Is(err, order.ErrNotEnoughTickets):
 		return ErrGRPCNotEnoughTickets
-	case order.ErrEventConfigNotFound:
+	case errors.Is(err, order.ErrEventConfigNotFound):
 		return ErrGRPCEventConfigNotFound
-	case order.ErrInvalidCheckoutToken:
+	case errors.Is(err, order.ErrInvalidCheckoutToken):
 		return ErrGRPCInvalidCheckoutToken
 	default:
 		return err
