@@ -1,6 +1,8 @@
 package service
 
 import (
+	"time"
+
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -21,9 +23,11 @@ type implService struct {
 	evSvc    event.EventServiceClient
 	pmtSvc   payment.PaymentServiceClient
 	temporal temporalCli.Client
+
+	createTimeout time.Duration
 }
 
-func New(l logger.Logger, repo repo.Repository, jwt pkgJwt.Manager, invSvc inventory.InventoryServiceClient, evSvc event.EventServiceClient, pmtSvc payment.PaymentServiceClient, prod producer.Producer, tprCli temporalCli.Client) order.Service {
+func New(l logger.Logger, repo repo.Repository, jwt pkgJwt.Manager, invSvc inventory.InventoryServiceClient, evSvc event.EventServiceClient, pmtSvc payment.PaymentServiceClient, prod producer.Producer, tprCli temporalCli.Client, createTimeout time.Duration) order.Service {
 	return &implService{
 		l:        l,
 		repo:     repo,
@@ -33,5 +37,7 @@ func New(l logger.Logger, repo repo.Repository, jwt pkgJwt.Manager, invSvc inven
 		pmtSvc:   pmtSvc,
 		prod:     prod,
 		temporal: tprCli,
+
+		createTimeout: createTimeout,
 	}
 }

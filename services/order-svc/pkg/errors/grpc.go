@@ -17,6 +17,15 @@ func NewGRPCError(code string, message string) *GRPCError {
 	}
 }
 
+// NewGRPCErrorWithStatus sets the status explicitly. NewGRPCError leaves
+// GrpcCode zero, which response.GrpcError renders as InvalidArgument.
+func NewGRPCErrorWithStatus(grpcCode codes.Code, code string, message string) *GRPCError {
+	return &GRPCError{
+		Message:  fmt.Sprintf("%s - %s", code, message),
+		GrpcCode: grpcCode,
+	}
+}
+
 func (e GRPCError) Error() string {
 	return e.Message
 }

@@ -26,6 +26,10 @@ import (
 // the original sentinel is gone by the time it lands here. The ApplicationError
 // type string survives, and it is what distinguishes a business rejection from
 // a fault: without this, a sold-out event reaches the client as a 500.
+// Cancellation must outlive the deadline that triggered it, but not block the
+// handler: the workflow only has to be told, not watched.
+const cancelWorkflowTimeout = 5 * time.Second
+
 func mapWorkflowError(err error) error {
 	var appErr *sdktemporal.ApplicationError
 	if !errors.As(err, &appErr) {
@@ -144,7 +148,7 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 
 	tcMap := make(map[string]*inventory.TicketClass)
 
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, s.createTimeout)
 	defer cancel()
 
 	tcIds := make([]string, len(in.Items))
@@ -220,6 +224,19 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	err = wfRun.Get(ctx, &wfRes)
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
+
+		// Get only stops waiting; the saga runs on server-side and would keep
+		// reserving inventory for a caller that has already given up. Cancel it
+		// so CreateOrder's deferred compensation releases the hold.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			cancelCtx, cancelDone := context.WithTimeout(context.WithoutCancel(ctx), cancelWorkflowTimeout)
+			defer cancelDone()
+			if cErr := s.temporal.CancelWorkflow(cancelCtx, wfRun.GetID(), wfRun.GetRunID()); cErr != nil {
+				s.l.Errorf(ctx, "failed to cancel abandoned create order workflow %s: %v", wfRun.GetID(), cErr)
+			}
+			return order.CreateOrderOutput{}, order.ErrRequestTimeout
+		}
+
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 

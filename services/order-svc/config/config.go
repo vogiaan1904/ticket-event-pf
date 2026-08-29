@@ -29,6 +29,11 @@ type ServerConfig struct {
 	IdleTimeout  time.Duration
 
 	PaymentTimeoutSeconds int32
+
+	// How long Create waits for the CreateOrder saga before giving up. Bounds a
+	// gRPC handler; on expiry the workflow is cancelled so it cannot go on
+	// reserving inventory for a caller that has left.
+	CreateOrderTimeout time.Duration
 }
 
 type RedisConfig struct {
@@ -90,6 +95,7 @@ func Load() (*Config, error) {
 			IdleTimeout:  getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
 
 			PaymentTimeoutSeconds: int32(getEnvAsInt("PAYMENT_TIMEOUT_SECONDS", 600)),
+			CreateOrderTimeout:    getEnvAsDuration("ORDER_CREATE_TIMEOUT", 30*time.Second),
 		},
 		DynamoDB: DynamoDBConfig{
 			TableName: getEnv("DYNAMODB_TABLE_NAME", "ticketbottle-orders"),

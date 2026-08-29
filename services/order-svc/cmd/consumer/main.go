@@ -125,7 +125,7 @@ func main() {
 	}()
 
 	// Initialize services
-	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli)
+	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
 	// Create consumer
 	cons := oCons.NewConsumer(kConsGr, oSvc, l)
