@@ -124,7 +124,10 @@ func (s *sessionService) GenerateCheckoutToken(ctx context.Context, ss *models.S
 }
 
 func (s *sessionService) ValidateSession(ctx context.Context, ssID string) error {
-	ss, err := s.repo.Get(ctx, ssID)
+	// Via GetSession, not repo.Get: the repository answers a missing key with
+	// redis.Nil, and returning that raw leaves the delivery layer nothing to
+	// match on — an unknown session answered 500 instead of 404.
+	ss, err := s.GetSession(ctx, ssID)
 	if err != nil {
 		return err
 	}

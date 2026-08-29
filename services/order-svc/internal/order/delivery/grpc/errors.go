@@ -9,29 +9,29 @@ import (
 )
 
 var (
-	ErrValidationFailed = pkgErrors.NewGRPCError("ORD400", "Validation failed")
+	ErrValidationFailed = pkgErrors.NewGRPCError(codes.InvalidArgument, "ORD400", "Validation failed")
 	// Order errors
-	ErrGRPCOrderNotFound           = pkgErrors.NewGRPCError("ORD001", "Order not found")
-	ErrGRPCOrderAlreadyExists      = pkgErrors.NewGRPCError("ORD002", "Order already exists")
-	ErrGRPCInvalidOrderStatus      = pkgErrors.NewGRPCError("ORD003", "Invalid order status")
-	ErrGRPCOrderCreationFailed     = pkgErrors.NewGRPCError("ORD004", "Order creation failed")
-	ErrGRPCOrderUpdateFailed       = pkgErrors.NewGRPCError("ORD005", "Order update failed")
-	ErrGRPCOrderCancellationFailed = pkgErrors.NewGRPCError("ORD006", "Order cancellation failed")
-	ErrGRPCOrderNotPending         = pkgErrors.NewGRPCError("ORD007", "Order is not in pending status")
-	ErrGRPCPaymentAmountMismatch   = pkgErrors.NewGRPCError("ORD008", "Payment amount does not match order amount")
+	ErrGRPCOrderNotFound           = pkgErrors.NewGRPCError(codes.NotFound, "ORD001", "Order not found")
+	ErrGRPCOrderAlreadyExists      = pkgErrors.NewGRPCError(codes.AlreadyExists, "ORD002", "Order already exists")
+	ErrGRPCInvalidOrderStatus      = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD003", "Invalid order status")
+	ErrGRPCOrderCreationFailed     = pkgErrors.NewGRPCError(codes.Internal, "ORD004", "Order creation failed")
+	ErrGRPCOrderUpdateFailed       = pkgErrors.NewGRPCError(codes.Internal, "ORD005", "Order update failed")
+	ErrGRPCOrderCancellationFailed = pkgErrors.NewGRPCError(codes.Internal, "ORD006", "Order cancellation failed")
+	ErrGRPCOrderNotPending         = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD007", "Order is not in pending status")
+	ErrGRPCPaymentAmountMismatch   = pkgErrors.NewGRPCError(codes.InvalidArgument, "ORD008", "Payment amount does not match order amount")
 
 	// Event errors
-	ErrGRPCEventNotFound        = pkgErrors.NewGRPCError("ORD009", "Event not found")
-	ErrGRPCEventNotReadyForSale = pkgErrors.NewGRPCError("ORD010", "Event not ready for sale")
-	ErrGRPCTicketClassNotFound  = pkgErrors.NewGRPCError("ORD011", "Ticket class not found")
-	ErrGRPCTicketSoldOut        = pkgErrors.NewGRPCError("ORD012", "Ticket sold out")
-	ErrGRPCNotEnoughTickets     = pkgErrors.NewGRPCError("ORD013", "Not enough tickets available")
-	ErrGRPCEventConfigNotFound  = pkgErrors.NewGRPCError("ORD014", "Event config not found")
+	ErrGRPCEventNotFound        = pkgErrors.NewGRPCError(codes.NotFound, "ORD009", "Event not found")
+	ErrGRPCEventNotReadyForSale = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD010", "Event not ready for sale")
+	ErrGRPCTicketClassNotFound  = pkgErrors.NewGRPCError(codes.NotFound, "ORD011", "Ticket class not found")
+	ErrGRPCTicketSoldOut        = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD012", "Ticket sold out")
+	ErrGRPCNotEnoughTickets     = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD013", "Not enough tickets available")
+	ErrGRPCEventConfigNotFound  = pkgErrors.NewGRPCError(codes.NotFound, "ORD014", "Event config not found")
 
 	// Checkout errors
-	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError("ORD016", "Invalid checkout token")
+	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError(codes.Unauthenticated, "ORD016", "Invalid checkout token")
 
-	ErrGRPCRequestTimeout = pkgErrors.NewGRPCErrorWithStatus(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
+	ErrGRPCRequestTimeout = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
 )
 
 // mapError turns a domain error into its wire equivalent. Matching uses

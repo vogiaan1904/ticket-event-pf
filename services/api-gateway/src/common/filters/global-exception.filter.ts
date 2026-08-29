@@ -19,7 +19,6 @@ const GRPC_TO_HTTP: Partial<Record<GrpcStatus, HttpStatus>> = {
   [GrpcStatus.UNAUTHENTICATED]: HttpStatus.UNAUTHORIZED,
   [GrpcStatus.FAILED_PRECONDITION]: HttpStatus.CONFLICT,
   [GrpcStatus.OUT_OF_RANGE]: HttpStatus.BAD_REQUEST,
-  [GrpcStatus.RESOURCE_EXHAUSTED]: HttpStatus.TOO_MANY_REQUESTS,
   [GrpcStatus.ABORTED]: HttpStatus.CONFLICT,
   [GrpcStatus.UNIMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
   [GrpcStatus.UNAVAILABLE]: HttpStatus.SERVICE_UNAVAILABLE,
