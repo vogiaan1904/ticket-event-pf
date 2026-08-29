@@ -6,7 +6,7 @@ terraform {
       version = "~> 5.0"
     }
   }
-  # Phase 0 uses local state (all resources are ~$0). Phase A introduces S3.
+  backend "s3" {}
 }
 
 provider "aws" {

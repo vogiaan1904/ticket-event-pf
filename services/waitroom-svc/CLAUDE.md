@@ -132,4 +132,4 @@ period.
 ## Notes
 
 - Logging uses the zap wrapper with ctx-first `f`-suffixed methods (`l.Errorf(ctx, ...)`).
-- The repo carries several design docs worth reading before changing the admission logic: `QUEUE_PROCESSOR_GUIDE.md`, `REAL_TIME_POSITION.md`, `STREAMING_IMPLEMENTATION_GUIDE.md`, `SYSTEM_FLOW_README.md`. (The ASCII diagram in `README.md` is generic/early and lists wrong ports — trust this file and the configs instead.)
+- The repo carries several design docs worth reading before changing the admission logic, under `docs/`: `docs/QUEUE_PROCESSOR_GUIDE.md`, `docs/STREAMING_IMPLEMENTATION_GUIDE.md`, `docs/SYSTEM_FLOW_README.md`. (Trust this file and the configs for ports/behaviour — the design docs are background, not the source of truth.)

@@ -16,7 +16,7 @@
 #     no waitroom callback), so we mint the exact token waitroom would sign. It is
 #     byte-for-byte equivalent; this only sidesteps the race, not the validation.
 set -euo pipefail
-GW=http://localhost:3000/api
+GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
 

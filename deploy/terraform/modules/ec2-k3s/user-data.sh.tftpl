@@ -1,0 +1,51 @@
+#!/bin/bash
+set -euxo pipefail
+
+# --- k3s (single node, default Traefik). Kubeconfig world-readable for SSH fetch. ---
+curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
+until /usr/local/bin/kubectl get nodes 2>/dev/null | grep -q ' Ready'; do sleep 5; done
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+/usr/local/bin/kubectl create namespace ticketbottle --dry-run=client -o yaml | /usr/local/bin/kubectl apply -f -
+
+# --- ECR pull-secret refresher (instance profile -> regcred every 6h + on boot) ---
+cat >/usr/local/bin/refresh-ecr-secret.sh <<'EOS'
+#!/bin/bash
+set -euo pipefail
+REGION="${region}"
+NS=ticketbottle
+export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+REGISTRY="$${ACCOUNT}.dkr.ecr.$${REGION}.amazonaws.com"
+TOKEN=$(aws ecr get-login-password --region "$REGION")
+/usr/local/bin/kubectl create namespace "$NS" --dry-run=client -o yaml | /usr/local/bin/kubectl apply -f -
+/usr/local/bin/kubectl create secret docker-registry regcred -n "$NS" \
+  --docker-server="$REGISTRY" --docker-username=AWS --docker-password="$TOKEN" \
+  --dry-run=client -o yaml | /usr/local/bin/kubectl apply -f -
+/usr/local/bin/kubectl patch serviceaccount default -n "$NS" \
+  -p '{"imagePullSecrets":[{"name":"regcred"}]}'
+EOS
+chmod +x /usr/local/bin/refresh-ecr-secret.sh
+
+cat >/etc/systemd/system/ecr-refresh.service <<'EOS'
+[Unit]
+Description=Refresh ECR pull secret
+After=k3s.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/refresh-ecr-secret.sh
+EOS
+
+cat >/etc/systemd/system/ecr-refresh.timer <<'EOS'
+[Unit]
+Description=Refresh ECR pull secret on boot and every 6h
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=6h
+[Install]
+WantedBy=timers.target
+EOS
+
+systemctl daemon-reload
+systemctl enable --now ecr-refresh.timer
+# run once now so the secret exists before the first helm deploy
+/usr/local/bin/refresh-ecr-secret.sh || true

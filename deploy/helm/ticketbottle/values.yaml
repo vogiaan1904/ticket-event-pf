@@ -1,10 +1,19 @@
 # Shared defaults. Overlays (values-local/-k3s/-eks) override per target.
 namespace: ticketbottle
 
+image:
+  registry: ""          # "" for kind; "<account>.dkr.ecr.us-east-1.amazonaws.com/" for k3s (set via --set)
+  tag: local            # "local" for kind; "latest"/"sha-..." for k3s
+  pullPolicy: IfNotPresent
+
 apps:
   # Set false (via --set) for an infra-only install — e.g. running a service
   # locally against in-cluster Postgres/Kafka/Temporal instead of in-pod.
   enabled: true
+
+# "" -> the cluster's default StorageClass (kind: standard, k3s: local-path).
+# EKS names "gp3" explicitly; see deploy/k8s/eks/storageclass-gp3.yaml.
+storageClass: ""
 
 postgres:
   image: postgres:15-alpine
@@ -58,3 +67,23 @@ localstack:
   expose: false
   ip: 172.18.0.100
   postgresNodePort: 31432
+
+gateway:
+  # NodePort for kind/k3s (reached through the SSH tunnel on Rung 2).
+  # Set to null on EKS, where the Service becomes ClusterIP behind an ALB Ingress.
+  nodePort: 30000
+
+ingress:
+  enabled: false
+  className: alb
+  annotations: {}
+  subnets: ""       # comma-separated subnet ids; injected at deploy time
+  inboundCidrs: ""  # comma-separated CIDRs allowed to reach the ALB; injected at deploy time
+
+serviceAccount:
+  order:
+    # On EKS, order-api + order-consumer run under a dedicated ServiceAccount
+    # annotated with an IRSA role. On kind/k3s they use the namespace default SA.
+    create: false
+    name: order-service
+    roleArn: ""     # injected at deploy time from `terraform output order_role_arn`

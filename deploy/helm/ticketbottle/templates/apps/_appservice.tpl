@@ -15,10 +15,13 @@ spec:
     metadata:
       labels: { app: {{ .name }} }
     spec:
+      {{- if .serviceAccount }}
+      serviceAccountName: {{ .serviceAccount }}
+      {{- end }}
       containers:
         - name: {{ .name }}
-          image: {{ .image }}
-          imagePullPolicy: IfNotPresent
+          image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
           envFrom:
             - configMapRef: { name: {{ .config }} }
           {{- if gt (int .port) 0 }}

@@ -3,7 +3,11 @@ package activities
 import (
 	"context"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
+	"go.temporal.io/sdk/temporal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type InventoryActivities struct {
@@ -23,6 +27,18 @@ func (a *InventoryActivities) ReserveInventory(ctx context.Context, orderCode st
 		Items:     items,
 	})
 	if err != nil {
+		// inventory-svc answers a sold-out reserve with ResourceExhausted. That
+		// is a business rejection, not a fault: retrying it burns the default
+		// five attempts with backoff before failing anyway, and reaches the
+		// caller as an opaque activity error. Tag it so the gRPC layer can turn
+		// it into a 4xx, and stop the retries.
+		if status.Code(err) == codes.ResourceExhausted {
+			return temporal.NewNonRetryableApplicationError(
+				order.ErrNotEnoughTickets.Error(),
+				order.ErrTypeInsufficientInventory,
+				err,
+			)
+		}
 		return err
 	}
 

@@ -124,8 +124,10 @@ data:
   DYNAMODB_TABLE_NAME: ticketbottle-orders
   AWS_REGION: {{ .Values.order.awsRegion | quote }}
   DYNAMODB_ENDPOINT: {{ .Values.order.dynamodbEndpoint | quote }}
+  {{- if .Values.order.awsAccessKeyId }}
   AWS_ACCESS_KEY_ID: {{ .Values.order.awsAccessKeyId | quote }}
   AWS_SECRET_ACCESS_KEY: {{ .Values.order.awsSecretAccessKey | quote }}
+  {{- end }}
   TEMPORAL_HOST_PORT: temporal:7233
   TEMPORAL_NAMESPACE: default
   JWT_SECRET: 3723723ry2h398rhfby824yrf032ihrbfiuewrt782u3yrh0d23hr9ghuwhfskdbmsdnc

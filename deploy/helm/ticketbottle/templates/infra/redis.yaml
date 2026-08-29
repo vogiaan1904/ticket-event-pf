@@ -26,6 +26,9 @@ spec:
     - metadata: { name: data }
       spec:
         accessModes: ["ReadWriteOnce"]
+        {{- if .Values.storageClass }}
+        storageClassName: {{ .Values.storageClass }}
+        {{- end }}
         resources: { requests: { storage: "{{ .Values.redis.storage }}" } }
 ---
 apiVersion: v1

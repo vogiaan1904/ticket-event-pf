@@ -25,3 +25,7 @@ output "dynamodb_table_arn" {
 output "ci_role_arn" {
   value = module.iam_ci.ci_role_arn
 }
+
+output "ecr_registry" {
+  value = split("/", values(module.ecr.repository_urls)[0])[0]
+}

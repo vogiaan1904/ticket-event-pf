@@ -1,0 +1,20 @@
+# EKS has no usable default StorageClass: the in-tree kubernetes.io/aws-ebs
+# provisioner was removed from Kubernetes, so PVCs need the EBS CSI driver
+# (installed as an addon in modules/eks) plus a class that points at it.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+provisioner: ebs.csi.aws.com
+# WaitForFirstConsumer is load-bearing, not a nicety: an EBS volume lives in ONE
+# availability zone. With Immediate binding the volume can be created in AZ-a while
+# the scheduler puts the pod in AZ-b, and the pod hangs forever. Waiting until the
+# pod is scheduled lets the driver create the volume in the right AZ.
+volumeBindingMode: WaitForFirstConsumer
+# Delete (not Retain) so `kubectl delete pvc` actually removes the EBS volume —
+# retained volumes are the classic post-teardown bill (Gate 3b).
+reclaimPolicy: Delete
+allowVolumeExpansion: true
+parameters:
+  type: gp3
+  encrypted: "true"

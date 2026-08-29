@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -15,7 +16,29 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/util"
 	"go.temporal.io/sdk/client"
+	sdktemporal "go.temporal.io/sdk/temporal"
 )
+
+// mapWorkflowError translates a Temporal failure into a domain error.
+//
+// wfRun.Get returns whatever the workflow returned wrapped in
+// *temporal.WorkflowExecutionError, rebuilt from a serialised failure proto, so
+// the original sentinel is gone by the time it lands here. The ApplicationError
+// type string survives, and it is what distinguishes a business rejection from
+// a fault: without this, a sold-out event reaches the client as a 500.
+func mapWorkflowError(err error) error {
+	var appErr *sdktemporal.ApplicationError
+	if !errors.As(err, &appErr) {
+		return err
+	}
+
+	switch appErr.Type() {
+	case order.ErrTypeInsufficientInventory:
+		return order.ErrNotEnoughTickets
+	default:
+		return err
+	}
+}
 
 func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (order.CreateOrderOutput, error) {
 	var e *event.Event
@@ -197,7 +220,7 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	err = wfRun.Get(ctx, &wfRes)
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
-		return order.CreateOrderOutput{}, err
+		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 
 	return order.CreateOrderOutput{
