@@ -148,3 +148,14 @@ autoscaling:
     # Kubernetes' own default. Named explicitly because Gate 4a asserts the
     # scale-DOWN, and a gate that polls sooner than this will always fail.
     scaleDownStabilizationSeconds: 300
+
+# A PDB on a single-replica Deployment makes `kubectl drain` block FOREVER:
+# minAvailable:1 with replicas:1 means zero voluntary evictions are ever allowed.
+# Only enable this for workloads that actually have an HPA above them.
+pdb: {}
+
+# maxSkew:1 across zones, ScheduleAnyway. NOT DoNotSchedule: on a two-node
+# cluster a hard constraint turns a scale-out into a Pending pod, which looks
+# exactly like a broken HPA.
+topologySpread:
+  enabled: false

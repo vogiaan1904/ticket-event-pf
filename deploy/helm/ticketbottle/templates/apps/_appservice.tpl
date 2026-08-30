@@ -22,6 +22,14 @@ spec:
     metadata:
       labels: { app: {{ .name }} }
     spec:
+      {{- if $.Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: {{ .name }} }
+      {{- end }}
       {{- if .serviceAccount }}
       serviceAccountName: {{ .serviceAccount }}
       {{- end }}

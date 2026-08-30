@@ -74,3 +74,13 @@ redis:
 autoscaling:
   app-gateway:
     enabled: true
+
+# Only app-gateway gets a PDB, because only app-gateway can have >1 replica
+# (see `autoscaling` above). A PDB on any other workload here would block drains.
+pdb:
+  app-gateway:
+    enabled: true
+    minAvailable: 1
+
+topologySpread:
+  enabled: true
