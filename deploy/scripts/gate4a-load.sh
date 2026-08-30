@@ -19,6 +19,13 @@ TOTAL=${TOTAL:-200}
 VUS=${VUS:-300}
 GW=${GW:?set GW to the ALB url, e.g. http://<alb>/api}
 USER_PREFIX=gate4a-u
+# Set by Gate 4b only. Switches purchase.js to a sustained constant-vus run and
+# turns this script into a pure load generator — see the early exit after §3.
+DURATION=${DURATION:-}
+# Gate 4b needs the seeded ticket class id to know when buyers are actually
+# mid-purchase. Passing it back through a file is the least invasive channel;
+# this script's stdout is the human-readable run log.
+TCID_FILE=${TCID_FILE:-/tmp/gate4a-ticketclass}
 MAX_CONCURRENT=${MAX_CONCURRENT:-$(kubectl -n $NS get cm waitroom-config -o jsonpath='{.data.QUEUE_DEFAULT_MAX_CONCURRENT}')}
 
 psql() { kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc "$1" | tr -d '[:space:]'; }
@@ -62,6 +69,7 @@ kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -
 
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" "$TOTAL" 10000)
 [ -n "$TCID" ] || fail "seed-ticketclass returned no id"
+printf '%s' "$TCID" > "$TCID_FILE"
 echo "  eventId=$EVENT_ID ticketClassId=$TCID total=$TOTAL"
 
 # Seed one user per VU. Signing up in-band costs a bcrypt hash per buyer and
@@ -78,6 +86,7 @@ echo "== 3. run $VUS concurrent buyers, in-cluster =="
 kubectl -n $NS delete job k6-load --ignore-not-found >/dev/null
 PURCHASE_JS=$(sed 's/^/    /' "$HERE/../loadtest/purchase.js") \
 EVENT_ID="$EVENT_ID" TICKET_CLASS_ID="$TCID" VUS="$VUS" USER_PREFIX="$USER_PREFIX" \
+DURATION="$DURATION" \
   envsubst < "$HERE/../loadtest/job.yaml" | kubectl apply -f -
 
 # Watch both terminal conditions: --for=condition=complete alone never fires on
@@ -109,6 +118,17 @@ if [ "$(kubectl -n $NS get job k6-load -o jsonpath='{.status.conditions[?(@.type
 fi
 
 kubectl -n $NS logs job/k6-load | tail -40
+
+# In chaos mode this script is a LOAD GENERATOR, not a gate. Gate 4a's remaining
+# assertions do not apply to it and actively get in the way: §7 demands an HPA
+# scale-out that 20 VUs will not produce, and §6/§8 poll for up to ten minutes
+# each, which is why the background job used to outlive the interesting part of
+# Gate 4b by several minutes. Stop here and let Gate 4b's own assertions decide.
+if [ -n "$DURATION" ]; then
+  echo
+  echo "load generator finished (${DURATION}, ${VUS} VUs) — Gate 4b asserts the outcome."
+  exit 0
+fi
 
 echo "== 4. assert no oversell =="
 SOLD=$(psql "SELECT sold FROM ticket_class WHERE id='$TCID';")

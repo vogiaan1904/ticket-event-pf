@@ -113,7 +113,7 @@ EKS_VALUES  := $(CHART)/values-eks.yaml
 EKS_CLUSTER := ticketbottle-eks
 REGION      := us-east-1
 
-.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down eks-metrics eks-gate4a
+.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down eks-metrics eks-gate4a eks-gate4b
 
 eks-guard:         ## Refuse to proceed unless the k3s box is stopped (never both)
 	@state=$$(aws ec2 describe-instances --instance-ids $(K3S_ID) \
@@ -169,3 +169,7 @@ eks-metrics:       ## Show live CPU/memory per pod (needs metrics-server)
 eks-gate4a:        ## Gate 4a — concurrency: no oversell, HPA scales out and back in
 	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
 	  ./scripts/gate4a-load.sh
+
+eks-gate4b:        ## Gate 4b — terminate a node under load, assert nothing is lost
+	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
+	  ./scripts/gate4b-chaos.sh

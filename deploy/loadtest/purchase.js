@@ -24,18 +24,39 @@ const completed  = new Counter('tb_orders_completed');
 const soldOut    = new Counter('tb_sold_out_4xx');
 const unexpected = new Counter('tb_unexpected_errors');
 
+// Two shapes, one script. Gate 4a wants a THUNDERING HERD: every buyer arrives
+// at once, contends for a fixed allotment, and leaves. Gate 4b wants a SUSTAINED
+// STREAM: it has to terminate a node while orders are genuinely mid-saga, and a
+// one-shot burst drains in ~10s — long before any fixed sleep expires, which is
+// how a chaos test ends up killing an idle cluster and proving nothing.
+const DURATION = __ENV.DURATION;   // set => chaos mode
+
 export const options = {
   scenarios: {
-    rush: {
-      executor: 'per-vu-iterations',
-      vus: Number(__ENV.VUS || 300),
-      iterations: 1,
-      maxDuration: '12m',
-    },
+    rush: DURATION
+      ? {
+          // Each VU loops for the whole window. Safe to repeat as the same
+          // buyer: waitroom JoinQueue calls CreateSession unconditionally, so a
+          // rejoin yields a fresh session and a fresh checkout token.
+          executor: 'constant-vus',
+          vus: Number(__ENV.VUS || 20),
+          duration: DURATION,
+        }
+      : {
+          executor: 'per-vu-iterations',
+          vus: Number(__ENV.VUS || 300),
+          iterations: 1,
+          maxDuration: '12m',
+        },
   },
-  thresholds: {
-    // A "sold out" rejection is a PASS. A 5xx, a hang, or a silent success
-    // beyond the allotment is not. This is the assertion that matters.
+  // A "sold out" rejection is a PASS. A 5xx, a hang, or a silent success beyond
+  // the allotment is not. This is the assertion that matters.
+  //
+  // In chaos mode it is deliberately dropped: we are terminating a node under
+  // this load, so in-flight requests to the dying pod SHOULD fail. Counting
+  // those as a threshold breach would fail the run for doing its job. Gate 4b's
+  // own assertions on reservations and the outbox are the verdict there.
+  thresholds: DURATION ? {} : {
     tb_unexpected_errors: ['count==0'],
   },
 };

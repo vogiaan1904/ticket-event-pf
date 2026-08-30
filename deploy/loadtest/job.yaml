@@ -30,6 +30,9 @@ spec:
             - { name: TICKET_CLASS_ID, value: "${TICKET_CLASS_ID}" }
             - { name: VUS,             value: "${VUS}" }
             - { name: USER_PREFIX,     value: "${USER_PREFIX}" }
+            # Empty unless Gate 4b set it; an empty string is falsy in the
+            # script, which selects the one-shot per-vu-iterations scenario.
+            - { name: DURATION,        value: "${DURATION}" }
             - name: ACCESS_SECRET
               valueFrom:
                 configMapKeyRef: { name: gateway-config, key: JWT_ACCESS_SECRET }
