@@ -5,13 +5,13 @@
 # than there are tickets, then asserts:
 #   1. no oversell            (sold + reserved <= TOTAL, always)
 #   2. admission control held  (concurrent checkouts <= MAX_CONCURRENT)
-#   3. every rejected buyer got a 4xx, never a 5xx
+#   3. every rejected buyer got a 409, never a 5xx or a stray 4xx
 #   4. nothing leaked          (reserved == 0 and no ACTIVE reservation once holds expire)
 #   5. the HPA scaled app-gateway out AND back in
 #
-# Deliberately NOT asserted: sold == TOTAL. Each VU buys once and never retries,
-# so when demand outruns throughput some allotment goes unsold — that is the
-# harness, not the system. Selling out needs a retrying buyer.
+# Deliberately not asserted: sold == TOTAL. Each VU buys once and never retries,
+# so when demand outruns throughput some allotment goes unsold. That is the
+# harness, not the system — selling out needs a retrying buyer.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NS=ticketbottle
@@ -22,9 +22,9 @@ USER_PREFIX=gate4a-u
 # Set by Gate 4b only. Switches purchase.js to a sustained constant-vus run and
 # turns this script into a pure load generator — see the early exit after §3.
 DURATION=${DURATION:-}
-# Gate 4b needs the seeded ticket class id to know when buyers are actually
-# mid-purchase. Passing it back through a file is the least invasive channel;
-# this script's stdout is the human-readable run log.
+# Gate 4b needs the seeded ticket class id to tell when buyers are actually
+# mid-purchase. A file is the least invasive channel for it; this script's
+# stdout is the human-readable run log.
 TCID_FILE=${TCID_FILE:-/tmp/gate4a-ticketclass}
 MAX_CONCURRENT=${MAX_CONCURRENT:-$(kubectl -n $NS get cm waitroom-config -o jsonpath='{.data.QUEUE_DEFAULT_MAX_CONCURRENT}')}
 
@@ -73,9 +73,9 @@ printf '%s' "$TCID" > "$TCID_FILE"
 echo "  eventId=$EVENT_ID ticketClassId=$TCID total=$TOTAL"
 
 # Seed one user per VU. Signing up in-band costs a bcrypt hash per buyer and
-# saturates the gateway long before inventory is contended — the run would
-# measure password hashing, not the purchase path. The password is a placeholder;
-# purchase.js mints its access token directly.
+# saturates the gateway long before inventory is contended, so the run would
+# measure password hashing rather than the purchase path. The password is a
+# placeholder; purchase.js mints its access token directly.
 echo "== 2. seed $VUS buyers =="
 kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_user -c \
   "INSERT INTO users (id, email, \"firstName\", \"lastName\", password, \"updatedAt\")
@@ -103,8 +103,8 @@ while kill -0 $DONE_PID 2>/dev/null && kill -0 $FAIL_PID 2>/dev/null; do
   R=$(kubectl -n $NS get deploy app-gateway -o jsonpath='{.status.replicas}' 2>/dev/null || echo 0)
   if [ "${R:-0}" -gt "$PEAK" ]; then PEAK=$R; echo "   peak replicas: $PEAK"; fi
 
-  # Sampled, not derived from logs: the checkouts sorted set IS the admission
-  # bound, so reading it is the only honest measure of what the queue allowed.
+  # The checkouts sorted set is the admission bound itself, so sampling it
+  # measures what the queue actually allowed rather than what the logs report.
   A=$(kubectl -n $NS exec statefulset/redis -- redis-cli ZCARD "waitroom:$EVENT_ID:checkouts" 2>/dev/null | tr -d '[:space:]')
   if [ "${A:-0}" -gt "$PEAK_ADMITTED" ]; then PEAK_ADMITTED=$A; echo "   peak admitted: $PEAK_ADMITTED"; fi
   sleep 5
@@ -119,11 +119,10 @@ fi
 
 kubectl -n $NS logs job/k6-load | tail -40
 
-# In chaos mode this script is a LOAD GENERATOR, not a gate. Gate 4a's remaining
-# assertions do not apply to it and actively get in the way: §7 demands an HPA
-# scale-out that 20 VUs will not produce, and §6/§8 poll for up to ten minutes
-# each, which is why the background job used to outlive the interesting part of
-# Gate 4b by several minutes. Stop here and let Gate 4b's own assertions decide.
+# With DURATION set this script is a load generator, not a gate, and the
+# remaining assertions get in the way: §7 wants an HPA scale-out that 20 VUs
+# will not produce, and §6 and §8 each poll for up to ten minutes. Stop here and
+# let Gate 4b's own assertions decide.
 if [ -n "$DURATION" ]; then
   echo
   echo "load generator finished (${DURATION}, ${VUS} VUs) — Gate 4b asserts the outcome."
@@ -141,8 +140,8 @@ echo "  peak concurrent checkouts=$PEAK_ADMITTED (limit=$MAX_CONCURRENT)"
 [ "$PEAK_ADMITTED" -le "$MAX_CONCURRENT" ] || fail "waitroom admitted $PEAK_ADMITTED concurrent checkouts, limit is $MAX_CONCURRENT"
 
 echo "== 6. assert nothing leaked once the holds expire =="
-# Reservations outlive the run by design; the sweeper releases them. Waiting is
-# the assertion — polling sooner just measures the hold, not the leak.
+# Reservations outlive the run by design and the sweeper releases them, so
+# polling sooner than the hold measures the hold rather than a leak.
 for i in $(seq 1 40); do
   RESERVED=$(psql "SELECT reserved FROM ticket_class WHERE id='$TCID';")
   ACTIVE=$(psql "SELECT count(*) FROM reservation r JOIN ticket_class t ON r.ticket_class_id=t.id WHERE t.id='$TCID' AND r.status='ACTIVE';")
@@ -158,8 +157,8 @@ echo "== 7. assert the HPA scaled out =="
 echo "  peaked at $PEAK replicas"
 
 echo "== 8. assert it scales back in =="
-# The HPA's scaleDown stabilizationWindowSeconds is 300 (values.yaml). Polling
-# sooner than that will always "fail" — the wait IS the assertion.
+# The HPA's scaleDown stabilizationWindowSeconds is 300 (values.yaml), so the
+# replica count means nothing until that window has passed.
 echo "   waiting out the 300s scale-down stabilization window..."
 for i in $(seq 1 40); do
   R=$(kubectl -n $NS get deploy app-gateway -o jsonpath='{.spec.replicas}')

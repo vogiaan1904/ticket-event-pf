@@ -2,9 +2,9 @@
 //   authenticate -> waitroom join -> wait for admission -> create order
 //   -> fire the payment webhook -> poll until COMPLETED
 //
-// The event, its config and the ticket class are seeded ONCE by
-// gate4a-load.sh before this Job starts, and arrive as env vars. Seeding
-// per-VU would measure event creation, not the purchase path.
+// The event, its config and the ticket class are seeded once by gate4a-load.sh
+// before this Job starts and arrive as env vars; seeding per-VU would measure
+// event creation rather than the purchase path.
 import http from 'k6/http';
 import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
@@ -21,15 +21,14 @@ const ADMIT_POLLS     = Number(__ENV.ADMIT_POLLS || 180);
 const CONFIRM_POLLS   = Number(__ENV.CONFIRM_POLLS || 90);   // x2s = 3min
 
 const completed  = new Counter('tb_orders_completed');
-const soldOut    = new Counter('tb_sold_out_4xx');
+const rejected   = new Counter('tb_orders_rejected_409');
 const unexpected = new Counter('tb_unexpected_errors');
 
-// Two shapes, one script. Gate 4a wants a THUNDERING HERD: every buyer arrives
-// at once, contends for a fixed allotment, and leaves. Gate 4b wants a SUSTAINED
-// STREAM: it has to terminate a node while orders are genuinely mid-saga, and a
-// one-shot burst drains in ~10s — long before any fixed sleep expires, which is
-// how a chaos test ends up killing an idle cluster and proving nothing.
-const DURATION = __ENV.DURATION;   // set => chaos mode
+// Two load shapes, one script. Gate 4a wants a burst: every buyer arrives at
+// once, contends for a fixed allotment and leaves. Gate 4b needs a sustained
+// stream instead, because it terminates a node mid-saga and a burst drains in
+// ~10s — long before the kill lands.
+const DURATION = __ENV.DURATION;   // set => sustained run
 
 export const options = {
   scenarios: {
@@ -49,13 +48,11 @@ export const options = {
           maxDuration: '12m',
         },
   },
-  // A "sold out" rejection is a PASS. A 5xx, a hang, or a silent success beyond
-  // the allotment is not. This is the assertion that matters.
+  // A sold-out rejection is a pass; a 5xx or a hang is not.
   //
-  // In chaos mode it is deliberately dropped: we are terminating a node under
-  // this load, so in-flight requests to the dying pod SHOULD fail. Counting
-  // those as a threshold breach would fail the run for doing its job. Gate 4b's
-  // own assertions on reservations and the outbox are the verdict there.
+  // Dropped in a sustained run: Gate 4b terminates a node under this load, so
+  // in-flight requests to the dying pod are expected to fail. That gate's own
+  // assertions on reservations and the outbox are the verdict there.
   thresholds: DURATION ? {} : {
     tb_unexpected_errors: ['count==0'],
   },
@@ -78,7 +75,7 @@ export default function () {
   const json = { headers: { 'Content-Type': 'application/json' } };
 
   // 1. authenticate. With USER_PREFIX the buyer already exists and the token is
-  //    minted here — signing up in-band costs a bcrypt hash per VU and saturates
+  //    minted here: signing up in-band costs a bcrypt hash per VU and saturates
   //    the gateway before inventory is ever contended.
   let userId, email, accessToken;
   if (USER_PREFIX) {
@@ -134,8 +131,12 @@ export default function () {
     redirectUrl: 'https://example.com/done',
   }), auth);
 
-  if (or.status >= 400 && or.status < 500) { soldOut.add(1); return; }   // correct rejection
-  if (or.status >= 500) { unexpected.add(1, { step: 'order', status: or.status }); return; }
+  // 409 is the only correct rejection: sold out, sale closed and wrong-state
+  // all arrive as FAILED_PRECONDITION. Any other 4xx is the harness at fault --
+  // a stale token, a malformed body -- and counting it as a buyer who lost the
+  // race is how a broken run passes as a green one.
+  if (or.status === 409) { rejected.add(1); return; }
+  if (or.status >= 400) { unexpected.add(1, { step: 'order', status: or.status }); return; }
 
   const code = or.json('data.order.code');
   if (!code) { unexpected.add(1, { step: 'order-code' }); return; }
@@ -144,10 +145,9 @@ export default function () {
   const wh = http.post(`${WEBHOOK}/complete/${code}`);
   if (wh.status >= 400) { unexpected.add(1, { step: 'webhook', status: wh.status }); return; }
 
-  // 5. poll to COMPLETED (Kafka -> Temporal ConfirmOrder)
-  // The confirm leg is asynchronous (webhook -> outbox -> Kafka -> ConfirmOrder)
-  // and lags under load; polling for less than it takes reports a working saga
-  // as a failure.
+  // 5. poll to COMPLETED. The confirm leg is asynchronous (webhook -> outbox ->
+  //    Kafka -> ConfirmOrder) and lags under load, so the poll budget has to
+  //    cover it or a working saga reads as a failure.
   for (let i = 0; i < CONFIRM_POLLS; i++) {
     const o = http.get(`${GW}/orders/code/${code}`, auth);
     if (o.json('data.status') === 'COMPLETED') { completed.add(1); return; }
