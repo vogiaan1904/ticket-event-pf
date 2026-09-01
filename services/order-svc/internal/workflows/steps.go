@@ -24,20 +24,6 @@ func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 	return ord, nil
 }
 
-func checkAvailability(ctx workflow.Context, in *CreateOrderWorkflowInput) (bool, error) {
-	chkItms := make([]*inventory.CheckAvailabilityItem, len(in.Items))
-	for i, itm := range in.Items {
-		chkItms[i] = &inventory.CheckAvailabilityItem{
-			TicketClassId: itm.TicketClassID,
-			Quantity:      itm.Quantity,
-		}
-	}
-
-	var available bool
-	err := workflow.ExecuteActivity(ctx, iActs.CheckAvailability, chkItms).Get(ctx, &available)
-	return available, err
-}
-
 func createOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*models.Order, error) {
 	opt := repo.CreateOrderOption{
 		SessionID:    in.SessionID,
