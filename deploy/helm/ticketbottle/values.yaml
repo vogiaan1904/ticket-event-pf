@@ -62,7 +62,7 @@ order:
 
 temporal:
   image: temporalio/auto-setup:1.27.2
-  enableElasticsearch: false   # SQL/Postgres visibility — spec §4
+  enableElasticsearch: false   # SQL/Postgres visibility; Elasticsearch alone wants 1-2GB
 
 localstack:
   expose: false
@@ -70,7 +70,7 @@ localstack:
   postgresNodePort: 31432
 
 gateway:
-  # NodePort for kind/k3s (reached through the SSH tunnel on Rung 2).
+  # NodePort for kind/k3s (reached through the SSH tunnel on the k3s target).
   # Set to null on EKS, where the Service becomes ClusterIP behind an ALB Ingress.
   nodePort: 30000
 

@@ -1,4 +1,4 @@
-# Rung 1.5 overlay: layer ON TOP of values-local.yaml.
+# LocalStack overlay (retired): layer ON TOP of values-local.yaml.
 #   helm upgrade tb deploy/helm/ticketbottle -n ticketbottle \
 #     -f deploy/helm/ticketbottle/values-local.yaml \
 #     -f deploy/helm/ticketbottle/values-localstack.yaml
@@ -8,7 +8,7 @@ paymentEvents:
   enabled: false            # real Lambdas replace the adapter
 localstack:
   expose: true
-  ip: 172.18.0.100          # LocalStack's static IP on the `kind` docker net (Task C1 confirms)
+  ip: 172.18.0.100          # LocalStack's static IP on the `kind` docker net
   postgresNodePort: 31432
 redpanda:
   external:

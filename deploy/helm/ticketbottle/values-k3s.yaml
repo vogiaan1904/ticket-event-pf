@@ -15,7 +15,7 @@ order:
   awsAccessKeyId: ""       # empty -> config.yaml omits creds -> instance-profile chain
   awsSecretAccessKey: ""
 
-# In-cluster payment path (simulated webhook + relay), same as Gate 1.
+# In-cluster payment path (simulated webhook + relay), same as the kind target.
 paymentEvents:
   enabled: true
 outboxRelay:

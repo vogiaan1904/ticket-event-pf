@@ -1,4 +1,4 @@
-# TicketBottle — local Kubernetes (Rung 1) operations.
+# TicketBottle — cluster operations for every deploy target.
 CLUSTER := ticketbottle
 CTX     := kind-$(CLUSTER)
 NS      := ticketbottle
@@ -47,12 +47,12 @@ smoke-apps:            ## Verify the app tier (pods Ready + signup)
 
 .PHONY: gate1
 
-gate1:                 ## Run the full purchase-flow acceptance test (Phase 0B-2)
+gate1:                 ## Run the full purchase-flow acceptance test
 	./scripts/gate1-purchase-flow.sh
 
 
 
-# --- Rung 2: k3s on EC2 -------------------------------------------------------
+# --- k3s on EC2 -------------------------------------------------------
 K3S_ENV := terraform/envs/k3s
 K3S_VALUES := $(CHART)/values-k3s.yaml
 KUBECONFIG_FILE := /tmp/k3s.yaml
@@ -105,7 +105,7 @@ k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
 
 
-# --- Rung 3: ephemeral EKS ----------------------------------------------------
+# --- Ephemeral EKS ----------------------------------------------------
 # Weekend sprint, never an everyday environment. There is NO stop switch: the
 # control plane bills $0.10/hr from `eks-up` until `eks-down`.
 EKS_ENV     := terraform/envs/eks

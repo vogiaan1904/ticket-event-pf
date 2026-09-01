@@ -30,7 +30,7 @@ build ticketbottle/order-api:local       services/order-svc          services/or
 build ticketbottle/order-consumer:local  services/order-svc          services/order-svc/cmd/consumer/Dockerfile
 build ticketbottle/gateway:local         services/api-gateway        services/api-gateway/Dockerfile
 
-# Payment-events adapter (Phase 0B-2): simulated webhook (completes a payment + writes an outbox row).
+# Payment-events adapter: simulated webhook (completes a payment + writes an outbox row).
 build ticketbottle/payment-events:local  deploy/adapters/payment-events  deploy/adapters/payment-events/Dockerfile
 
 # Outbox relay: long-lived outbox->Kafka publisher, replaces the old outbox-publisher adapter deployment.

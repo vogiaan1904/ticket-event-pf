@@ -1,4 +1,4 @@
-# Rung 3 (ephemeral EKS). Layer on base values.yaml:
+# Ephemeral EKS. Layer on base values.yaml:
 #   ./deploy/scripts/eks-deploy.sh
 # which generates a second -f file carrying the account-specific bits
 # (ECR registry, IRSA role ARN, ALB subnets, your IP).
@@ -49,7 +49,7 @@ ingress:
   subnets: ""              # injected at deploy time
   inboundCidrs: ""         # injected at deploy time — the ALB is NOT world-open
 
-# In-cluster payment path (simulated webhook + relay), same as Gates 1 and 2.
+# In-cluster payment path (simulated webhook + relay), same as the kind and k3s targets.
 paymentEvents:
   enabled: true
 outboxRelay:

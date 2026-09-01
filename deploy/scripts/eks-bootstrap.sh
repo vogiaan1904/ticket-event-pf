@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rung 3 bootstrap: cluster-level pieces the app chart assumes exist.
+# EKS bootstrap: cluster-level pieces the app chart assumes exist.
 #   1. the gp3 StorageClass (EBS CSI driver is installed by Terraform as an addon)
 #   2. the AWS Load Balancer Controller, wearing its IRSA role
 # Idempotent — safe to re-run.

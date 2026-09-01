@@ -71,9 +71,9 @@ resource "aws_iam_openid_connect_provider" "oidc" {
 }
 
 # ------------------------------------------------------------------ node group
-# NOTE: this role has NO DynamoDB permission, on purpose. On Rung 2 the node's
+# NOTE: this role has NO DynamoDB permission, on purpose. On the k3s target the node's
 # instance profile granted DynamoDB to every pod on the box. Here only the
-# order-service ServiceAccount gets it (Task 5) — and the purchase flow passing is
+# order-service ServiceAccount gets it — and the purchase flow passing is
 # the proof that IRSA, not the node, is what authenticated.
 resource "aws_iam_role" "node" {
   name = "${var.cluster_name}-node"
