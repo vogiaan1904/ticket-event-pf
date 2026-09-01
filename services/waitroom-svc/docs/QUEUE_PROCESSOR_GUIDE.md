@@ -1,10 +1,10 @@
 # Queue Processor Implementation Guide
 
-## 🚀 Overview
+## Overview
 
 The Queue Processor automatically admits users from the queue to checkout when slots become available. It uses **Redis-based event discovery** - no manual configuration required!
 
-## ⚡ Quick Start
+## Quick Start
 
 **Zero Configuration:**
 1. Start the service → Processor runs automatically
@@ -13,7 +13,7 @@ The Queue Processor automatically admits users from the queue to checkout when s
 4. Queue becomes empty → Event auto-removed
 5. Repeat for all events!
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Flow
 
@@ -72,7 +72,7 @@ T5    Event-A queue empty            {event-B}          event-A: 0 (removed!)
 T6    Processor checks event-B only  {event-B}          event-B: 1
 ```
 
-## 🔄 Processing Flow
+## Processing Flow
 
 ### Main Loop (Every 1 Second)
 
@@ -97,7 +97,7 @@ T6    Processor checks event-B only  {event-B}          event-B: 1
 - **Retry**: 3 attempts with exponential backoff
 - **System errors**: Log and continue processing
 
-## 📊 Redis Data Structures
+## Redis Data Structures
 
 ### Complete Schema
 
@@ -129,7 +129,7 @@ ZCARD waitroom:event-123:queue            # Returns: 0
 SREM waitroom:active_events "event-123"   # Auto-remove
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 ```go
 ProcessorConfig{
@@ -141,7 +141,7 @@ ProcessorConfig{
 }
 ```
 
-## 🔍 Monitoring
+## Monitoring
 
 ### Check Active Events
 
@@ -167,7 +167,7 @@ INFO  User admitted successfully session_id=abc
 INFO  Batch processing completed attempted=5 admitted=5
 ```
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 ### Users Not Getting Admitted
 
@@ -193,17 +193,16 @@ docker logs waitroom-service | grep "active events"
 - Queue empty → Verify enqueue worked
 - Processing maxed → Wait for checkouts to complete
 
-## 🎯 Key Features
+## Key Features
 
-✅ **Redis-based discovery** - Automatic event detection
-✅ **Self-cleaning** - Auto-removes empty queues
-✅ **Real-time** - Instant queue detection
-✅ **Zero configuration** - No event registration needed
-✅ **Scalable** - O(1) operations
-✅ **Fault-tolerant** - Continues on errors
-✅ **Production-ready** - Battle-tested architecture
+- **Redis-based discovery** - Automatic event detection
+- **Self-cleaning** - Auto-removes empty queues
+- **Real-time** - Instant queue detection
+- **Zero configuration** - No event registration needed
+- **Scalable** - O(1) operations
+- **Fault-tolerant** - Continues on errors
 
-## 📝 Summary
+## Summary
 
 The Queue Processor uses Redis Sets to track active events automatically:
 
@@ -216,4 +215,4 @@ The Queue Processor uses Redis Sets to track active events automatically:
 
 ---
 
-🚀 **Just start the service** - events are automatically discovered as users join queues!
+**Just start the service** - events are automatically discovered as users join queues!
