@@ -57,8 +57,14 @@ EOF
 echo "== generated $GEN =="; cat "$GEN"
 
 echo "== deploying $IMAGE_TAG =="
+SECRETS="$HERE/../secrets.values.yaml"
+if [ ! -f "$SECRETS" ]; then
+  echo "missing $SECRETS — run: make -C deploy secrets-init"
+  exit 1
+fi
+
 helm upgrade --install tb "$CHART" -n "$NS" --create-namespace \
-  -f "$CHART/values-eks.yaml" -f "$GEN" --wait --timeout 15m
+  -f "$CHART/values-eks.yaml" -f "$GEN" -f "$SECRETS" --wait --timeout 15m
 
 echo "== waiting for the controller to publish an ALB hostname =="
 HOST=""

@@ -15,6 +15,20 @@ apps:
 # EKS names "gp3" explicitly; see deploy/k8s/eks/storageclass-gp3.yaml.
 storageClass: ""
 
+# Signing keys, the service-to-service key and the admin bootstrap password.
+# Deliberately empty — templates/apps/secrets.yaml calls `required` on each, so
+# a deploy without them fails loudly instead of shipping a known-value key.
+# Generate a local file and pass it with -f:  make -C deploy secrets-init
+secrets:
+  jwtSecret: ""
+  jwtAccessSecret: ""
+  jwtRefreshSecret: ""
+  encryptKey: ""
+  internalKey: ""
+  adminPassword: ""
+  zalopayKey1: ""
+  zalopayKey2: ""
+
 postgres:
   image: postgres:15-alpine
   storage: 2Gi
@@ -70,6 +84,9 @@ localstack:
   postgresNodePort: 31432
 
 gateway:
+  # JSON array of allowed browser origins. "*" is right for a local cluster with
+  # no browser client; a target that serves one should name its origins.
+  corsOrigins: '["*"]'
   # NodePort for kind/k3s (reached through the SSH tunnel on the k3s target).
   # Set to null on EKS, where the Service becomes ClusterIP behind an ALB Ingress.
   nodePort: 30000

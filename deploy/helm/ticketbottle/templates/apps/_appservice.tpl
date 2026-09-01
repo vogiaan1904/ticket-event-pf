@@ -39,6 +39,9 @@ spec:
           {{- include "tb.resources" (dict "ctx" $ "name" .name) | nindent 10 }}
           envFrom:
             - configMapRef: { name: {{ .config }} }
+            {{- if .secret }}
+            - secretRef: { name: {{ .secret }} }
+            {{- end }}
           {{- if gt (int .port) 0 }}
           ports: [{ containerPort: {{ .port }} }]
           {{- end }}
