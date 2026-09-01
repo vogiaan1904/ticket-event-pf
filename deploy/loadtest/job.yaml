@@ -36,8 +36,8 @@ spec:
             - name: ACCESS_SECRET
               valueFrom:
                 configMapKeyRef: { name: gateway-config, key: JWT_ACCESS_SECRET }
-          # k6 with 300 VUs is itself a workload. Requesting nothing would let it
-          # be scheduled onto a node it then starves — measuring the load
+          # k6 at 300 VUs is itself a workload. Requesting nothing lets it be
+          # scheduled onto a node it then starves, which measures the load
           # generator instead of the system.
           resources:
             requests: { cpu: 250m, memory: 256Mi }

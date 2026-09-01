@@ -89,51 +89,49 @@ serviceAccount:
     name: order-service
     roleArn: ""     # injected at deploy time from `terraform output order_role_arn`
 
-# --- Phase C: scheduling inputs -----------------------------------------------
-# Keyed by WORKLOAD name, not service directory name. Note payment-webhook
+# --- Scheduling and scaling ---------------------------------------------------
+# Keyed by WORKLOAD name, not service directory name — note payment-webhook
 # (rendered by payment-events.yaml) and the two order Deployments.
 #
-# Requests schedule; limits throttle. CPU limits are deliberately ~10x the
-# request so a scale-out event is not capped by the very limit meant to protect
-# neighbours. Memory limits are 2-4x request because memory is not compressible.
+# Requests schedule; limits throttle. CPU limits are ~10x the request so a
+# scale-out is not capped by the limit meant to protect its neighbours; memory
+# limits are 2-4x because memory is not compressible.
 #
-# Derived from `kubectl top pods` under gate1, not guessed. The measured value
-# for each workload is in the trailing comment; requests round that up to the
-# next sane floor, they do not track it exactly.
+# Trailing comments are the measured `kubectl top pods` figures under gate1;
+# requests round those up to the next sane floor.
 resources:
-  # Go services - small heaps, fast start. 32Mi requests because the measured
-  # ceiling across all four is 21Mi; the 50m CPU floor is scheduling weight, not
-  # observed demand (all four idle in single-digit millicores).
+  # Go services: small heaps, fast start. The 32Mi request clears the 21Mi
+  # measured ceiling; the 50m CPU floor is scheduling weight, not observed
+  # demand — all four idle in single-digit millicores.
   order-service:      { requests: { cpu: 50m,  memory: 32Mi },   limits: { cpu: 500m, memory: 128Mi } }  #   7m /  12Mi
   order-consumer:     { requests: { cpu: 50m,  memory: 32Mi },   limits: { cpu: 500m, memory: 128Mi } }  #  13m /  12Mi
   inventory-service:  { requests: { cpu: 50m,  memory: 32Mi },   limits: { cpu: 500m, memory: 128Mi } }  #   2m /  21Mi
   waitroom-service:   { requests: { cpu: 50m,  memory: 32Mi },   limits: { cpu: 500m, memory: 128Mi } }  #  10m /   8Mi
-  # NestJS services - the V8 heap floor is why these are 4x the Go requests.
-  # All four sit at 58-65Mi with a warm module graph; 128Mi leaves room for the
-  # heap to grow before the GC gets aggressive.
+  # NestJS services: the V8 heap floor is why these request 4x the Go services.
+  # All four sit at 58-65Mi with a warm module graph; 128Mi leaves the heap room
+  # to grow before the GC gets aggressive.
   app-gateway:        { requests: { cpu: 100m, memory: 128Mi },  limits: { cpu: "1",  memory: 384Mi } }  # 100m /  63Mi
   user-service:       { requests: { cpu: 50m,  memory: 128Mi },  limits: { cpu: 500m, memory: 384Mi } }  #   8m /  59Mi
   event-service:      { requests: { cpu: 50m,  memory: 128Mi },  limits: { cpu: 500m, memory: 384Mi } }  #  16m /  58Mi
   payment-service:    { requests: { cpu: 50m,  memory: 128Mi },  limits: { cpu: 500m, memory: 384Mi } }  #   3m /  65Mi
-  # Plain Node workers, no Nest module graph - half the footprint of the above.
+  # Plain Node workers, no Nest module graph: half the footprint of the above.
   payment-webhook:    { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 500m, memory: 256Mi } }  #  12m /  23Mi
   outbox-relay:       { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 500m, memory: 256Mi } }  #  37m /  23Mi
   # Infra
   postgres:           { requests: { cpu: 100m, memory: 256Mi },  limits: { cpu: "1",  memory: 1Gi } }    #  41m / 141Mi
-  # Redpanda is the one workload whose memory is NOT demand-driven: Seastar
-  # claims its arena at startup, so 1070Mi is a floor it will always hold, not a
-  # working set that shrinks when idle. Request must sit above it or the pod is
-  # scheduled onto a node that cannot actually hold it.
+  # Redpanda's memory is not demand-driven: Seastar claims its arena at startup,
+  # so 1070Mi is a floor it always holds, not a working set that shrinks when
+  # idle. The request must clear it or the pod lands on a node too small for it.
   redpanda:           { requests: { cpu: 100m, memory: 1280Mi }, limits: { cpu: "1",  memory: 2Gi } }    #  16m / 1070Mi
   temporal:           { requests: { cpu: 100m, memory: 192Mi },  limits: { cpu: "1",  memory: 768Mi } }  #  59m / 103Mi
   redis:              { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 250m, memory: 256Mi } }  #  13m /   7Mi
-  # kind/k3s only - `dynamodb.enabled: false` on EKS, where the real service
-  # replaces it. Limit is 768Mi rather than 512Mi because the JVM sizes its
+  # kind/k3s only — `dynamodb.enabled: false` on EKS, where the real service
+  # replaces it. The limit is 768Mi rather than 512Mi because the JVM sizes its
   # default heap from the cgroup limit; too snug and it OOMs before it can GC.
   dynamodb:           { requests: { cpu: 50m,  memory: 256Mi },  limits: { cpu: 500m, memory: 768Mi } }  #  13m / 197Mi
 
-# Static replica counts. A workload with autoscaling enabled (Lab 02) omits
-# `replicas` from its manifest entirely - see the note in _appservice.tpl.
+# Static replica counts. A workload with autoscaling enabled omits `replicas`
+# from its manifest entirely — see the note in _appservice.tpl.
 replicas: {}
 
 # Off everywhere by default; values-eks.yaml opts app-gateway in.
@@ -145,17 +143,16 @@ autoscaling:
     minReplicas: 1
     maxReplicas: 4
     targetCPUUtilizationPercentage: 70
-    # Kubernetes' own default. Named explicitly because Gate 4a asserts the
-    # scale-DOWN, and a gate that polls sooner than this will always fail.
+    # Kubernetes' own default, stated explicitly because gate4a-load.sh asserts
+    # the scale-down and has to wait this window out.
     scaleDownStabilizationSeconds: 300
 
-# A PDB on a single-replica Deployment makes `kubectl drain` block FOREVER:
-# minAvailable:1 with replicas:1 means zero voluntary evictions are ever allowed.
-# Only enable this for workloads that actually have an HPA above them.
+# A PDB on a single-replica Deployment blocks `kubectl drain` indefinitely:
+# minAvailable 1 against replicas 1 permits no voluntary eviction at all. Enable
+# it only for workloads that have an HPA above them.
 pdb: {}
 
-# maxSkew:1 across zones, ScheduleAnyway. NOT DoNotSchedule: on a two-node
-# cluster a hard constraint turns a scale-out into a Pending pod, which looks
-# exactly like a broken HPA.
+# maxSkew 1 across zones, ScheduleAnyway rather than DoNotSchedule: on a
+# two-node cluster a hard constraint turns a scale-out into a Pending pod.
 topologySpread:
   enabled: false

@@ -121,8 +121,8 @@ data:
   SERVER_WRITE_TIMEOUT: 30s
   SERVER_IDLE_TIMEOUT: 60s
   PAYMENT_TIMEOUT_SECONDS: "600"
-  # Bounds the wait on the CreateOrder saga. Measured at 100 concurrent buyers
-  # on one hot ticket class: p-max 33s, so 30s rejected ~8% of them with a 504.
+  # Bounds the wait on the CreateOrder saga. At 100 concurrent buyers on one hot
+  # ticket class the slowest saga took 33s, so a 30s bound returned 504 for ~8%.
   ORDER_CREATE_TIMEOUT: {{ .Values.order.createTimeout | quote }}
   DYNAMODB_TABLE_NAME: ticketbottle-orders
   AWS_REGION: {{ .Values.order.awsRegion | quote }}

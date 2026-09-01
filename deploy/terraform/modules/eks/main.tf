@@ -119,7 +119,7 @@ resource "aws_eks_node_group" "spot" {
   }
 
   lifecycle {
-    # Let an autoscaler/HPA experiment (Phase C) move the node count without
+    # Let a cluster autoscaler or a manual scale move the node count without
     # Terraform fighting it back on the next apply.
     ignore_changes = [scaling_config[0].desired_size]
   }

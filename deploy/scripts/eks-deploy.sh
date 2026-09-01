@@ -10,9 +10,8 @@ NS=ticketbottle
 GEN=/tmp/tb-eks-values.yaml
 
 # Deploy an immutable sha- tag, not :latest. A moving tag leaves the pod template
-# unchanged, so helm upgrade rolls nothing and the running build becomes
-# unknowable — an HPA scale-out then pulls a newer image and you are serving two
-# versions at once.
+# unchanged, so `helm upgrade` rolls nothing and the running build is unknowable;
+# a later HPA scale-out pulls a newer image and serves two versions at once.
 #
 # Resolve to the newest origin/main commit that actually has an image: CI only
 # builds on changes under services/ and deploy/adapters/, so a chart- or

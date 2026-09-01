@@ -5,8 +5,8 @@
 target: eks
 
 image:
-  # registry and tag are injected at deploy time by eks-deploy.sh: the account id
-  # stays out of git, and the tag is the immutable sha- build CI pushed.
+  # registry and tag are injected at deploy time by eks-deploy.sh: the account
+  # id stays out of git, and the tag is the immutable sha- build CI pushed.
   pullPolicy: IfNotPresent
 
 # EKS has no working default StorageClass; deploy/k8s/eks/storageclass-gp3.yaml
@@ -62,21 +62,20 @@ redpanda:
 redis:
   storage: 1Gi
 
-# The gateway is the right first HPA target: stateless, HTTP-bound, no database
-# lock contention, and scale-out is externally visible as target registrations
-# in the ALB's target group.
+# The gateway is the only autoscaled workload: stateless, HTTP-bound, no
+# database lock contention.
 #
-# inventory-service is deliberately NOT autoscaled. Its reserve path holds
+# inventory-service is deliberately not autoscaled. Its reserve path holds
 # `SELECT ... FOR UPDATE` on the ticket-class row, so throughput against one hot
-# ticket class is bounded by lock hold time, not replica count — while each extra
-# replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the stock
-# max_connections=100. Scaling it costs connections and buys no throughput.
+# ticket class is bounded by lock hold time rather than replica count, while
+# each extra replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the
+# stock max_connections=100. Scaling it costs connections and buys nothing.
 autoscaling:
   app-gateway:
     enabled: true
 
 # Only app-gateway gets a PDB, because only app-gateway can have >1 replica
-# (see `autoscaling` above). A PDB on any other workload here would block drains.
+# (see `autoscaling` above). A PDB on any other workload would block drains.
 pdb:
   app-gateway:
     enabled: true

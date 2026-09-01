@@ -34,12 +34,12 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 kubectl -n kube-system rollout status deploy/aws-load-balancer-controller --timeout=5m
 
 echo "== 3. metrics-server =="
-# EKS ships NO metrics-server. k3s bundles one, which is why Rung 2 never needed
-# this step and `kubectl top` "just worked" there. Without it every HPA reports
-# <unknown>/70% forever and never scales.
+# EKS ships no metrics-server; k3s bundles one, which is why the k3s target
+# never needed this step. Without it every HPA reports <unknown> and never
+# scales.
 #
-# No --kubelet-insecure-tls here: EKS kubelet serving certs are signed by the
-# cluster CA. On kind you DO need that flag, which is the whole difference.
+# No --kubelet-insecure-tls: EKS kubelet serving certs are signed by the cluster
+# CA. kind needs that flag, EKS does not.
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null
 
