@@ -1,29 +1,16 @@
-# Rung 3 — ephemeral EKS (BUILT; GATE 3 GREEN)
+# Ephemeral EKS
 
-**Status (2026-08-24).** Rung 3 is complete and has been through a full create → deploy → prove →
-destroy cycle against the real account. `ticketbottle-eks` was created 2026-08-22 (Kubernetes 1.36,
-two spot nodes across the two foundation subnets, EBS CSI addon) and destroyed 2026-08-24.
+The managed-Kubernetes target. `ticketbottle-eks` runs Kubernetes 1.36 with two spot nodes across
+the two foundation subnets and the EBS CSI addon, and is created for a session and destroyed after
+it. It is **never** run simultaneously with the k3s box — `eks-guard` enforces that.
 
-| Piece | State |
-|---|---|
-| `modules/eks`, `modules/irsa-role`, `envs/eks` | ✅ built, applied, destroyed cleanly |
-| `values-eks.yaml` + chart EKS surface (Ingress, ServiceAccount, `storageClass`, nullable NodePort) | ✅ built |
-| `deploy/scripts/eks-bootstrap.sh`, `eks-deploy.sh` | ✅ built |
-| `eks-teardown.sh`, `eks-leak-check.sh`, `eks-sweep-orphans.sh`, Makefile Rung 3 section | ✅ built |
-| **Gate 3a** — purchase flow green on EKS | ✅ **passed** 2026-08-24 |
-| **Gate 3b** — `terraform destroy` leaves nothing billable | ✅ **passed** — all ten checks `OK` |
+EKS is deliberately not the everyday environment: its ~$73/mo control-plane floor would consume the
+entire budget, and the k3s box answers the same questions for ~$8/mo. What EKS answers that k3s
+cannot is below.
 
-**The evidence for 3a is durable and worth knowing about.** Order
-`TB-GATE1-20260824-JCGVD4YX` sits in the real DynamoDB table, `COMPLETED`, created
-`2026-08-24T15:44:11Z` and updated four seconds later. It survived the cluster's destruction because
-DynamoDB is in `envs/foundation`, off-cluster. That single row is also **the IRSA proof**: the node
-role has no DynamoDB permission at all, so nothing but the `order-service` ServiceAccount could have
-written it.
-
-**The model is a weekend sprint, not an environment.** `terraform apply` Friday, learn, `terraform
-destroy` Sunday. It is *never* run simultaneously with the k3s box. EKS was explicitly **rejected as
-the everyday environment** — its ~$73/mo control-plane floor would consume the entire budget for
-learning that a couple of weekend sessions already deliver.
+**The order table is the IRSA proof.** An order written on EKS survives the cluster's destruction,
+because DynamoDB lives in `envs/foundation`, off-cluster. The node role carries no DynamoDB
+permission at all, so nothing but the `order-service` ServiceAccount could have written that row.
 
 > ⚠️ **There is no stop switch.** The control plane bills $0.10/hr from `apply` to `destroy` whether
 > or not a pod is running. The scripted off switch is `make -C deploy eks-down`, which runs the
@@ -34,12 +21,11 @@ learning that a couple of weekend sessions already deliver.
 
 ---
 
-## What actually changes from Rung 2
+## What changes relative to the k3s box
 
-The chart is the same. The app topology is the same. Four things change, and each one is a distinct
-AWS lesson:
+The chart is the same. The app topology is the same. Four things change:
 
-| Concern | Rung 2 (k3s) | Rung 3 (EKS) | The lesson |
+| Concern | k3s box | EKS | Why it matters |
 |---|---|---|---|
 | **Control plane** | k3s process on the instance you own | AWS-managed, multi-AZ, you never see the masters | managed vs self-hosted trade-off |
 | **Nodes** | the same one instance | managed node group on **spot** (`t3.large`/`t3a.large`), across the 2 existing public subnets | node lifecycle, spot interruption, drain |
@@ -48,7 +34,7 @@ AWS lesson:
 
 The last row is the real prize, and it was built as a *provable* claim rather than a config step:
 the node role is deliberately granted **no DynamoDB permission at all** (`modules/eks/main.tf`, the
-three managed policies are worker-node / CNI / ECR-read-only). On Rung 2 every pod on the box
+three managed policies are worker-node / CNI / ECR-read-only). On the k3s box every pod
 inherits DynamoDB from IMDS. Here, exactly one ServiceAccount can reach the orders table — so a
 green Gate 3a *is* the proof that IRSA authenticated, not a coincidence.
 
@@ -74,9 +60,9 @@ Order for a session: `terraform apply` → `eks-bootstrap.sh` → `eks-deploy.sh
 
 ---
 
-## What Rung 2 already pre-wired for this
+## What the k3s foundation already pre-wired for this
 
-Two decisions in the built infrastructure exist *only* to make Rung 3 a delta rather than a rewrite:
+Two decisions in the shared infrastructure exist *only* to make EKS a delta rather than a rewrite:
 
 1. **Two public subnets across two AZs** (`10.0.1.0/24` in AZ-a, `10.0.2.0/24` in AZ-b), even though
    the k3s box only occupies the first. EKS requires subnets in ≥2 AZs; an ALB needs ≥2 to place its
@@ -116,7 +102,7 @@ rather than blank them — an empty-string env var still wins over IMDS.
 
 ---
 
-## Where the shipped code diverges from the Phase B plan
+## Deliberate deviations — do not "restore" an earlier design
 
 Two things were changed during execution and are correct as shipped. Don't "restore" an earlier
 design that says otherwise:
@@ -171,10 +157,10 @@ asynchronously.
 
 ---
 
-## Beyond Gate 3 — what the cluster is *for* now
+## What the cluster is for beyond a green deploy
 
-Gate 3 proved the chart runs on managed Kubernetes. The open work is proving it **behaves**, which is
-what the cluster exists to make possible:
+A green Gate 3 proves the chart runs on managed Kubernetes. What remains is proving it **behaves**,
+which is what the cluster exists to make possible:
 
 - **Node-loss recovery** — terminate a node mid-purchase and watch the Temporal saga resume and the
   outbox redeliver. This is the first test a simpler architecture would fail, and so the best
@@ -219,10 +205,10 @@ only if a replacement node appears **in the same zone**; otherwise they sit `Pen
 
 ## A property of the end state worth stating plainly
 
-On Rung 3 the **stateful tier does not survive the weekend.** `reclaimPolicy: Delete` is what makes
+On EKS the **stateful tier does not survive a teardown.** `reclaimPolicy: Delete` is what makes
 Gate 3b passable, so Postgres / Redis / Redpanda / Temporal data is destroyed with every
-`terraform destroy` and re-seeded next session. Gate 2's "stop/start preserves data" property has no
-Rung 3 equivalent.
+`terraform destroy` and re-seeded next session. The k3s box's "stop/start preserves data" property has no
+EKS equivalent.
 
 Across the whole estate only three things are durable: the **DynamoDB table**, the **ECR images**,
 and the **S3 tfstate**. That is by design — it is what makes the toggle-off discipline safe rather
