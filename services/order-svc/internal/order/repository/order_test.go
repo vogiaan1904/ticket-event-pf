@@ -4,10 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
+	pkgDynamo "github.com/vogiaan1904/ticketbottle-order/pkg/dynamodb"
 )
 
 // A retry that reuses a code must be refused, not served. The old PutItem had
@@ -116,5 +122,96 @@ func TestClaimPurchaseSlot_ConcurrentClaimsLeaveExactlyOneWinner(t *testing.T) {
 		if l.existing != winner {
 			t.Fatalf("loser %s was told the winner is %q, want %q", l.code, l.existing, winner)
 		}
+	}
+}
+
+// Releasing a slot frees it for the next buyer. Without this the claim is a
+// one-way door: a create that fails before writing an order would lock the
+// buyer out of the event it failed on.
+func TestReleasePurchaseSlot_FreesTheSlotForTheNextClaim(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-FIRST-0001"); err != nil {
+		t.Fatalf("first claim: %v", err)
+	}
+
+	if err := repo.ReleasePurchaseSlot(ctx, "sess-rel", "TB-FIRST-0001"); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	existing, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-SECOND-0002")
+	if err != nil {
+		t.Fatalf("claim after release: %v", err)
+	}
+	if existing != "" {
+		t.Fatalf("claim after release reported an existing order %q", existing)
+	}
+}
+
+// A release is scoped to the order that took the slot. A late release from an
+// abandoned create must not delete the claim a fresh request has since taken,
+// or two creates run at once -- exactly what the claim exists to prevent.
+func TestReleasePurchaseSlot_LeavesAClaimTakenBySomeoneElseStanding(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-CURRENT-0002"); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	if err := repo.ReleasePurchaseSlot(ctx, "sess-late", "TB-ABANDONED-0001"); err != nil {
+		t.Fatalf("stale release: %v", err)
+	}
+
+	existing, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-INTRUDER-0003")
+	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
+		t.Fatalf("claim after stale release returned %v, want ErrPurchaseSlotTaken", err)
+	}
+	if existing != "TB-CURRENT-0002" {
+		t.Fatalf("slot is held by %q, want TB-CURRENT-0002", existing)
+	}
+}
+
+// The claim carries a TTL so an item nobody ever comes back for is collected
+// instead of holding a buyer out of an event forever.
+func TestClaimPurchaseSlot_WritesATTLBeyondTheCheckoutWindow(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-ttl", "TB-TTL-0001"); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+
+	k := pkgDynamo.BuildPurchaseSlotKey("sess-ttl")
+	res, err := repo.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(repo.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: k},
+			"SK": &types.AttributeValueMemberS{Value: k},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		t.Fatalf("read back the claim: %v", err)
+	}
+
+	attr, ok := res.Item[pkgDynamo.TTLAttribute].(*types.AttributeValueMemberN)
+	if !ok {
+		t.Fatalf("claim has no numeric %s attribute: %#v", pkgDynamo.TTLAttribute, res.Item)
+	}
+
+	expiresAt, err := strconv.ParseInt(attr.Value, 10, 64)
+	if err != nil {
+		t.Fatalf("parse %s: %v", pkgDynamo.TTLAttribute, err)
+	}
+
+	// A claim on a live order has to outlive the buyer's whole checkout, so the
+	// floor is well past the payment window plus its hold grace (9 minutes in
+	// workflows), not merely "now". The workflows package imports this one, so
+	// the constants cannot be named here without a cycle.
+	floor := time.Now().Add(24 * time.Hour)
+	if !time.Unix(expiresAt, 0).After(floor) {
+		t.Fatalf("claim expires at %v, which is not beyond the checkout window ending %v", time.Unix(expiresAt, 0), floor)
 	}
 }

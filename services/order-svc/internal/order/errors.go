@@ -25,11 +25,16 @@ var (
 	// should return that order rather than creating a second one.
 	ErrPurchaseSlotTaken = errors.New("purchase slot already taken")
 
-	// The buyer's slot is held by an order that is finished. They are told to
-	// start again rather than being handed a dead order. The workflows package
-	// declares its own sentinel of the same name; the service layer must not
-	// import it, and neither survives Temporal's failure proto anyway.
+	// The buyer's slot is held by an order in a state this service does not
+	// know how to resume. The workflows package declares its own sentinel of
+	// the same name; the service layer must not import it, and neither
+	// survives Temporal's failure proto anyway.
 	ErrOrderAlreadyProcessed = errors.New("order already processed")
+
+	// The buyer's purchase slot could not be settled: it named an order that
+	// was never written, or it kept changing hands. Nothing is broken and no
+	// order was created, so the buyer retries into a clean slot.
+	ErrPurchaseSlotUnsettled = errors.New("purchase slot could not be settled")
 
 	ErrRequestTimeout = errors.New("order creation timed out")
 )

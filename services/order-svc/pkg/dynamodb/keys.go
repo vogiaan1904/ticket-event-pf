@@ -20,6 +20,13 @@ const (
 	GSI2Name = "GSI2"
 )
 
+// TTLAttribute is the item attribute DynamoDB's time-to-live reads: an item
+// carrying it is deleted some time after the epoch second it holds, and an
+// item without it lives forever. Deletion is best-effort and can lag by many
+// hours, so nothing may depend on it for correctness -- it is garbage
+// collection, not a deadline.
+const TTLAttribute = "expires_at"
+
 // BuildOrderPK builds the partition key for an order
 func BuildOrderPK(code string) string {
 	return OrderPrefix + code

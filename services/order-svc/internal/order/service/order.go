@@ -24,6 +24,21 @@ import (
 // only has to tell the workflow, not watch it stop.
 const cancelWorkflowTimeout = 5 * time.Second
 
+// Releasing a stranded purchase slot has to outlive the deadline that stranded
+// it, for the same reason cancellation does.
+const releaseSlotTimeout = 5 * time.Second
+
+// claimAttempts bounds the claim loop. Each pass costs one round trip and only
+// happens when the slot was held by an order that had already ended, so a
+// second pass is normal and a fourth means the slot is churning rather than
+// settling.
+const claimAttempts = 3
+
+// errPurchaseSlotReleased is internal to the claim loop: the slot was held by
+// an order that can no longer hold inventory or money, the claim has been
+// dropped, and this request should take it. It never reaches a caller.
+var errPurchaseSlotReleased = errors.New("purchase slot released")
+
 // mapWorkflowError translates a Temporal failure into a domain error. wfRun.Get
 // returns the workflow's error rebuilt from a serialised failure proto, so the
 // original sentinel is gone; the ApplicationError type string is what survives,
@@ -129,13 +144,12 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		dedupeKey = fmt.Sprintf("user#%s:event#%s", in.UserID, in.EventID)
 	}
 
-	existingCode, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
-	if err != nil && !errors.Is(err, order.ErrPurchaseSlotTaken) {
-		s.l.Errorf(ctx, "internal.order.service.Create.ClaimPurchaseSlot: %v", err)
+	existing, err := s.claimPurchaseSlot(ctx, dedupeKey, code, in.PaymentMethod)
+	if err != nil {
 		return order.CreateOrderOutput{}, err
 	}
-	if errors.Is(err, order.ErrPurchaseSlotTaken) {
-		return s.resumeExistingOrder(ctx, existingCode, in.PaymentMethod)
+	if existing != nil {
+		return *existing, nil
 	}
 
 	tcMap := make(map[string]*inventory.TicketClass)
@@ -207,6 +221,7 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	wfRun, err := s.temporal.ExecuteWorkflow(ctx, wfOpts, workflows.CreateOrder, &wfIn)
 	if err != nil {
 		s.l.Errorf(ctx, "failed to start create order workflow: %v", err)
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, err
 	}
 
@@ -214,6 +229,14 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	err = wfRun.Get(ctx, &wfRes)
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
+
+		// The saga reserves inventory before it writes the order row, so a
+		// create that fails -- sold out, or a caller who gave up and had the
+		// saga compensated away underneath them -- can leave the slot claimed
+		// with no order behind it. Nothing would ever answer for that claim,
+		// and the buyer's next attempt would be refused on behalf of an order
+		// that does not exist. Sold out has to stay sold out.
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
 
 		// Get only stops waiting: the saga runs server-side and would go on
 		// reserving inventory for a caller that has already given up. Cancel it
@@ -237,13 +260,78 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	}, nil
 }
 
+// claimPurchaseSlot takes the buyer's slot for this request. It returns a
+// non-nil order when the slot is held by one the buyer should be sent back to,
+// and nil when this request won the slot and should go on to create one.
+//
+// The loop is here because a slot held by an order that has already ended is
+// released rather than honoured, and a release has to be followed by a fresh
+// claim: freeing the slot and then proceeding without retaking it would leave
+// this create unguarded and hand the slot to whoever asked next.
+func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code string, method models.PaymentMethod) (*order.CreateOrderOutput, error) {
+	for range claimAttempts {
+		heldBy, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
+		if err == nil {
+			return nil, nil
+		}
+		if !errors.Is(err, order.ErrPurchaseSlotTaken) {
+			s.l.Errorf(ctx, "internal.order.service.claimPurchaseSlot.ClaimPurchaseSlot: %v", err)
+			return nil, err
+		}
+
+		out, err := s.resumeExistingOrder(ctx, dedupeKey, heldBy, method)
+		if err == nil {
+			return &out, nil
+		}
+		if !errors.Is(err, errPurchaseSlotReleased) {
+			return nil, err
+		}
+	}
+
+	// Every pass found the slot held and then released it, so it is changing
+	// hands faster than this request can take it. No order was created and
+	// nothing is broken, so the buyer retries rather than being handed a fault.
+	s.l.Warnf(ctx, "internal.order.service.claimPurchaseSlot: slot %s changed hands %d times", dedupeKey, claimAttempts)
+	return nil, order.ErrPurchaseSlotUnsettled
+}
+
+// releasePurchaseSlot drops the buyer's claim after a create that produced no
+// order it could point at.
+//
+// It runs on a context detached from the request because the case that needs
+// it most is the one where the caller already gave up and the request context
+// is dead. A failure is logged and swallowed: the claim carries a TTL behind
+// it, the next request to find it stranded clears it, and the caller is owed
+// the error that actually failed their create, not this one.
+func (s *implService) releasePurchaseSlot(ctx context.Context, dedupeKey, code string) {
+	relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseSlotTimeout)
+	defer cancel()
+
+	if err := s.repo.ReleasePurchaseSlot(relCtx, dedupeKey, code); err != nil {
+		s.l.Errorf(ctx, "internal.order.service.releasePurchaseSlot: %v", err)
+	}
+}
+
 // resumeExistingOrder answers a duplicate create with the order that already
-// holds the buyer's slot. A live order is returned with its payment URL so a
-// retrying client lands back on the same checkout; a terminal one means the
-// slot's owner is finished and the buyer is told to start again rather than
-// being handed a dead order.
-func (s *implService) resumeExistingOrder(ctx context.Context, code string, method models.PaymentMethod) (order.CreateOrderOutput, error) {
+// holds the buyer's slot.
+//
+// A live or completed order is returned with its payment URL, so a retrying
+// client lands back on the same checkout and a buyer who has bought does not
+// buy twice. An order that ended without buying anything holds neither
+// inventory nor money, so its claim has no work left to do: it is released and
+// errPurchaseSlotReleased tells the caller to take the slot for itself.
+//
+// A claim naming an order that was never written is the same situation with a
+// worse cause -- a create died mid-flight -- and is cleared the same way, but
+// the buyer is asked to retry instead: whatever killed that attempt is more
+// recent than a status transition and is worth a fresh request to find out.
+func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code string, method models.PaymentMethod) (order.CreateOrderOutput, error) {
 	o, err := s.repo.GetByCode(ctx, code)
+	if errors.Is(err, repo.ErrOrderNotFound) {
+		s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, which was never written", dedupeKey, code)
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
+		return order.CreateOrderOutput{}, order.ErrPurchaseSlotUnsettled
+	}
 	if err != nil {
 		s.l.Errorf(ctx, "internal.order.service.resumeExistingOrder.GetByCode: %v", err)
 		return order.CreateOrderOutput{}, err
@@ -251,7 +339,14 @@ func (s *implService) resumeExistingOrder(ctx context.Context, code string, meth
 
 	switch o.Status {
 	case models.OrderStatusPending, models.OrderStatusCompleted:
+	case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout:
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
+		return order.CreateOrderOutput{}, errPurchaseSlotReleased
 	default:
+		// A status nobody here recognises. Guessing would either sell the
+		// buyer a second order or strand them, so the slot is left alone and
+		// the request is refused.
+		s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: order %s holds slot %s in unhandled status %s", code, dedupeKey, o.Status)
 		return order.CreateOrderOutput{}, order.ErrOrderAlreadyProcessed
 	}
 

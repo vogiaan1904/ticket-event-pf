@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -16,6 +18,14 @@ import (
 )
 
 var ErrOrderNotFound = errors.New("order not found")
+
+// purchaseSlotTTL garbage collects a claim nothing ever comes back for. It is
+// not the recovery path: a stranded claim is released when the create fails,
+// and the next request to find one naming an order that was never written
+// deletes it on the spot. This only stops an item nobody revisits from living
+// forever, and DynamoDB's TTL sweep can lag by hours, so it is set far beyond
+// any checkout window rather than tuned to one.
+const purchaseSlotTTL = 30 * 24 * time.Hour
 
 // isConditionalCheckFailed reports whether a DynamoDB write was refused by its
 // own ConditionExpression -- the shared shape every conditional write in this
@@ -64,13 +74,15 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 // two inventory holds. Only the database can settle that.
 func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, error) {
 	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
+	expiresAt := r.clock().Add(purchaseSlotTTL).Unix()
 
 	_, err := r.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
 		Item: map[string]types.AttributeValue{
-			"PK":         &types.AttributeValueMemberS{Value: k},
-			"SK":         &types.AttributeValueMemberS{Value: k},
-			"order_code": &types.AttributeValueMemberS{Value: orderCode},
+			"PK":                   &types.AttributeValueMemberS{Value: k},
+			"SK":                   &types.AttributeValueMemberS{Value: k},
+			"order_code":           &types.AttributeValueMemberS{Value: orderCode},
+			pkgDynamo.TTLAttribute: &types.AttributeValueMemberN{Value: strconv.FormatInt(expiresAt, 10)},
 		},
 		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 	})
@@ -104,6 +116,40 @@ func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, order
 	}
 
 	return winner.Value, order.ErrPurchaseSlotTaken
+}
+
+// ReleasePurchaseSlot drops the claim on dedupeKey, but only while it still
+// names orderCode.
+//
+// The condition is what stops a release from undoing someone else's claim. A
+// stranded claim is released by whoever notices it, and by the time a late
+// release lands the slot may already have been taken by a fresh request; an
+// unconditional delete would remove that new claim and let two creates run at
+// once -- the very thing the claim exists to prevent. A refused delete means
+// the slot has already moved on, which is the outcome the caller wanted, so it
+// is not an error.
+func (r *implRepository) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
+	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
+
+	_, err := r.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: k},
+			"SK": &types.AttributeValueMemberS{Value: k},
+		},
+		ConditionExpression:       aws.String("order_code = :code"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":code": &types.AttributeValueMemberS{Value: orderCode}},
+	})
+	if err != nil {
+		if isConditionalCheckFailed(err) {
+			r.l.Warnf(ctx, "order.repository.ReleasePurchaseSlot: slot %s is no longer held by %s", dedupeKey, orderCode)
+			return nil
+		}
+		r.l.Errorf(ctx, "order.repository.ReleasePurchaseSlot.DeleteItem: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 func (r *implRepository) GetByCode(ctx context.Context, code string) (models.Order, error) {
