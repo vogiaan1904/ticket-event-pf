@@ -26,12 +26,12 @@ func (c *captureProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 	return nil
 }
 
-func (c *captureProducer) Close() error                              { return nil }
-func (c *captureProducer) TxnStatus() sarama.ProducerTxnStatusFlag   { return 0 }
-func (c *captureProducer) IsTransactional() bool                     { return false }
-func (c *captureProducer) BeginTxn() error                           { return nil }
-func (c *captureProducer) CommitTxn() error                          { return nil }
-func (c *captureProducer) AbortTxn() error                           { return nil }
+func (c *captureProducer) Close() error                            { return nil }
+func (c *captureProducer) TxnStatus() sarama.ProducerTxnStatusFlag { return 0 }
+func (c *captureProducer) IsTransactional() bool                   { return false }
+func (c *captureProducer) BeginTxn() error                         { return nil }
+func (c *captureProducer) CommitTxn() error                        { return nil }
+func (c *captureProducer) AbortTxn() error                         { return nil }
 func (c *captureProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetMetadata, string) error {
 	return nil
 }
