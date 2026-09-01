@@ -91,8 +91,8 @@ which tells a buyer they were rate-limited when the truth is the show sold out.
 of `pkgErrors.NewGRPCError(codes.X, "ID", "message")`, so omitting it does not
 compile; `response.GrpcError` has no fallback. TS services carry it as the third
 element of the `ErrorCode` tuple — `[message, httpStatus, grpcCode]` — so a missing
-one fails `tsc`. Both defaults previously collapsed to `INVALID_ARGUMENT`, which is
-how 24 of 25 errors ended up with the wrong class.
+one fails `tsc`. Neither side has a default: a silent fallback is how an error
+ends up with the wrong class.
 
 ## Conventions that span services
 

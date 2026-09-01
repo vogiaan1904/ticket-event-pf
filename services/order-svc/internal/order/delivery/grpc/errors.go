@@ -34,11 +34,10 @@ var (
 	ErrGRPCRequestTimeout = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
 )
 
-// mapError turns a domain error into its wire equivalent. Matching uses
-// errors.Is rather than == so a sentinel still resolves after it has been
-// wrapped on the way up; a bare switch on err sends every wrapped error to
-// default, which response.GrpcError renders as codes.Internal — a 500 for what
-// may well be an ordinary business rejection.
+// mapError turns a domain error into its wire equivalent. Matching is by
+// errors.Is, not ==, so a sentinel still resolves after it has been wrapped on
+// the way up; anything reaching default is rendered as codes.Internal by
+// response.GrpcError.
 func (s *grpcService) mapError(err error) error {
 	switch {
 	case errors.Is(err, order.ErrOrderNotFound):

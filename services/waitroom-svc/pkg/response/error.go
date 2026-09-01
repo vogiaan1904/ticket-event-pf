@@ -38,8 +38,8 @@ func parseHttpError(err error) (int, Resp) {
 func ParseGRPCError(err error) error {
 	switch parsedErr := err.(type) {
 	case *pkgErrors.GRPCError:
-		// No fallback for a zero GrpcCode: it used to become InvalidArgument,
-		// which silently gave every error the wrong class.
+		// No fallback for a zero GrpcCode: NewGRPCError requires one, and a
+		// silent default is how an error ends up with the wrong class.
 		return status.Error(parsedErr.GrpcCode, parsedErr.Error())
 	default:
 		return status.Error(codes.Internal, "Internal server error")

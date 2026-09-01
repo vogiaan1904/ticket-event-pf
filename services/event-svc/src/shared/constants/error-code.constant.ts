@@ -9,9 +9,8 @@ export enum ErrorCodeEnum {
   OrganizerNotFound = 21000,
 }
 
-// [message, httpStatus, grpcCode]. The gRPC code is required: it is what
-// the caller maps to an HTTP status, and a missing one used to make every
-// rejection an INVALID_ARGUMENT. See the error taxonomy in the root CLAUDE.md.
+// [message, httpStatus, grpcCode]. The gRPC code is required — it is what the
+// caller maps to an HTTP status. See the error taxonomy in the root CLAUDE.md.
 export const ErrorCode = Object.freeze<
   Record<ErrorCodeEnum, [string, number, grpcStatus]>
 >({

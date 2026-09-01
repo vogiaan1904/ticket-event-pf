@@ -11,10 +11,9 @@ type GRPCError struct {
 	GrpcCode codes.Code
 }
 
-// NewGRPCError requires the status class. It is the first argument so that
-// omitting it cannot compile: every error must state whether it is a client
-// mistake, a business rejection, or our bug. See the error taxonomy in the
-// root CLAUDE.md.
+// NewGRPCError takes the status class first so that omitting it cannot compile:
+// every error states whether it is a client mistake, a business rejection or our
+// own bug. See the error taxonomy in the root CLAUDE.md.
 func NewGRPCError(grpcCode codes.Code, code string, message string) *GRPCError {
 	return &GRPCError{
 		Message:  fmt.Sprintf("%s - %s", code, message),
