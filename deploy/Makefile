@@ -173,3 +173,53 @@ eks-gate4a:        ## Gate 4a — concurrency: no oversell, HPA scales out and b
 eks-gate4b:        ## Gate 4b — terminate a node under load, assert nothing is lost
 	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
 	  ./scripts/gate4b-chaos.sh
+
+# --- Your public IP: the allowlist that follows you around --------------------
+# `my_ip_cidr` in each env's terraform.tfvars gates three things:
+#   1. port 22 on the k3s box       — SG rule, k3s env
+#   2. the EKS public API endpoint  — public_access_cidrs, eks env
+#   3. the ALB's inbound-cidrs      — a helm annotation, read from the eks output
+#      by eks-deploy.sh, so `terraform apply` alone leaves the ALB on the old IP.
+IP_URL := https://checkip.amazonaws.com
+TFVARS := $(K3S_ENV)/terraform.tfvars $(EKS_ENV)/terraform.tfvars
+READ_IP = sed -n 's/^my_ip_cidr[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p'
+
+.PHONY: my-ip update-my-ip k3s-allow-ip eks-allow-ip
+
+my-ip:             ## Compare your current public IP against what each tfvars allows
+	@ip=$$(curl -fsS --max-time 5 $(IP_URL) | tr -d '[:space:]'); \
+	 printf '%-34s %s\n' "current" "$$ip"; \
+	 for f in $(TFVARS); do \
+	   if [ -f $$f ]; then printf '%-34s %s\n' "$$f" "$$($(READ_IP) $$f)"; \
+	   else printf '%-34s %s\n' "$$f" "(absent)"; fi; \
+	 done
+
+update-my-ip:      ## Rewrite my_ip_cidr in every tfvars to your current IP
+	@ip=$$(curl -fsS --max-time 5 $(IP_URL) | tr -d '[:space:]'); \
+	 echo "$$ip" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$$' || \
+	   { echo "REFUSING: '$$ip' is not an IPv4 — captive portal, or $(IP_URL) unreachable"; exit 1; }; \
+	 for f in $(TFVARS); do \
+	   if [ ! -f $$f ]; then echo "skip  $$f (absent — copy its terraform.tfvars.example)"; continue; fi; \
+	   old=$$($(READ_IP) $$f); \
+	   if [ "$$old" = "$$ip/32" ]; then echo "ok    $$f already $$ip/32"; continue; fi; \
+	   sed -E 's|^(my_ip_cidr[[:space:]]*=[[:space:]]*).*|\1"'"$$ip"'/32"|' $$f > $$f.new && mv $$f.new $$f; \
+	   echo "edit  $$f  $$old -> $$ip/32"; \
+	 done; \
+	 echo; echo "apply it: make -C deploy k3s-allow-ip   (or eks-allow-ip)"
+
+k3s-allow-ip: update-my-ip   ## ...then apply it to the k3s SSH security group
+	@cd $(K3S_ENV) && terraform state list 2>/dev/null | grep -q aws_instance || \
+	  { echo "REFUSING: no k3s instance in state. 'make k3s-allow-ip' re-opens a firewall, it does not build a box."; exit 1; }
+	cd $(K3S_ENV) && terraform apply
+
+eks-allow-ip: update-my-ip   ## ...then apply it to the EKS API endpoint AND the live ALB
+	@aws eks describe-cluster --region $(REGION) --name $(EKS_CLUSTER) >/dev/null 2>&1 || \
+	  { echo "REFUSING: $(EKS_CLUSTER) does not exist. Applying here would BUILD it and start the \$$0.10/hr meter — use 'make eks-up' if that is what you want."; exit 1; }
+	cd $(EKS_ENV) && terraform apply
+	@ip=$$(cd $(EKS_ENV) && terraform output -raw my_ip_cidr); \
+	 if helm status $(RELEASE) -n $(NS) >/dev/null 2>&1; then \
+	   echo "== re-pointing the ALB at $$ip (annotation only; no pod rolls) =="; \
+	   helm upgrade $(RELEASE) $(CHART) -n $(NS) --reuse-values --set ingress.inboundCidrs="$$ip"; \
+	 else \
+	   echo "chart not installed — the ALB picks up $$ip on the next 'make eks-deploy'"; \
+	 fi
