@@ -33,4 +33,5 @@ var (
 // the workflow and the gRPC layer.
 const (
 	ErrTypeInsufficientInventory = "InsufficientInventory"
+	ErrTypeOrderCodeCollision    = "OrderCodeCollision"
 )

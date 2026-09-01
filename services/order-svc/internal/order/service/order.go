@@ -36,6 +36,11 @@ func mapWorkflowError(err error) error {
 	switch appErr.Type() {
 	case order.ErrTypeInsufficientInventory:
 		return order.ErrNotEnoughTickets
+	case order.ErrTypeOrderCodeCollision:
+		// A code collision means two different orders landed on the same
+		// code -- a code-generation bug, not a business outcome the buyer
+		// caused. ErrOrderCreationFailed already maps to codes.Internal.
+		return order.ErrOrderCreationFailed
 	default:
 		return err
 	}

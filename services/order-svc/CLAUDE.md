@@ -15,7 +15,9 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `CHECKOUT_COMPLETED`.
 
 ## Datastore: DynamoDB only
-This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). The MongoDB driver was removed — `internal/infra/mongo/` no longer exists, and there is no `legacy/mongodb` branch in this monorepo. Run with `make up-aws` (LocalStack provides DynamoDB); the `make up` MongoDB compose mode is legacy and non-functional for this service (see root `CLAUDE.md`).
+This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). The MongoDB driver was removed — `internal/infra/mongo/` no longer exists, and there is no `legacy/mongodb` branch in this monorepo.
+
+For local DynamoDB, run `docker compose -f docker-compose.dev.yml up -d` — this brings up `amazon/dynamodb-local` (container `ticketbottle-order-dynamodb`, port 8000), the same image the Helm chart uses for the same job. The repository and activity integration tests (`internal/order/repository`, `internal/activities`) create the table on first use via `internal/testutil/dynamotest`, skip locally when the datastore is unreachable, and **fail** when `CI` is set — a suite that skips itself reports PASS having asserted nothing.
 
 ## Commands
 
@@ -43,7 +45,7 @@ go build ./...
   - GSI1: `GSI1PK=USER#<userId>`, `GSI1SK=ORDER#<createdAt>#<code>`
   - GSI2: `GSI2PK=EVENT#<eventId>`, `GSI2SK=ORDER#<createdAt>#<code>`
 - **Pagination:** cursor-based (not page-based). Cursor = base64-encoded DynamoDB `LastEvaluatedKey`. Responses carry `Count, PageSize, NextCursor, HasMore`.
-- Env: `DYNAMODB_TABLE_NAME` (default `ticketbottle-orders`), `AWS_REGION` (default `us-east-1`), `DYNAMODB_ENDPOINT` (empty for real AWS, set for LocalStack).
+- Env: `DYNAMODB_TABLE_NAME` (default `ticketbottle-orders`), `AWS_REGION` (default `us-east-1`), `DYNAMODB_ENDPOINT` (empty for real AWS, set for a local DynamoDB such as dynamodb-local).
 
 ## Layout
 

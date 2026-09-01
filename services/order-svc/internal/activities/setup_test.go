@@ -1,9 +1,9 @@
-package repository
+package activities
 
 import (
 	"testing"
-	"time"
 
+	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/internal/testutil/dynamotest"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 )
@@ -11,13 +11,9 @@ import (
 // These run against a real table on DynamoDB local:
 //
 //	docker compose -f services/order-svc/docker-compose.dev.yml up -d
-func newTestRepo(t *testing.T) *implRepository {
+func newTestOrderActivities(t *testing.T) *OrderActivities {
 	t.Helper()
 
-	return &implRepository{
-		l:         logger.InitializeTestZapLogger(),
-		db:        dynamotest.NewClient(t),
-		tableName: dynamotest.TableName,
-		clock:     time.Now,
-	}
+	db := dynamotest.NewClient(t)
+	return NewOrderActivities(repo.New(logger.InitializeTestZapLogger(), db, dynamotest.TableName))
 }

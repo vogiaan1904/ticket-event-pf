@@ -17,6 +17,14 @@ import (
 
 var ErrOrderNotFound = errors.New("order not found")
 
+// isConditionalCheckFailed reports whether a DynamoDB write was refused by its
+// own ConditionExpression -- the shared shape every conditional write in this
+// package (order creation, purchase-slot claims) checks for.
+func isConditionalCheckFailed(err error) bool {
+	var cond *types.ConditionalCheckFailedException
+	return errors.As(err, &cond)
+}
+
 func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (models.Order, error) {
 	o := r.buildOrderModel(opt)
 
@@ -35,8 +43,7 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 	})
 	if err != nil {
-		var cond *types.ConditionalCheckFailedException
-		if errors.As(err, &cond) {
+		if isConditionalCheckFailed(err) {
 			r.l.Warnf(ctx, "order.repository.Create: code %s is already taken", opt.Code)
 			return models.Order{}, order.ErrOrderAlreadyExists
 		}
