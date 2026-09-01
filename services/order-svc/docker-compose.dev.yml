@@ -2,6 +2,11 @@ services:
   dynamodb:
     container_name: ticketbottle-order-dynamodb
     image: amazon/dynamodb-local:2.5.2
+    # -sharedDb keeps one database regardless of which AWS credentials the
+    # caller presents; without it dynamodb-local partitions data per
+    # access key, and a CLI call with different creds than the app "can't
+    # see" tables the app created. Matches the Helm chart's dynamodb pod.
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
     ports:
       - "8000:8000"
     restart: unless-stopped
