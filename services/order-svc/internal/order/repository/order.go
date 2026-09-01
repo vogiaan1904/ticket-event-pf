@@ -54,6 +54,58 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 	return o, nil
 }
 
+// ClaimPurchaseSlot reserves a buyer's right to one in-flight order, keyed by
+// dedupeKey. It returns ("", nil) when this caller won the claim, and
+// (winningOrderCode, order.ErrPurchaseSlotTaken) when one already exists.
+//
+// This is a conditional write rather than a read followed by a create because
+// the case that matters is two requests arriving together: both would read
+// nothing, both would proceed, and one queue slot would produce two orders and
+// two inventory holds. Only the database can settle that.
+func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, error) {
+	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
+
+	_, err := r.db.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.tableName),
+		Item: map[string]types.AttributeValue{
+			"PK":         &types.AttributeValueMemberS{Value: k},
+			"SK":         &types.AttributeValueMemberS{Value: k},
+			"order_code": &types.AttributeValueMemberS{Value: orderCode},
+		},
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
+	})
+	if err == nil {
+		return "", nil
+	}
+	if !isConditionalCheckFailed(err) {
+		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.PutItem: %v", err)
+		return "", err
+	}
+
+	// The loser reads the winner back so its caller can return that order. The
+	// read is consistent because the write it is chasing landed microseconds
+	// ago, and an eventually-consistent read could still miss it.
+	res, gErr := r.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: k},
+			"SK": &types.AttributeValueMemberS{Value: k},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if gErr != nil {
+		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.GetItem: %v", gErr)
+		return "", gErr
+	}
+
+	winner, _ := res.Item["order_code"].(*types.AttributeValueMemberS)
+	if winner == nil {
+		return "", order.ErrPurchaseSlotTaken
+	}
+
+	return winner.Value, order.ErrPurchaseSlotTaken
+}
+
 func (r *implRepository) GetByCode(ctx context.Context, code string) (models.Order, error) {
 	pk := pkgDynamo.BuildOrderPK(code)
 	sk := pkgDynamo.BuildOrderSK(code)

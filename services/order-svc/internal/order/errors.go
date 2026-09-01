@@ -21,6 +21,16 @@ var (
 
 	ErrInvalidCheckoutToken = errors.New("invalid checkout token")
 
+	// Another order already holds this buyer's purchase slot. The caller
+	// should return that order rather than creating a second one.
+	ErrPurchaseSlotTaken = errors.New("purchase slot already taken")
+
+	// The buyer's slot is held by an order that is finished. They are told to
+	// start again rather than being handed a dead order. The workflows package
+	// declares its own sentinel of the same name; the service layer must not
+	// import it, and neither survives Temporal's failure proto anyway.
+	ErrOrderAlreadyProcessed = errors.New("order already processed")
+
 	ErrRequestTimeout = errors.New("order creation timed out")
 )
 

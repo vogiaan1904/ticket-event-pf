@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -102,6 +103,11 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, order.ErrEventNotReadyForSale
 	}
 
+	// The order's code is generated here rather than at the workflow call
+	// because the purchase-slot claim records it: the claim is what a duplicate
+	// create is answered with, so it has to name the order it is protecting.
+	code := util.GenerateOrderCodeWithEventPrefix(e.Name)
+
 	var ssID string
 	if eCfg.AllowWaitRoom {
 		claim, err := s.validateCheckoutToken(ctx, in)
@@ -111,41 +117,25 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		}
 
 		ssID = claim.SessionID
+	}
 
-		existingOrder, err := s.repo.GetOne(ctx, repo.GetOneOrderOption{
-			FilterOrder: order.FilterOrder{
-				SessionID: ssID,
-			},
-		})
-		if err == nil {
-			switch existingOrder.Status {
-			case models.OrderStatusPending, models.OrderStatusCompleted:
-				itms, err := s.repo.ListItemByOrderCode(ctx, existingOrder.Code)
-				if err != nil {
-					s.l.Errorf(ctx, "internal.order.service.Create.repo.ListItemByOrderCode: %v", err)
-					return order.CreateOrderOutput{}, err
-				}
+	// One in-flight order per buyer. With a waiting room the slot is the
+	// session, because that is what admission handed out; without one it is the
+	// buyer and the event, so an event that skips the queue is not left with no
+	// suppression at all -- which is what happened when this check lived inside
+	// the AllowWaitRoom branch.
+	dedupeKey := ssID
+	if dedupeKey == "" {
+		dedupeKey = fmt.Sprintf("user#%s:event#%s", in.UserID, in.EventID)
+	}
 
-				pmtResp, err := s.pmtSvc.GetPaymentUrlByIdempotencyKey(ctx, &payment.GetPaymentUrlByIdempotencyKeyRequest{
-					IdempotencyKey: generatePaymentIdempotencyKey(existingOrder.Code, string(in.PaymentMethod)),
-				})
-				if err != nil {
-					s.l.Errorf(ctx, "internal.order.service.Create.pmtSvc.GetPaymentUrlByIdempotencyKey: %v", err)
-					return order.CreateOrderOutput{}, err
-				}
-
-				return order.CreateOrderOutput{
-					Order:      &existingOrder,
-					OrderItems: itms,
-					PaymentUrl: pmtResp.PaymentUrl,
-				}, nil
-			case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout:
-
-			}
-		} else if err != repo.ErrOrderNotFound {
-			s.l.Errorf(ctx, "internal.order.service.Create.repo.GetOne: %v", err)
-			return order.CreateOrderOutput{}, err
-		}
+	existingCode, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
+	if err != nil && !errors.Is(err, order.ErrPurchaseSlotTaken) {
+		s.l.Errorf(ctx, "internal.order.service.Create.ClaimPurchaseSlot: %v", err)
+		return order.CreateOrderOutput{}, err
+	}
+	if errors.Is(err, order.ErrPurchaseSlotTaken) {
+		return s.resumeExistingOrder(ctx, existingCode, in.PaymentMethod)
 	}
 
 	tcMap := make(map[string]*inventory.TicketClass)
@@ -191,8 +181,6 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 			TotalAmount:     tt,
 		}
 	}
-
-	code := util.GenerateOrderCodeWithEventPrefix(e.Name)
 
 	wfOpts := client.StartWorkflowOptions{
 		ID:        workflows.GetCreateOrderWorkflowID(code),
@@ -246,6 +234,45 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		Order:      wfRes.Order,
 		OrderItems: wfRes.OrderItems,
 		PaymentUrl: wfRes.PaymentUrl,
+	}, nil
+}
+
+// resumeExistingOrder answers a duplicate create with the order that already
+// holds the buyer's slot. A live order is returned with its payment URL so a
+// retrying client lands back on the same checkout; a terminal one means the
+// slot's owner is finished and the buyer is told to start again rather than
+// being handed a dead order.
+func (s *implService) resumeExistingOrder(ctx context.Context, code string, method models.PaymentMethod) (order.CreateOrderOutput, error) {
+	o, err := s.repo.GetByCode(ctx, code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.resumeExistingOrder.GetByCode: %v", err)
+		return order.CreateOrderOutput{}, err
+	}
+
+	switch o.Status {
+	case models.OrderStatusPending, models.OrderStatusCompleted:
+	default:
+		return order.CreateOrderOutput{}, order.ErrOrderAlreadyProcessed
+	}
+
+	itms, err := s.repo.ListItemByOrderCode(ctx, o.Code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.resumeExistingOrder.ListItemByOrderCode: %v", err)
+		return order.CreateOrderOutput{}, err
+	}
+
+	pmtResp, err := s.pmtSvc.GetPaymentUrlByIdempotencyKey(ctx, &payment.GetPaymentUrlByIdempotencyKeyRequest{
+		IdempotencyKey: generatePaymentIdempotencyKey(o.Code, string(method)),
+	})
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.resumeExistingOrder.GetPaymentUrlByIdempotencyKey: %v", err)
+		return order.CreateOrderOutput{}, err
+	}
+
+	return order.CreateOrderOutput{
+		Order:      &o,
+		OrderItems: itms,
+		PaymentUrl: pmtResp.PaymentUrl,
 	}, nil
 }
 

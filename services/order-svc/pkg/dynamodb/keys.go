@@ -11,6 +11,7 @@ const (
 	ItemPrefix  = "ITEM#"
 	UserPrefix  = "USER#"
 	EventPrefix = "EVENT#"
+	ClaimPrefix = "CLAIM#"
 )
 
 // GSI names
@@ -27,6 +28,14 @@ func BuildOrderPK(code string) string {
 // BuildOrderSK builds the sort key for an order
 func BuildOrderSK(code string) string {
 	return OrderPrefix + code
+}
+
+// BuildPurchaseSlotKey builds the partition and sort key of a buyer's
+// purchase-slot claim. The claim is a bare item in the orders table rather than
+// an attribute of the order, because it has to exist before the order does:
+// it is what decides which of two concurrent requests gets to create one.
+func BuildPurchaseSlotKey(dedupeKey string) string {
+	return ClaimPrefix + dedupeKey
 }
 
 // BuildItemSK builds the sort key for an order item

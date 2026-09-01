@@ -32,6 +32,12 @@ var (
 	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError(codes.Unauthenticated, "ORD016", "Invalid checkout token")
 
 	ErrGRPCRequestTimeout = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
+
+	// FailedPrecondition, not Internal: the buyer's purchase slot is held by an
+	// order that has already finished. Nothing is broken -- the world is simply
+	// in a state this request cannot be served from, and the buyer has to start
+	// a new checkout rather than retry this one.
+	ErrGRPCOrderAlreadyProcessed = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD018", "Order already processed")
 )
 
 // mapError turns a domain error into its wire equivalent. Matching is by
@@ -72,6 +78,8 @@ func (s *grpcService) mapError(err error) error {
 		return ErrGRPCInvalidCheckoutToken
 	case errors.Is(err, order.ErrRequestTimeout):
 		return ErrGRPCRequestTimeout
+	case errors.Is(err, order.ErrOrderAlreadyProcessed):
+		return ErrGRPCOrderAlreadyProcessed
 	default:
 		return err
 	}

@@ -14,6 +14,7 @@ type Repository interface {
 
 type OrderRepository interface {
 	Create(ctx context.Context, opt CreateOrderOption) (models.Order, error)
+	ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, error)
 	GetByCode(ctx context.Context, code string) (models.Order, error)
 	GetOne(ctx context.Context, opt GetOneOrderOption) (models.Order, error)
 	GetMany(ctx context.Context, opt GetManyOrderOption) ([]models.Order, paginator.Paginator, error)
