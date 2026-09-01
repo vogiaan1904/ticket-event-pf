@@ -26,12 +26,11 @@ var (
 
 // Temporal ApplicationError type strings.
 //
-// A workflow or activity failure reaches the caller wrapped in
-// *temporal.WorkflowExecutionError. Sentinel identity does not survive that
-// round trip — the error is serialised to a failure proto and rebuilt — so
-// errors.Is against the vars above can never match on the client side. The
-// ApplicationError *type string* is the one field that does survive, which
-// makes it the contract between the workflow and the gRPC layer.
+// A workflow failure reaches the caller as a *temporal.WorkflowExecutionError
+// rebuilt from a serialised failure proto, so sentinel identity does not survive
+// the round trip and errors.Is against the vars above can never match. The
+// ApplicationError type string does survive, which makes it the contract between
+// the workflow and the gRPC layer.
 const (
 	ErrTypeInsufficientInventory = "InsufficientInventory"
 )

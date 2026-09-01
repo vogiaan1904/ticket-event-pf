@@ -1,4 +1,4 @@
-# Rung 1.5 — host-side LocalStack for the AWS-native services only.
+# Retired: host-side LocalStack for the AWS-native services only.
 # Runs OUTSIDE kind, attached to the `kind` docker network with a static IP so
 # (a) kind pods reach it via the k8s `localstack` Service/Endpoints, and
 # (b) the Lambdas it spawns (LAMBDA_DOCKER_NETWORK=kind) reach kind NodePorts.

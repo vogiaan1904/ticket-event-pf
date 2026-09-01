@@ -1,13 +1,13 @@
-# Rung 3 (ephemeral EKS). Layer on base values.yaml:
+# Ephemeral EKS. Layer on base values.yaml:
 #   ./deploy/scripts/eks-deploy.sh
 # which generates a second -f file carrying the account-specific bits
 # (ECR registry, IRSA role ARN, ALB subnets, your IP).
 target: eks
 
 image:
-  # registry injected at deploy time (keeps the account id out of git)
-  tag: latest
-  pullPolicy: Always
+  # registry and tag are injected at deploy time by eks-deploy.sh: the account
+  # id stays out of git, and the tag is the immutable sha- build CI pushed.
+  pullPolicy: IfNotPresent
 
 # EKS has no working default StorageClass; deploy/k8s/eks/storageclass-gp3.yaml
 # creates this one (EBS CSI, WaitForFirstConsumer, Delete).
@@ -49,7 +49,7 @@ ingress:
   subnets: ""              # injected at deploy time
   inboundCidrs: ""         # injected at deploy time — the ALB is NOT world-open
 
-# In-cluster payment path (simulated webhook + relay), same as Gates 1 and 2.
+# In-cluster payment path (simulated webhook + relay), same as the kind and k3s targets.
 paymentEvents:
   enabled: true
 outboxRelay:
@@ -62,15 +62,24 @@ redpanda:
 redis:
   storage: 1Gi
 
-# The gateway is the right first HPA target: stateless, HTTP-bound, no database
-# lock contention, and scale-out is externally visible as target registrations
-# in the ALB's target group.
+# The gateway is the only autoscaled workload: stateless, HTTP-bound, no
+# database lock contention.
 #
-# inventory-service is deliberately NOT autoscaled. Its reserve path holds
+# inventory-service is deliberately not autoscaled. Its reserve path holds
 # `SELECT ... FOR UPDATE` on the ticket-class row, so throughput against one hot
-# ticket class is bounded by lock hold time, not replica count — while each extra
-# replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the stock
-# max_connections=100. Scaling it costs connections and buys no throughput.
+# ticket class is bounded by lock hold time rather than replica count, while
+# each extra replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the
+# stock max_connections=100. Scaling it costs connections and buys nothing.
 autoscaling:
   app-gateway:
     enabled: true
+
+# Only app-gateway gets a PDB, because only app-gateway can have >1 replica
+# (see `autoscaling` above). A PDB on any other workload would block drains.
+pdb:
+  app-gateway:
+    enabled: true
+    minAvailable: 1
+
+topologySpread:
+  enabled: true

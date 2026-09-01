@@ -1,1 +1,1 @@
-{{ include "tb.appService" (dict "ctx" . "name" "waitroom-service" "image" "ticketbottle/waitroom" "port" 50056 "config" "waitroom-config" "svcName" "waitroom-service" "probe" "tcp") }}
+{{ include "tb.appService" (dict "ctx" . "name" "waitroom-service" "image" "ticketbottle/waitroom" "port" 50056 "config" "waitroom-config" "secret" "waitroom-secrets" "svcName" "waitroom-service" "probe" "tcp") }}

@@ -1,4 +1,4 @@
-# TicketBottle — local Kubernetes (Rung 1) operations.
+# TicketBottle — cluster operations for every deploy target.
 CLUSTER := ticketbottle
 CTX     := kind-$(CLUSTER)
 NS      := ticketbottle
@@ -37,8 +37,8 @@ smoke:                 ## Verify every infra component end-to-end
 apps-build:            ## Build the app images and load them into kind
 	./scripts/build-images.sh
 
-apps-deploy:           ## Deploy/upgrade the chart only (no image build)
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --wait --timeout 8m
+apps-deploy: secrets-check  ## Deploy/upgrade the chart only (no image build)
+	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) -f $(SECRETS_FILE) --wait --timeout 8m
 
 apps-up: apps-build apps-deploy   ## Build+load images and deploy the app tier
 
@@ -47,12 +47,12 @@ smoke-apps:            ## Verify the app tier (pods Ready + signup)
 
 .PHONY: gate1
 
-gate1:                 ## Run the full purchase-flow acceptance test (Phase 0B-2)
+gate1:                 ## Run the full purchase-flow acceptance test
 	./scripts/gate1-purchase-flow.sh
 
 
 
-# --- Rung 2: k3s on EC2 -------------------------------------------------------
+# --- k3s on EC2 -------------------------------------------------------
 K3S_ENV := terraform/envs/k3s
 K3S_VALUES := $(CHART)/values-k3s.yaml
 KUBECONFIG_FILE := /tmp/k3s.yaml
@@ -95,9 +95,9 @@ k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
 	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
-k3s-deploy:        ## Deploy the chart to k3s from ECR (tunnel must be open)
+k3s-deploy: secrets-check  ## Deploy the chart to k3s from ECR (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
-	  -f $(K3S_VALUES) \
+	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
 	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
 	  --wait --timeout 10m
 
@@ -105,7 +105,7 @@ k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
 
 
-# --- Rung 3: ephemeral EKS ----------------------------------------------------
+# --- Ephemeral EKS ----------------------------------------------------
 # Weekend sprint, never an everyday environment. There is NO stop switch: the
 # control plane bills $0.10/hr from `eks-up` until `eks-down`.
 EKS_ENV     := terraform/envs/eks
@@ -113,7 +113,7 @@ EKS_VALUES  := $(CHART)/values-eks.yaml
 EKS_CLUSTER := ticketbottle-eks
 REGION      := us-east-1
 
-.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down eks-metrics eks-gate4a
+.PHONY: eks-guard eks-status eks-up eks-kubeconfig eks-bootstrap eks-deploy eks-url eks-gate3 eks-teardown eks-leak-check eks-sweep-orphans eks-down eks-metrics eks-gate4a eks-gate4b
 
 eks-guard:         ## Refuse to proceed unless the k3s box is stopped (never both)
 	@state=$$(aws ec2 describe-instances --instance-ids $(K3S_ID) \
@@ -169,3 +169,95 @@ eks-metrics:       ## Show live CPU/memory per pod (needs metrics-server)
 eks-gate4a:        ## Gate 4a — concurrency: no oversell, HPA scales out and back in
 	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
 	  ./scripts/gate4a-load.sh
+
+eks-gate4b:        ## Gate 4b — terminate a node under load, assert nothing is lost
+	GW=http://$$(kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')/api \
+	  ./scripts/gate4b-chaos.sh
+
+# --- Your public IP: the allowlist that follows you around --------------------
+# `my_ip_cidr` in each env's terraform.tfvars gates three things:
+#   1. port 22 on the k3s box       — SG rule, k3s env
+#   2. the EKS public API endpoint  — public_access_cidrs, eks env
+#   3. the ALB's inbound-cidrs      — a helm annotation, read from the eks output
+#      by eks-deploy.sh, so `terraform apply` alone leaves the ALB on the old IP.
+IP_URL := https://checkip.amazonaws.com
+TFVARS := $(K3S_ENV)/terraform.tfvars $(EKS_ENV)/terraform.tfvars
+READ_IP = sed -n 's/^my_ip_cidr[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p'
+
+.PHONY: my-ip update-my-ip k3s-allow-ip eks-allow-ip
+
+my-ip:             ## Compare your current public IP against what each tfvars allows
+	@ip=$$(curl -fsS --max-time 5 $(IP_URL) | tr -d '[:space:]'); \
+	 printf '%-34s %s\n' "current" "$$ip"; \
+	 for f in $(TFVARS); do \
+	   if [ -f $$f ]; then printf '%-34s %s\n' "$$f" "$$($(READ_IP) $$f)"; \
+	   else printf '%-34s %s\n' "$$f" "(absent)"; fi; \
+	 done
+
+update-my-ip:      ## Rewrite my_ip_cidr in every tfvars to your current IP
+	@ip=$$(curl -fsS --max-time 5 $(IP_URL) | tr -d '[:space:]'); \
+	 echo "$$ip" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$$' || \
+	   { echo "REFUSING: '$$ip' is not an IPv4 — captive portal, or $(IP_URL) unreachable"; exit 1; }; \
+	 for f in $(TFVARS); do \
+	   if [ ! -f $$f ]; then echo "skip  $$f (absent — copy its terraform.tfvars.example)"; continue; fi; \
+	   old=$$($(READ_IP) $$f); \
+	   if [ "$$old" = "$$ip/32" ]; then echo "ok    $$f already $$ip/32"; continue; fi; \
+	   sed -E 's|^(my_ip_cidr[[:space:]]*=[[:space:]]*).*|\1"'"$$ip"'/32"|' $$f > $$f.new && mv $$f.new $$f; \
+	   echo "edit  $$f  $$old -> $$ip/32"; \
+	 done; \
+	 echo; echo "apply it: make -C deploy k3s-allow-ip   (or eks-allow-ip)"
+
+k3s-allow-ip: update-my-ip   ## ...then apply it to the k3s SSH security group
+	@cd $(K3S_ENV) && terraform state list 2>/dev/null | grep -q aws_instance || \
+	  { echo "REFUSING: no k3s instance in state. 'make k3s-allow-ip' re-opens a firewall, it does not build a box."; exit 1; }
+	cd $(K3S_ENV) && terraform apply
+
+eks-allow-ip: update-my-ip   ## ...then apply it to the EKS API endpoint AND the live ALB
+	@aws eks describe-cluster --region $(REGION) --name $(EKS_CLUSTER) >/dev/null 2>&1 || \
+	  { echo "REFUSING: $(EKS_CLUSTER) does not exist. Applying here would BUILD it and start the \$$0.10/hr meter — use 'make eks-up' if that is what you want."; exit 1; }
+	cd $(EKS_ENV) && terraform apply
+	@ip=$$(cd $(EKS_ENV) && terraform output -raw my_ip_cidr); \
+	 if helm status $(RELEASE) -n $(NS) >/dev/null 2>&1; then \
+	   echo "== re-pointing the ALB at $$ip (annotation only; no pod rolls) =="; \
+	   helm upgrade $(RELEASE) $(CHART) -n $(NS) --reuse-values --set ingress.inboundCidrs="$$ip"; \
+	 else \
+	   echo "chart not installed — the ALB picks up $$ip on the next 'make eks-deploy'"; \
+	 fi
+
+# --- Chart secrets ------------------------------------------------------------
+# Signing keys and the admin password are `required` by the chart and have no
+# committed defaults, so every deploy needs this file. It is gitignored: the
+# previous values were literals inside a ConfigMap template, which published
+# them to everyone who could read the repository.
+SECRETS_FILE := secrets.values.yaml
+
+.PHONY: secrets-init secrets-check
+
+secrets-init:      ## Generate $(SECRETS_FILE) with fresh random keys (refuses to overwrite)
+	@if [ -f $(SECRETS_FILE) ]; then \
+	   echo "REFUSING: $(SECRETS_FILE) exists. Rotating means redeploying every service and invalidating"; \
+	   echo "          every issued token — delete it deliberately if that is what you want."; exit 1; fi
+	@rand() { LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$$1"; }; \
+	 { echo "# Generated by 'make -C deploy secrets-init'. Gitignored — never commit."; \
+	   echo "# Rotating these invalidates every issued access and refresh token."; \
+	   echo "secrets:"; \
+	   echo "  jwtSecret: \"$$(rand 64)\""; \
+	   echo "  jwtAccessSecret: \"$$(rand 48)\""; \
+	   echo "  jwtRefreshSecret: \"$$(rand 48)\""; \
+	   echo "  encryptKey: \"$$(rand 64)\""; \
+	   echo "  internalKey: \"$$(rand 48)\""; \
+	   echo "  adminPassword: \"$$(rand 24)\""; \
+	   echo "  # ZaloPay's published sandbox pair for app id 2554 — test credentials,"; \
+	   echo "  # not merchant keys. Replace both when integrating a real merchant account."; \
+	   echo "  zalopayKey1: \"sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn\""; \
+	   echo "  zalopayKey2: \"trMrHtvjo6myautxDUiAcYsVtaeQ8nhf\""; \
+	 } > $(SECRETS_FILE)
+	@chmod 600 $(SECRETS_FILE)
+	@echo "wrote $(SECRETS_FILE) (mode 600, gitignored)"
+	@echo "the admin password is in it — read it once, then treat the file as the source of truth"
+
+secrets-check:     ## Fail unless $(SECRETS_FILE) exists and is not tracked by git
+	@[ -f $(SECRETS_FILE) ] || { echo "missing $(SECRETS_FILE) — run 'make -C deploy secrets-init'"; exit 1; }
+	@! git ls-files --error-unmatch $(SECRETS_FILE) >/dev/null 2>&1 || \
+	   { echo "REFUSING: $(SECRETS_FILE) is tracked by git. Untrack it before deploying."; exit 1; }
+	@echo "$(SECRETS_FILE) present and untracked"

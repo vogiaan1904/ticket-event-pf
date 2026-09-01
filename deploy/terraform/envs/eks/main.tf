@@ -49,7 +49,7 @@ module "eks" {
 
 # ------------------------------- AWS Load Balancer Controller identity ---------
 # The controller's IAM policy is long and AWS revises it; fetch the upstream one
-# rather than pasting a copy that silently goes stale. A learning cluster tracking
+# rather than pasting a copy that silently goes stale. An ephemeral cluster tracking
 # `main` is the right trade — production would pin the tag matching its chart
 # version and review the diff.
 data "http" "lbc_policy" {

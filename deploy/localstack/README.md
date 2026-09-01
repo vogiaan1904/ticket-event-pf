@@ -31,7 +31,7 @@ Internal clients (order-consumer, payment-svc) keep using the internal listener 
 - **Docker Desktop ≥ 8 GB memory** and **≥ ~10 GB free disk** in the VM (the polyglot
   build + kind loads are disk-hungry; prune buildx cache / abandoned images if tight).
 - `awslocal` (`pip install awscli-local`) and `jq` on the host.
-- **LocalStack Pro (student) token** in `deploy/localstack/.env` as `LOCALSTACK_AUTH_TOKEN` (git-ignored).
+- **LocalStack Pro auth token** in `deploy/localstack/.env` as `LOCALSTACK_AUTH_TOKEN` (git-ignored).
 
 ## Run it
 

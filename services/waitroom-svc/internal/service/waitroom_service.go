@@ -10,7 +10,24 @@ import (
 	pkgLog "github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 	"github.com/vogiaan1904/ticketbottle-waitroom/protogen/event"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
+
+// eventServiceError classifies a failed call to event-svc. Only NOT_FOUND is a
+// verdict about the event; every other code means the dependency failed, and
+// event-svc's errors carry none of our sentinels for the delivery layer to
+// match on.
+func eventServiceError(err error, notFound error) error {
+	switch status.Code(err) {
+	case codes.NotFound:
+		return notFound
+	case codes.DeadlineExceeded, codes.Canceled:
+		return ErrEventServiceTimeout
+	default:
+		return ErrEventServiceUnavailable
+	}
+}
 
 type WaitroomService interface {
 	JoinQueue(ctx context.Context, req *JoinQueueInput) (*JoinQueueOutput, error)
@@ -58,14 +75,14 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 	var eCfg *event.EventConfig
 	g, gCtx := errgroup.WithContext(ctx)
 
-	// event-svc's status codes don't survive as our sentinels, and returning its
-	// error raw leaves the delivery layer nothing to match on. Which call failed
-	// is what identifies the rejection.
 	g.Go(func() error {
 		out, err := s.eSvc.FindOne(gCtx, &event.FindOneEventRequest{
 			Id: in.EventID,
 		})
-		if err != nil || out.Event == nil {
+		if err != nil {
+			return eventServiceError(err, ErrEventNotFound)
+		}
+		if out.Event == nil {
 			return ErrEventNotFound
 		}
 		return nil
@@ -75,7 +92,10 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		cfgOut, err := s.eSvc.GetConfig(gCtx, &event.GetEventConfigRequest{
 			EventId: in.EventID,
 		})
-		if err != nil || cfgOut.EventConfig == nil {
+		if err != nil {
+			return eventServiceError(err, ErrEventConfigNotFound)
+		}
+		if cfgOut.EventConfig == nil {
 			return ErrEventConfigNotFound
 		}
 		eCfg = cfgOut.EventConfig

@@ -27,12 +27,12 @@ func (a *InventoryActivities) ReserveInventory(ctx context.Context, orderCode st
 		Items:     items,
 	})
 	if err != nil {
-		// inventory-svc answers a sold-out reserve with ResourceExhausted. That
-		// is a business rejection, not a fault: retrying it burns the default
+		// A business rejection from inventory-svc (sold out, sale closed, state
+		// conflict) arrives as FailedPrecondition. Retrying it burns the default
 		// five attempts with backoff before failing anyway, and reaches the
-		// caller as an opaque activity error. Tag it so the gRPC layer can turn
-		// it into a 4xx, and stop the retries.
-		if status.Code(err) == codes.ResourceExhausted {
+		// caller as an opaque activity error, so mark it non-retryable and tag
+		// it for the gRPC layer to turn into a 4xx.
+		if status.Code(err) == codes.FailedPrecondition {
 			return temporal.NewNonRetryableApplicationError(
 				order.ErrNotEnoughTickets.Error(),
 				order.ErrTypeInsufficientInventory,

@@ -124,7 +124,10 @@ func (s *sessionService) GenerateCheckoutToken(ctx context.Context, ss *models.S
 }
 
 func (s *sessionService) ValidateSession(ctx context.Context, ssID string) error {
-	ss, err := s.repo.Get(ctx, ssID)
+	// Via GetSession, not repo.Get: the repository answers a missing key with
+	// redis.Nil, which the delivery layer has no sentinel to match and would
+	// answer 500 rather than 404.
+	ss, err := s.GetSession(ctx, ssID)
 	if err != nil {
 		return err
 	}

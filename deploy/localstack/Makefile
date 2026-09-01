@@ -1,4 +1,4 @@
-# Rung 1.5 — kind + host LocalStack (AWS services only). Run from deploy/localstack/.
+# Retired: kind + host LocalStack (AWS services only). Run from deploy/localstack/.
 ROOT  := $(shell cd ../.. && pwd)
 NS    := ticketbottle
 CTX   := kind-ticketbottle

@@ -1,0 +1,17 @@
+{{- if .Values.apps.enabled }}
+{{- range $name, $cfg := .Values.pdb }}
+{{- if $cfg.enabled }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "tb.namespace" $ }}
+  labels: {{- include "tb.labels" $ | nindent 4 }}
+spec:
+  minAvailable: {{ $cfg.minAvailable }}
+  selector:
+    matchLabels: { app: {{ $name }} }
+{{- end }}
+{{- end }}
+{{- end }}

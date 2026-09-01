@@ -4,9 +4,9 @@ import { status as grpcStatus } from '@grpc/grpc-js';
 
 export class RpcBusinessException extends RpcException {
   constructor(code: ErrorCodeEnum) {
-    const [message] = ErrorCode[code];
+    const [message, , grpcCode] = ErrorCode[code];
     super({
-      code: grpcStatus.INVALID_ARGUMENT,
+      code: grpcCode,
       message: `${code} - ${message}`,
     });
   }

@@ -10,10 +10,9 @@ metadata:
 spec:
   {{- $hpa := index ($.Values.autoscaling | default dict) .name | default dict }}
   {{- if not $hpa.enabled }}
-  {{- /* When an HPA owns this Deployment, `replicas` MUST be omitted. Leaving it
-         in means every `helm upgrade` resets the Deployment to the static count
-         and the HPA has to scale back out from scratch — a slow, confusing fight
-         between two controllers, and one of the most common Helm+HPA bugs. */}}
+  {{- /* When an HPA owns this Deployment, `replicas` must be omitted: leaving
+         it in makes every `helm upgrade` reset the Deployment to the static
+         count, and the HPA then has to scale back out from scratch. */}}
   replicas: {{ index $.Values.replicas .name | default 1 }}
   {{- end }}
   selector:
@@ -22,6 +21,14 @@ spec:
     metadata:
       labels: { app: {{ .name }} }
     spec:
+      {{- if $.Values.topologySpread.enabled }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: {{ .name }} }
+      {{- end }}
       {{- if .serviceAccount }}
       serviceAccountName: {{ .serviceAccount }}
       {{- end }}
@@ -32,6 +39,9 @@ spec:
           {{- include "tb.resources" (dict "ctx" $ "name" .name) | nindent 10 }}
           envFrom:
             - configMapRef: { name: {{ .config }} }
+            {{- if .secret }}
+            - secretRef: { name: {{ .secret }} }
+            {{- end }}
           {{- if gt (int .port) 0 }}
           ports: [{ containerPort: {{ .port }} }]
           {{- end }}
