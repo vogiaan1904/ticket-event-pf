@@ -13,8 +13,9 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end -}}
 
 {{/*
-Render a `resources:` block for a workload, or nothing if the values file has no
-entry for it. Call as: {{ include "tb.resources" (dict "ctx" $ "name" "app-gateway") }}
+Render a `resources:` block for a workload, or nothing when the values file has
+no entry for it. Call as:
+  {{ include "tb.resources" (dict "ctx" $ "name" "app-gateway") }}
 */}}
 {{- define "tb.resources" -}}
 {{- $res := index (.ctx.Values.resources | default dict) .name | default dict -}}

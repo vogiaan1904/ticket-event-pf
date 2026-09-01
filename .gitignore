@@ -72,3 +72,6 @@ tools/
 
 # --- Localstack ---
 tf-lab/
+
+# Chart secrets: generated per environment by `make -C deploy secrets-init`.
+deploy/secrets.values.yaml

@@ -1,1 +1,1 @@
-{{ include "tb.appService" (dict "ctx" . "name" "event-service" "image" "ticketbottle/event" "port" 50053 "config" "event-config" "svcName" "event-service" "probe" "tcp") }}
+{{ include "tb.appService" (dict "ctx" . "name" "event-service" "image" "ticketbottle/event" "port" 50053 "config" "event-config" "secret" "event-secrets" "svcName" "event-service" "probe" "tcp") }}

@@ -30,9 +30,9 @@ type ServerConfig struct {
 
 	PaymentTimeoutSeconds int32
 
-	// How long Create waits for the CreateOrder saga before giving up. Bounds a
-	// gRPC handler; on expiry the workflow is cancelled so it cannot go on
-	// reserving inventory for a caller that has left.
+	// How long Create waits for the CreateOrder saga before giving up. On expiry
+	// the workflow is cancelled so it cannot go on reserving inventory for a
+	// caller that has already left.
 	CreateOrderTimeout time.Duration
 }
 

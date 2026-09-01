@@ -6,11 +6,9 @@ import { status as GrpcStatus } from '@grpc/grpc-js';
 import { Response } from 'express';
 import { BusinessException } from '../exceptions/business.exception';
 
-// Every downstream service speaks gRPC, and a gRPC error is not an
-// HttpException — so without this table it falls through to the 500 branch
-// below. A sold-out ticket class, a missing event and a failed validation all
-// arrive as INVALID_ARGUMENT or NOT_FOUND and would be reported as server
-// faults. Codes absent from the map are genuinely ours to answer for.
+// Downstream services speak gRPC, and a gRPC error is not an HttpException, so
+// without this table every business rejection falls through to the 500 branch
+// below. A code absent from the map is genuinely ours to answer for.
 const GRPC_TO_HTTP: Partial<Record<GrpcStatus, HttpStatus>> = {
   [GrpcStatus.INVALID_ARGUMENT]: HttpStatus.BAD_REQUEST,
   [GrpcStatus.NOT_FOUND]: HttpStatus.NOT_FOUND,
@@ -19,7 +17,6 @@ const GRPC_TO_HTTP: Partial<Record<GrpcStatus, HttpStatus>> = {
   [GrpcStatus.UNAUTHENTICATED]: HttpStatus.UNAUTHORIZED,
   [GrpcStatus.FAILED_PRECONDITION]: HttpStatus.CONFLICT,
   [GrpcStatus.OUT_OF_RANGE]: HttpStatus.BAD_REQUEST,
-  [GrpcStatus.RESOURCE_EXHAUSTED]: HttpStatus.TOO_MANY_REQUESTS,
   [GrpcStatus.ABORTED]: HttpStatus.CONFLICT,
   [GrpcStatus.UNIMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
   [GrpcStatus.UNAVAILABLE]: HttpStatus.SERVICE_UNAVAILABLE,
@@ -89,8 +86,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       };
     }
 
-    // A mapped gRPC error is the downstream service's considered answer, so its
-    // message is the useful one and is safe to pass through in any environment.
+    // A mapped gRPC error is the downstream service's own answer, so its message
+    // is safe to pass through in any environment.
     const grpcError = asGrpcError(exception);
     if (grpcError && GRPC_TO_HTTP[grpcError.code]) {
       return {

@@ -16,8 +16,8 @@ spec:
   minReplicas: {{ $cfg.minReplicas }}
   maxReplicas: {{ $cfg.maxReplicas }}
   metrics:
-    # `Utilization` is a percentage OF THE REQUEST. With no request in
-    # .Values.resources.<name>, this reports <unknown> and never scales.
+    # Utilization is a percentage of the CPU *request*, so with no entry in
+    # .Values.resources.<name> this reports <unknown> and never scales.
     - type: Resource
       resource:
         name: cpu

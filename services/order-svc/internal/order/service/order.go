@@ -19,17 +19,14 @@ import (
 	sdktemporal "go.temporal.io/sdk/temporal"
 )
 
-// mapWorkflowError translates a Temporal failure into a domain error.
-//
-// wfRun.Get returns whatever the workflow returned wrapped in
-// *temporal.WorkflowExecutionError, rebuilt from a serialised failure proto, so
-// the original sentinel is gone by the time it lands here. The ApplicationError
-// type string survives, and it is what distinguishes a business rejection from
-// a fault: without this, a sold-out event reaches the client as a 500.
-// Cancellation must outlive the deadline that triggered it, but not block the
-// handler: the workflow only has to be told, not watched.
+// Cancellation has to outlive the deadline that triggered it, but the handler
+// only has to tell the workflow, not watch it stop.
 const cancelWorkflowTimeout = 5 * time.Second
 
+// mapWorkflowError translates a Temporal failure into a domain error. wfRun.Get
+// returns the workflow's error rebuilt from a serialised failure proto, so the
+// original sentinel is gone; the ApplicationError type string is what survives,
+// and it is what separates a business rejection from a fault.
 func mapWorkflowError(err error) error {
 	var appErr *sdktemporal.ApplicationError
 	if !errors.As(err, &appErr) {
@@ -225,7 +222,7 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
 
-		// Get only stops waiting; the saga runs on server-side and would keep
+		// Get only stops waiting: the saga runs server-side and would go on
 		// reserving inventory for a caller that has already given up. Cancel it
 		// so CreateOrder's deferred compensation releases the hold.
 		if ctxErr := ctx.Err(); ctxErr != nil {

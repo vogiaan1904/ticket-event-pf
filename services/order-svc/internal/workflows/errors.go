@@ -17,11 +17,10 @@ var (
 	ErrInsufficientInventory  = errors.New("insufficient inventory")
 )
 
-// NewInsufficientInventoryError is the sold-out rejection as it must cross the
+// NewInsufficientInventoryError carries the sold-out rejection across the
 // Temporal boundary: tagged with order.ErrTypeInsufficientInventory so the gRPC
 // layer can recognise it, and non-retryable because no number of attempts makes
-// stock reappear. Returning the bare sentinel instead loses both properties and
-// the caller can only report a 500.
+// stock reappear.
 func NewInsufficientInventoryError(cause error) error {
 	return temporal.NewNonRetryableApplicationError(
 		ErrInsufficientInventory.Error(),

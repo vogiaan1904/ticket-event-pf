@@ -35,7 +35,7 @@ var (
 	ErrAlreadyExists     = NewGRPCError(codes.AlreadyExists, "resource already exists")
 	ErrInternal          = NewGRPCError(codes.Internal, "internal server error")
 	ErrUnavailable       = NewGRPCError(codes.Unavailable, "service unavailable")
-	ErrInsufficientStock = NewGRPCError(codes.ResourceExhausted, "insufficient stock")
+	ErrInsufficientStock = NewGRPCError(codes.FailedPrecondition, "insufficient stock")
 	ErrConflict          = NewGRPCError(codes.FailedPrecondition, "reservation state conflict")
 	ErrSaleClosed        = NewGRPCError(codes.FailedPrecondition, "ticket class not on sale")
 )

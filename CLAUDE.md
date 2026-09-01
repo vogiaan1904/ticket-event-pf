@@ -43,7 +43,8 @@ Local **full-stack** dev runs on **kind + Helm** (the `deploy/` tree). The old *
 ```bash
 make -C deploy cluster-up   # create the kind cluster
 make -C deploy infra-up     # infra tier (Postgres / Redis / Redpanda / Temporal / DynamoDB-local)
-make -C deploy apps-up      # build + kind-load the 8 app images, deploy the app tier
+make -C deploy apps-up      # build + kind-load the app images, deploy the app tier
+make -C deploy apps-deploy  # chart-only change: helm upgrade, no image rebuild
 make -C deploy gate1        # full purchase-flow acceptance test
 make -C deploy cluster-down # tear it all down
 ```
@@ -60,6 +61,38 @@ There is **one source of truth: the root `proto/` directory.** Edit contracts th
 - **Go services** (`order`, `inventory`, `waitroom`): `make protoc-all` — runs `protoc` with the Go plugins against `../../proto` into `pkg/grpc/<svc>/` (waitroom: `protogen/`). Go uses **compiled stubs only** (no runtime `.proto`), so Go services keep **no** local `.proto` copy.
 
 Do **not** reintroduce the old redundant copies (`protos/`, `protos-submodule/`) — those were dead submodule remnants. The only legitimate local copy is each TS service's `src/protos/`, kept in sync by `update:proto`. (Target state is `buf generate` from a single root module, which removes even the TS copy.)
+
+## Error taxonomy (binding for every service)
+
+A failure crosses two boundaries: domain error → gRPC code → HTTP status. The
+gRPC code is the contract; the API Gateway maps it to HTTP in
+`common/filters/global-exception.filter.ts` and nowhere else.
+
+| gRPC code | HTTP | Means | Client should |
+|---|---|---|---|
+| `INVALID_ARGUMENT` | 400 | The request is malformed | Fix the request |
+| `UNAUTHENTICATED` | 401 | Missing or invalid credentials | Re-authenticate |
+| `PERMISSION_DENIED` | 403 | Authenticated but not allowed | Stop |
+| `NOT_FOUND` | 404 | The entity does not exist | Stop or refetch |
+| `ALREADY_EXISTS` | 409 | Duplicate create | Treat as success, or refetch |
+| `FAILED_PRECONDITION` | 409 | Valid request, world is in the wrong state | Refetch; do not retry identically |
+| `DEADLINE_EXCEEDED` | 504 | We did not answer in time | Retry |
+| `UNAVAILABLE` | 503 | A dependency is down | Retry with backoff |
+| `INTERNAL` | 500 | **We have a bug** | Retry later; page someone |
+
+**The governing rule: `INTERNAL` means we have a bug.** If a business outcome can
+produce it, the mapping is wrong. Sold out, sale closed, queue full and wrong-state
+are all `FAILED_PRECONDITION` — a buyer losing a race is not a server fault.
+
+`RESOURCE_EXHAUSTED` is deliberately unused: its canonical HTTP mapping is 429,
+which tells a buyer they were rate-limited when the truth is the show sold out.
+
+**The code is required, not defaulted.** Go services take it as the first argument
+of `pkgErrors.NewGRPCError(codes.X, "ID", "message")`, so omitting it does not
+compile; `response.GrpcError` has no fallback. TS services carry it as the third
+element of the `ErrorCode` tuple — `[message, httpStatus, grpcCode]` — so a missing
+one fails `tsc`. Neither side has a default: a silent fallback is how an error
+ends up with the wrong class.
 
 ## Conventions that span services
 

@@ -31,7 +31,7 @@ spec:
             - start
             - --mode=dev-container
             - --smp=1
-            # advertise the in-cluster service name so clients (0B) reach the broker
+            # advertise the in-cluster service name so clients reach the broker
             {{- if .Values.redpanda.external.enabled }}
             - --kafka-addr=PLAINTEXT://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
             - --advertise-kafka-addr=PLAINTEXT://redpanda:9093,EXTERNAL://{{ .Values.redpanda.external.advertisedHost }}:{{ .Values.redpanda.external.nodePort }}

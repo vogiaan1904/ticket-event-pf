@@ -1,8 +1,8 @@
-# Rung 2 — k3s on a single stoppable EC2 (BUILT, Gate 2 green)
+# k3s on a single stoppable EC2
 
 The everyday environment. One `t3.large` in a public subnet runs *the entire stack* — all 10 app workloads plus Postgres, Redis, Redpanda and Temporal as Kubernetes workloads. The only things outside the box are the things AWS runs better and cheaper than a pod: **DynamoDB**, **ECR**, and **S3** (Terraform state).
 
-**Why one box and not ECS/EKS/Lightsail:** the three hard constraints are *real Kubernetes learning* + *≤$20/mo* + *toggle-off*. Only k3s-on-one-EC2 satisfies all three — one `stop-instances` halts every datastore and every service at once, because they're all on the same machine, and the data survives on EBS. EKS was rejected as the *daily* environment purely on its ~$73/mo control-plane floor (spec Appendix A.1), not on merit.
+**Why one box and not ECS/EKS/Lightsail:** three constraints have to hold at once — a real Kubernetes API, ≤$20/mo, and a single switch that stops all of it. Only k3s-on-one-EC2 satisfies all three: one `stop-instances` halts every datastore and every service together, because they share a machine, and the data survives on EBS. EKS is rejected as the *daily* environment on its ~$73/mo control-plane floor alone, not on merit.
 
 ---
 
@@ -57,7 +57,7 @@ The AWS SDK resolves credentials in a **fixed order, first match wins**:
 1. Env vars  AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY   ← checked FIRST
 2. Shared config  ~/.aws/credentials
 3. Container / EKS (IRSA)  AWS_WEB_IDENTITY_TOKEN_FILE
-4. EC2 instance profile  IMDS 169.254.169.254            ← what Rung 2 WANTS
+4. EC2 instance profile  IMDS 169.254.169.254            ← what the box WANTS
 ```
 
 On kind, the chart sets `AWS_ACCESS_KEY_ID=local` (fake creds for dynamodb-local). Leave that on the box and the SDK stops at **step 1**, uses the fake key, and DynamoDB auth fails — the instance profile at step 4 never gets a look.
@@ -116,7 +116,7 @@ order:
   awsRegion: us-east-1
   awsAccessKeyId: ""                         # empty -> omitted -> instance profile
   awsSecretAccessKey: ""
-paymentEvents: { enabled: true }             # in-cluster payment path, same as Gate 1
+paymentEvents: { enabled: true }             # in-cluster payment path, same as kind
 outboxRelay:   { enabled: true }
 postgres: { storage: 5Gi }                   # PVCs sized for the real box
 redpanda: { storage: 5Gi }
@@ -143,11 +143,11 @@ helm upgrade --install tb deploy/helm/ticketbottle -n ticketbottle --create-name
 - A 13-entry matrix: 10 runtime images + 3 Prisma `migrate` images (built from the `builder` **target** of the same Dockerfile).
 - Buildx, `cache-from/to: type=gha` scoped per repo, tagged `:latest` **and** `:sha-<commit>`.
 
-Nothing is ever built on the Mac or on the box — that's the point (Appendix B: the Mac is a thin client).
+Nothing is ever built on a developer machine or on the box. CI is the only builder, which is what keeps both of them thin.
 
 ---
 
-## Operating it — `deploy/Makefile`, Rung 2 section
+## Operating it — the k3s section of `deploy/Makefile`
 
 ```bash
 make -C deploy start-ec2-k3s     # start + wait + print the fresh ssh command (IP changed!)
@@ -165,16 +165,14 @@ The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` i
 
 ---
 
-## Gate 2 — what "done" means
+## Gate 2 — the acceptance criteria
 
 1. **Gate 2a:** the full purchase flow (Waitroom → Order/Temporal → Inventory → Payment → Kafka → confirm → slot freed) green against the k3s box, pulling images from ECR, writing orders to real DynamoDB.
 2. **Gate 2b:** `stop-instances` → `start-instances` → the flow still green **and prior data still present** — proving the PVC-on-EBS story.
 
-Both are green as of commit `5915df4`.
-
 ## Known rough edges
 
 - **The IP changes on every start.** Every session needs a fresh `terraform refresh` + new tunnel. A Route 53 A-record update hook is the documented nicety, not built.
-- **Single node, single replica, no HA.** Intentional at this rung — HPA and node-failure recovery are Phase C work on EKS.
-- **Secrets are plain K8s Secrets/ConfigMaps.** External Secrets Operator + AWS Secrets Manager is a documented Rung-3 stretch.
-- **`payment-webhook` is a simulated provider**, not a real PSP callback. Real Lambda + API Gateway for payments is an optional Phase D add.
+- **Single node, single replica, no HA.** Intentional here; horizontal scaling and node-failure recovery are properties of the EKS target.
+- **Secrets are plain K8s Secrets/ConfigMaps.** External Secrets Operator with AWS Secrets Manager is the documented next step.
+- **`payment-webhook` is a simulated provider**, not a real PSP callback. A Lambda + API Gateway payment path is optional future work.
