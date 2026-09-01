@@ -13,6 +13,12 @@ var (
 	ErrEventConfigNotFound = errors.New("event config not found")
 	ErrWaitRoomNotAllowed  = errors.New("wait room is not allowed for this event")
 
+	// A failed call to event-svc that is not a verdict about the event. It must
+	// not be folded into ErrEventNotFound: a 404 tells the buyer to stop, when
+	// the truth is that the dependency is down or slow and the answer is retry.
+	ErrEventServiceUnavailable = errors.New("event service unavailable")
+	ErrEventServiceTimeout     = errors.New("event service timed out")
+
 	ErrProcessorStopped = errors.New("queue processor has been stopped")
 	ErrEventNotActive   = errors.New("event is not active or not found")
 
