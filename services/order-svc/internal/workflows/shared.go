@@ -49,20 +49,25 @@ func (s *Compensations) AddCompensation(activity any, parameters ...any) {
 	s.arguments = append(s.arguments, parameters)
 }
 
-func (s Compensations) Compensate(ctx workflow.Context, inParallel bool) {
+// Compensate runs the registered compensations newest-first. The order is the
+// point: a later step's undo may depend on an earlier step's state still being
+// there, so these cannot run concurrently and there is no flag to make them.
+//
+// Errors are logged and the loop continues. A compensation that fails must not
+// prevent the remaining ones from running, and the caller is already on its
+// way to failing the workflow.
+func (s Compensations) Compensate(ctx workflow.Context) {
 	logger := workflow.GetLogger(ctx)
 
-	if !inParallel {
-		for i := len(s.compensations) - 1; i >= 0; i-- {
-			errCompensation := workflow.ExecuteActivity(
-				workflow.WithActivityOptions(ctx, getCompensationActivityOptions()),
-				s.compensations[i],
-				s.arguments[i]...,
-			).Get(ctx, nil)
+	for i := len(s.compensations) - 1; i >= 0; i-- {
+		errCompensation := workflow.ExecuteActivity(
+			workflow.WithActivityOptions(ctx, getCompensationActivityOptions()),
+			s.compensations[i],
+			s.arguments[i]...,
+		).Get(ctx, nil)
 
-			if errCompensation != nil {
-				logger.Error("Executing compensation failed", "Error", errCompensation)
-			}
+		if errCompensation != nil {
+			logger.Error("Executing compensation failed", "Error", errCompensation)
 		}
 	}
 }

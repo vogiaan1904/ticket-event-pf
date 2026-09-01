@@ -68,7 +68,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 		if err != nil {
 			logger.Error("Workflow failed, running compensations", "error", err)
 			disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
-			compensations.Compensate(disconnectedCtx, false)
+			compensations.Compensate(disconnectedCtx)
 		}
 	}()
 

@@ -6,6 +6,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
 	"github.com/stretchr/testify/mock"
+	"go.temporal.io/sdk/workflow"
 )
 
 func testCreateInput() *CreateOrderWorkflowInput {
@@ -99,4 +100,13 @@ func TestCreateOrder_PaymentFailureCompensatesInReverse(t *testing.T) {
 	if env.GetWorkflowError() == nil {
 		t.Fatal("expected the payment failure to fail the workflow")
 	}
+}
+
+// Compensate took an inParallel flag whose true branch had no body, so a
+// caller could disable the entire rollback and get no error back. The
+// signature is the guard: there is nothing to pass.
+func TestCompensate_HasNoOptOut(t *testing.T) {
+	var c Compensations
+	// Compile-time assertion: Compensate takes a context and nothing else.
+	var _ func(workflow.Context) = c.Compensate
 }
