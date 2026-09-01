@@ -1,20 +1,7 @@
 services:
-  localstack:
-    container_name: ticketbottle-order-localstack
-    image: localstack/localstack:latest
+  dynamodb:
+    container_name: ticketbottle-order-dynamodb
+    image: amazon/dynamodb-local:2.5.2
     ports:
-      - "4566:4566"
-    environment:
-      - SERVICES=dynamodb
-      - DEBUG=1
-      - DATA_DIR=/var/lib/localstack/data
-      - DOCKER_HOST=unix:///var/run/docker.sock
-    volumes:
-      - localstack-data:/var/lib/localstack
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./scripts/init-dynamodb.sh:/etc/localstack/init/ready.d/init-dynamodb.sh
+      - "8000:8000"
     restart: unless-stopped
-
-volumes:
-  localstack-data:
-    driver: local

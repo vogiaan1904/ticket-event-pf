@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	pkgDynamo "github.com/vogiaan1904/ticketbottle-order/pkg/dynamodb"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/paginator"
 )
@@ -25,11 +26,20 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 		return models.Order{}, err
 	}
 
+	// attribute_not_exists on the partition key makes the create a claim: the
+	// first writer of a code wins and any replay is refused. Without it a
+	// retried PutItem overwrites whatever is there, including a paid order.
 	_, err = r.db.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(r.tableName),
-		Item:      item,
+		TableName:           aws.String(r.tableName),
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 	})
 	if err != nil {
+		var cond *types.ConditionalCheckFailedException
+		if errors.As(err, &cond) {
+			r.l.Warnf(ctx, "order.repository.Create: code %s is already taken", opt.Code)
+			return models.Order{}, order.ErrOrderAlreadyExists
+		}
 		r.l.Errorf(ctx, "order.repository.Create.PutItem: %v", err)
 		return models.Order{}, err
 	}
