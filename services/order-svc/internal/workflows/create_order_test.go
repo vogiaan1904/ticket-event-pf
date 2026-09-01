@@ -1,11 +1,13 @@
 package workflows
 
 import (
+	"reflect"
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
-	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -36,6 +38,7 @@ func TestCreateOrder_ReserveFailsBeforeAnyOrderIsWritten(t *testing.T) {
 		Return(&models.Order{Code: "TB-TEST-0001"}, nil).Maybe()
 	env.OnActivity("CreateOrderItems", mock.Anything, mock.Anything, mock.Anything).
 		Return([]models.OrderItem{}, nil).Maybe()
+	env.OnActivity("DeleteOrderItems", mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("DeleteOrder", mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("ReleaseInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -78,9 +81,23 @@ func TestCreateOrder_DoesNotPreCheckAvailability(t *testing.T) {
 }
 
 // A payment failure arrives after the hold and both order writes, so all three
-// must be undone, newest first.
+// must be undone, newest first: items before the order, and the order before
+// the hold that was taken before either of them.
 func TestCreateOrder_PaymentFailureCompensatesInReverse(t *testing.T) {
 	env := newTestEnv(t)
+
+	// The workflow runs compensations on a disconnected context after its main
+	// path returns, so the call order is recorded under a lock rather than
+	// assumed to be visible without one.
+	var mu sync.Mutex
+	var order []string
+	record := func(name string) func(mock.Arguments) {
+		return func(mock.Arguments) {
+			mu.Lock()
+			defer mu.Unlock()
+			order = append(order, name)
+		}
+	}
 
 	env.OnActivity("ReserveInventory", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil).Once()
@@ -91,14 +108,26 @@ func TestCreateOrder_PaymentFailureCompensatesInReverse(t *testing.T) {
 	env.OnActivity("CreatePaymentIntent", mock.Anything, mock.Anything).
 		Return(nil, ErrPaymentFailed)
 
-	env.OnActivity("DeleteOrderItems", mock.Anything, mock.Anything).Return(nil).Once()
-	env.OnActivity("DeleteOrder", mock.Anything, mock.Anything).Return(nil).Once()
-	env.OnActivity("ReleaseInventory", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("DeleteOrderItems", mock.Anything, mock.Anything).
+		Run(record("DeleteOrderItems")).Return(nil).Once()
+	env.OnActivity("DeleteOrder", mock.Anything, mock.Anything).
+		Run(record("DeleteOrder")).Return(nil).Once()
+	env.OnActivity("ReleaseInventory", mock.Anything, mock.Anything).
+		Run(record("ReleaseInventory")).Return(nil).Once()
 
 	env.ExecuteWorkflow(CreateOrder, testCreateInput())
 
 	if env.GetWorkflowError() == nil {
 		t.Fatal("expected the payment failure to fail the workflow")
+	}
+
+	mu.Lock()
+	got := append([]string(nil), order...)
+	mu.Unlock()
+
+	want := []string{"DeleteOrderItems", "DeleteOrder", "ReleaseInventory"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("compensations ran in order %v, want %v", got, want)
 	}
 }
 
