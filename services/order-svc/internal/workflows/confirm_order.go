@@ -52,10 +52,13 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 		return err
 	}
 
-	// 4. Publish checkout completed event to free waitroom slot
+	// 4. Free the waiting room slot. The buyer already has their ticket, so a
+	//    failure here is not the order's failure: it costs one slot until the
+	//    waiting room's session TTL reclaims it. Returning the error would mark
+	//    a fulfilled purchase as a failed workflow and page someone for it.
 	if err := publishCheckoutCompleted(ctx, o.SessionID, o.UserID, o.EventID); err != nil {
-		logger.Warn("Failed to publish checkout completed event", "error", err, "sessionID", o.SessionID)
-		return err
+		logger.Warn("Order is complete but the waiting room was not notified; the slot will be reclaimed by its session TTL",
+			"error", err, "orderCode", o.Code, "sessionID", o.SessionID)
 	}
 
 	logger.Info("Order confirmed successfully", "orderCode", in.OrderCode)
