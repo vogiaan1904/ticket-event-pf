@@ -46,5 +46,5 @@ make cluster-down   # delete the cluster entirely
 | DynamoDB-local | dynamodb:8000 | orders table (PK/SK + GSI1 + GSI2) |
 | Temporal | temporal:7233 | Postgres visibility, no Elasticsearch |
 
-The app tier adds the eight services plus the `outbox-relay` and `payment-events`
+The app tier adds the eight services plus the `outbox-relay` and `payment-webhook`
 workloads that carry the payment event path.

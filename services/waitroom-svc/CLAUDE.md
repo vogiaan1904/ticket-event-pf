@@ -61,9 +61,9 @@ as stale drops the user. This is why `claimSlot` deliberately does **not** roll 
 session status back on failure: the old best-effort rollback discarded its own error, and
 both calls hit Redis, so the one failure mode that mattered took out both.
 
-### QUEUE_READY publishes are buffered, not dropped
+### `queue.ready` publishes are buffered, not dropped
 
-A failed `QUEUE_READY` publish must **not** fail the admission. By that point the
+A failed `queue.ready` publish must **not** fail the admission. By that point the
 session is already admitted and holds a slot, and reporting failure sends the caller
 down the `ErrSessionNotAdmittable` path — which would drop the user out of the position
 broadcast, the channel they actually receive their checkout token on. Instead the event

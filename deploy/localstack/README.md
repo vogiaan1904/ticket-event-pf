@@ -7,7 +7,7 @@ Runs the TicketBottle purchase flow on the **existing kind cluster** with only t
 **AWS-native pieces** moved to a host-side **LocalStack Pro**: order's datastore →
 **LocalStack DynamoDB**, and the payment async path → the real **Lambdas**
 (`payment-webhook-handler` via API Gateway, `outbox-processor` via EventBridge/manual
-invoke) instead of the Phase-0 `payment-events` adapter.
+invoke) instead of the in-cluster payment-events adapter.
 
 Delivered as a `values-localstack.yaml` overlay on the same Helm chart — no infra is
 duplicated, kind keeps running everything else.
