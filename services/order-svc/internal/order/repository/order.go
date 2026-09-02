@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -10,11 +12,28 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	pkgDynamo "github.com/vogiaan1904/ticketbottle-order/pkg/dynamodb"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/paginator"
 )
 
 var ErrOrderNotFound = errors.New("order not found")
+
+// purchaseSlotTTL garbage collects a claim nothing ever comes back for. It is
+// not the recovery path: a stranded claim is released when the create fails,
+// and the next request to find one naming an order that was never written
+// deletes it on the spot. This only stops an item nobody revisits from living
+// forever, and DynamoDB's TTL sweep can lag by hours, so it is set far beyond
+// any checkout window rather than tuned to one.
+const purchaseSlotTTL = 30 * 24 * time.Hour
+
+// isConditionalCheckFailed reports whether a DynamoDB write was refused by its
+// own ConditionExpression -- the shared shape every conditional write in this
+// package (order creation, purchase-slot claims) checks for.
+func isConditionalCheckFailed(err error) bool {
+	var cond *types.ConditionalCheckFailedException
+	return errors.As(err, &cond)
+}
 
 func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (models.Order, error) {
 	o := r.buildOrderModel(opt)
@@ -25,16 +44,139 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 		return models.Order{}, err
 	}
 
+	// attribute_not_exists on the partition key makes the create a claim: the
+	// first writer of a code wins and any replay is refused. Without it a
+	// retried PutItem overwrites whatever is there, including a paid order.
 	_, err = r.db.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(r.tableName),
-		Item:      item,
+		TableName:           aws.String(r.tableName),
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 	})
 	if err != nil {
+		if isConditionalCheckFailed(err) {
+			r.l.Warnf(ctx, "order.repository.Create: code %s is already taken", opt.Code)
+			return models.Order{}, order.ErrOrderAlreadyExists
+		}
 		r.l.Errorf(ctx, "order.repository.Create.PutItem: %v", err)
 		return models.Order{}, err
 	}
 
 	return o, nil
+}
+
+// ClaimPurchaseSlot reserves a buyer's right to one in-flight order, keyed by
+// dedupeKey. It returns ("", claimedAt, nil) when this caller won the claim,
+// and (winningOrderCode, claimedAt, order.ErrPurchaseSlotTaken) when one
+// already exists. claimedAt is when the winning claim was written, so a
+// caller that loses can tell a claim still within its create's window apart
+// from one old enough to be abandoned.
+//
+// This is a conditional write rather than a read followed by a create because
+// the case that matters is two requests arriving together: both would read
+// nothing, both would proceed, and one queue slot would produce two orders and
+// two inventory holds. Only the database can settle that.
+func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, time.Time, error) {
+	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
+	now := r.clock()
+	expiresAt := now.Add(purchaseSlotTTL).Unix()
+
+	_, err := r.db.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.tableName),
+		Item: map[string]types.AttributeValue{
+			"PK":                   &types.AttributeValueMemberS{Value: k},
+			"SK":                   &types.AttributeValueMemberS{Value: k},
+			"order_code":           &types.AttributeValueMemberS{Value: orderCode},
+			"claimed_at":           &types.AttributeValueMemberN{Value: strconv.FormatInt(now.Unix(), 10)},
+			pkgDynamo.TTLAttribute: &types.AttributeValueMemberN{Value: strconv.FormatInt(expiresAt, 10)},
+		},
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
+	})
+	if err == nil {
+		return "", now, nil
+	}
+	if !isConditionalCheckFailed(err) {
+		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.PutItem: %v", err)
+		return "", time.Time{}, err
+	}
+
+	// The loser reads the winner back so its caller can return that order and
+	// judge its age. The read is consistent because the write it is chasing
+	// landed microseconds ago, and an eventually-consistent read could still
+	// miss it.
+	res, gErr := r.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: k},
+			"SK": &types.AttributeValueMemberS{Value: k},
+		},
+		ConsistentRead: aws.Bool(true),
+	})
+	if gErr != nil {
+		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.GetItem: %v", gErr)
+		return "", time.Time{}, gErr
+	}
+
+	claimedAt := parseClaimedAt(res.Item)
+
+	winner, _ := res.Item["order_code"].(*types.AttributeValueMemberS)
+	if winner == nil {
+		return "", claimedAt, order.ErrPurchaseSlotTaken
+	}
+
+	return winner.Value, claimedAt, order.ErrPurchaseSlotTaken
+}
+
+// parseClaimedAt reads a claim's claimed_at attribute back into a time.Time.
+// A claim written before this attribute existed, or one whose value fails to
+// parse, comes back as the zero time -- which reads as arbitrarily old to any
+// age check against it, the safe side to fail on since it leads to a stranded
+// claim being cleared rather than a live one being kept forever.
+func parseClaimedAt(item map[string]types.AttributeValue) time.Time {
+	attr, ok := item["claimed_at"].(*types.AttributeValueMemberN)
+	if !ok {
+		return time.Time{}
+	}
+
+	sec, err := strconv.ParseInt(attr.Value, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return time.Unix(sec, 0)
+}
+
+// ReleasePurchaseSlot drops the claim on dedupeKey, but only while it still
+// names orderCode.
+//
+// The condition is what stops a release from undoing someone else's claim. A
+// stranded claim is released by whoever notices it, and by the time a late
+// release lands the slot may already have been taken by a fresh request; an
+// unconditional delete would remove that new claim and let two creates run at
+// once -- the very thing the claim exists to prevent. A refused delete means
+// the slot has already moved on, which is the outcome the caller wanted, so it
+// is not an error.
+func (r *implRepository) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
+	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
+
+	_, err := r.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: k},
+			"SK": &types.AttributeValueMemberS{Value: k},
+		},
+		ConditionExpression:       aws.String("order_code = :code"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{":code": &types.AttributeValueMemberS{Value: orderCode}},
+	})
+	if err != nil {
+		if isConditionalCheckFailed(err) {
+			r.l.Warnf(ctx, "order.repository.ReleasePurchaseSlot: slot %s is no longer held by %s", dedupeKey, orderCode)
+			return nil
+		}
+		r.l.Errorf(ctx, "order.repository.ReleasePurchaseSlot.DeleteItem: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 func (r *implRepository) GetByCode(ctx context.Context, code string) (models.Order, error) {

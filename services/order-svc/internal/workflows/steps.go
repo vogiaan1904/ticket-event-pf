@@ -3,39 +3,24 @@ package workflows
 import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/activities"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
+// validateOrder loads the order an event is about. The failure comes back as
+// it arrived: GetOrder already tags an order that genuinely does not exist, and
+// relabelling every failure as that one would hide an unreachable datastore
+// behind a claim the order was never written.
 func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 	var ord *models.Order
-	err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord)
-	if err != nil {
-		return nil, temporal.NewNonRetryableApplicationError(
-			"Failed to get order",
-			"ORDER_NOT_FOUND",
-			err,
-		)
+	if err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord); err != nil {
+		return nil, err
 	}
 
 	return ord, nil
-}
-
-func checkAvailability(ctx workflow.Context, in *CreateOrderWorkflowInput) (bool, error) {
-	chkItms := make([]*inventory.CheckAvailabilityItem, len(in.Items))
-	for i, itm := range in.Items {
-		chkItms[i] = &inventory.CheckAvailabilityItem{
-			TicketClassId: itm.TicketClassID,
-			Quantity:      itm.Quantity,
-		}
-	}
-
-	var available bool
-	err := workflow.ExecuteActivity(ctx, iActs.CheckAvailability, chkItms).Get(ctx, &available)
-	return available, err
 }
 
 func createOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*models.Order, error) {
@@ -111,6 +96,12 @@ func confirmInventory(ctx workflow.Context, code string) error {
 	return err
 }
 
+func releasePurchaseSlot(ctx workflow.Context, o *models.Order) error {
+	key := order.PurchaseSlotKey(o.SessionID, o.UserID, o.EventID)
+
+	return workflow.ExecuteActivity(ctx, oActs.ReleasePurchaseSlot, key, o.Code).Get(ctx, nil)
+}
+
 func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string) error {
 	if ssID == "" {
 		return nil
@@ -123,4 +114,14 @@ func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string
 			EventID:   eventID,
 		}).Get(ctx, nil)
 	return err
+}
+
+func publishRefundRequired(ctx workflow.Context, o *models.Order, reason string) error {
+	return workflow.ExecuteActivity(ctx, epActs.PublishRefundRequired,
+		activities.PublishRefundRequiredInput{
+			OrderCode: o.Code,
+			UserID:    o.UserID,
+			EventID:   o.EventID,
+			Reason:    reason,
+		}).Get(ctx, nil)
 }

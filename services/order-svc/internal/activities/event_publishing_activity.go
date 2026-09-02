@@ -36,3 +36,19 @@ func (a *EventPublishingActivities) PublishCheckoutCompleted(ctx context.Context
 
 	return a.Prod.PublishCheckoutCompleted(ctx, event)
 }
+
+type PublishRefundRequiredInput struct {
+	OrderCode string
+	UserID    string
+	EventID   string
+	Reason    string
+}
+
+func (a *EventPublishingActivities) PublishRefundRequired(ctx context.Context, in PublishRefundRequiredInput) error {
+	return a.Prod.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
+		OrderCode: in.OrderCode,
+		UserID:    in.UserID,
+		EventID:   in.EventID,
+		Reason:    in.Reason,
+	})
+}

@@ -44,14 +44,19 @@ func GetCreateOrderWorkflowID(oCode string) string {
 	return fmt.Sprintf("CreateOrder:%s", oCode)
 }
 
-// CreateOrder handles order creation with saga pattern
-// Workflow handles transactional saga:
-// 1. Check Availability - Verify sufficient inventory
-// 2. Create Order - Persist order record (saga begins)
-// 3. Create Order Items - Persist order items (saga tracked)
-// 4. Reserve Tickets - Hold inventory for PaymentTimeout + ReservationHoldGrace (saga tracked)
-// 5. Create Payment Intent - Generate payment URL
-// Compensation on failure: Release inventory -> Delete items -> Delete order
+// CreateOrder runs the purchase saga:
+// 1. Reserve tickets   - a timed hold, the only step that can be contended
+// 2. Create order      - the order record (saga begins)
+// 3. Create order items
+// 4. Create payment intent - returns the URL the buyer is sent to
+// Compensation on failure runs in reverse: delete items -> delete order ->
+// release the hold.
+//
+// The hold is taken first on purpose. It is the only step whose outcome is
+// decided by other buyers, so taking it first means a buyer who loses the race
+// costs two DynamoDB writes and two deletes less than one who is told after
+// the fact. Availability is not pre-checked: Reserve decides it under a row
+// lock, and an unlocked read beforehand is wrong precisely when it matters.
 func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrderWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting create order workflow", "orderCode", in.OrderCode)
@@ -63,20 +68,20 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 		if err != nil {
 			logger.Error("Workflow failed, running compensations", "error", err)
 			disconnectedCtx, _ := workflow.NewDisconnectedContext(ctx)
-			compensations.Compensate(disconnectedCtx, false)
+			compensations.Compensate(disconnectedCtx)
 		}
 	}()
 
 	ctx = workflow.WithActivityOptions(ctx, getCreateOrderActivityOptions())
 
-	// 1. Check availability
-	available, err := checkAvailability(ctx, in)
+	// 1. Reserve inventory. in.OrderCode is assigned before the workflow starts,
+	//    so the hold can be keyed on it without an order row existing yet.
+	expAt := util.TimeToISO8601Str(reservationExpiry(workflow.Now(ctx)))
+	err = reserveInventory(ctx, in.OrderCode, expAt, in.Items)
 	if err != nil {
 		return nil, err
 	}
-	if !available {
-		return nil, NewInsufficientInventoryError(ErrInsufficientInventory)
-	}
+	compensations.AddCompensation(iActs.ReleaseInventory, in.OrderCode)
 
 	// 2. Create order
 	o, err := createOrder(ctx, in)
@@ -93,15 +98,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 	}
 	compensations.AddCompensation(oActs.DeleteOrderItems, code)
 
-	// 4. Reserve inventory
-	expAt := util.TimeToISO8601Str(reservationExpiry(workflow.Now(ctx)))
-	err = reserveInventory(ctx, code, expAt, in.Items)
-	if err != nil {
-		return nil, err
-	}
-	compensations.AddCompensation(iActs.ReleaseInventory, code)
-
-	// 5. Create payment intent
+	// 4. Create payment intent
 	pmtResp, err := processPayment(ctx, in)
 	if err != nil {
 		return nil, err

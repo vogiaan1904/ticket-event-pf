@@ -30,7 +30,12 @@ func (s *implService) HandlePaymentCompleted(ctx context.Context, in order.Handl
 	err = wfRun.Get(ctx, nil)
 	if err != nil {
 		s.l.Errorf(ctx, "Confirm order workflow failed: %v", err)
-		return err
+
+		// The consumer has to know whether the event can be answered by
+		// another delivery. Only mapWorkflowError can tell it: the workflow's
+		// error arrives rebuilt from a failure proto, where the type string is
+		// all that is left of what happened.
+		return mapWorkflowError(err)
 	}
 
 	return nil

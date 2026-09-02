@@ -48,6 +48,12 @@ const (
 	OrderStatusCancelled     OrderStatus = "CANCELLED"
 	OrderStatusPaymentFailed OrderStatus = "PAYMENT_FAILED"
 	OrderStatusRefunded      OrderStatus = "REFUNDED"
+
+	// Payment succeeded but the order cannot be fulfilled -- the stock was
+	// resold before the confirmation arrived, or the order had already been
+	// cancelled. The buyer is owed money. Distinct from REFUNDED, which means
+	// the money has actually gone back.
+	OrderStatusRefundRequired OrderStatus = "REFUND_REQUIRED"
 )
 
 type PaymentMethod string

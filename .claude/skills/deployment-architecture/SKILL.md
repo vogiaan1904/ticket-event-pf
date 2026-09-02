@@ -16,7 +16,7 @@ One Helm chart, three targets. The **application topology never changes** — th
  kind                       k3s on one EC2             Amazon EKS
  $0, offline                ~$8/mo, stoppable          hourly, ephemeral
  local images               ECR images                 ECR images
- dynamodb-local pod         real DynamoDB              real DynamoDB
+ dynamodb pod               real DynamoDB              real DynamoDB
  NodePort 30000             NodePort + SSH tunnel      ALB ingress
  static dummy creds         EC2 instance profile       IRSA
 ```
