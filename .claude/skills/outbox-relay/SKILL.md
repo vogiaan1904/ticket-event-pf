@@ -5,7 +5,7 @@ description: Use when working on, extending, or debugging the payment outbox →
 
 # The payment outbox → Kafka relay
 
-This is how a completed payment reliably becomes a `PAYMENT_COMPLETED` Kafka event that Order can confirm. It is the reference implementation of the **transactional outbox** pattern in this repo. Study it here; the same shape applies to any "change DB state *and* tell the world" problem.
+This is how a completed payment reliably becomes a `payment.completed` Kafka event that Order can confirm. It is the reference implementation of the **transactional outbox** pattern in this repo. Study it here; the same shape applies to any "change DB state *and* tell the world" problem.
 
 ## File map
 
@@ -57,7 +57,7 @@ WHERE orderCode = ? AND status='PENDING' RETURNING …
 - The payment gRPC service only **writes** the outbox — editing it does not change publishing behavior.
 
 ## Debugging
-Order stuck / not confirming? Check, in order: outbox rows with `publishedAt IS NULL` piling up (relay not draining) → `kubectl -n ticketbottle logs deploy/outbox-relay` → Kafka UI (`localhost:8090`) for the `payment.*` topic → the order consumer. A single stuck event that exhausted retries lands in the SQS DLQ and trips the `OutboxFailedEvents` alarm.
+Order stuck / not confirming? Check, in order: outbox rows with `publishedAt IS NULL` piling up (relay not draining) → `kubectl -n ticketbottle logs deploy/outbox-relay` → the order consumer (`kubectl -n ticketbottle logs deploy/order-consumer`). A single stuck event that exhausted retries lands in the SQS DLQ and trips the `OutboxFailedEvents` alarm.
 
 ## Further study
 Chris Richardson, [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) and Polling Publisher vs Transaction Log Tailing — the latter (CDC / Debezium reading the WAL) is the one variant this repo deliberately did *not* use.

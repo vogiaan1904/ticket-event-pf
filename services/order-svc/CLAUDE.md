@@ -8,11 +8,11 @@ This is the **Order** service for TicketBottle V2 — the saga orchestrator. For
 
 gRPC service (port **50054**) that coordinates the distributed purchase transaction using **Temporal** workflows. It calls Event, Inventory, and Payment over gRPC and reacts to Kafka events. It ships as **two binaries**:
 - `cmd/api` — gRPC server + Temporal client (starts workflows).
-- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `PAYMENT_COMPLETED`.
+- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`.
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
-- `CreateOrder` — check availability → reserve inventory → create order → create payment intent; **auto-compensates** on any failure (release tickets → delete order items → delete order). Workflow state tracks how far it got so rollback is exact.
-- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `CHECKOUT_COMPLETED`.
+- `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
+- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`.
 
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). The MongoDB driver was removed — `internal/infra/mongo/` no longer exists, and there is no `legacy/mongodb` branch in this monorepo.
