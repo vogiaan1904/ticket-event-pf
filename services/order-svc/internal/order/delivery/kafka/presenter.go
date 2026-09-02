@@ -38,8 +38,9 @@ type CheckoutFailedEvent struct {
 // fulfilment cannot. Reason carries what blocked it so the consumer does not
 // have to re-derive it from logs.
 type RefundRequiredEvent struct {
-	OrderCode string `json:"orderCode"`
-	UserID    string `json:"userId"`
-	EventID   string `json:"eventId"`
+	OrderCode string `json:"order_code"`
+	UserID    string `json:"user_id"`
+	EventID   string `json:"event_id"`
 	Reason    string `json:"reason"`
+	Timestamp string `json:"timestamp"`
 }

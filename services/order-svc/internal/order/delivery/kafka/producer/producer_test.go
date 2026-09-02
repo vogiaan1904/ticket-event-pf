@@ -84,6 +84,14 @@ func TestPublishedCheckoutTimestampsAreRFC3339(t *testing.T) {
 				})
 			},
 		},
+		{
+			name: "refund required",
+			publish: func(p Producer, ctx context.Context) error {
+				return p.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
+					OrderCode: "TB-1", UserID: "u-1", EventID: "e-1", Reason: "stock is gone",
+				})
+			},
+		},
 	}
 
 	for _, tt := range tests {

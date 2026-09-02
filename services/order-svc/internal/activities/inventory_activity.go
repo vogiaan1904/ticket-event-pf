@@ -61,6 +61,18 @@ func (a *InventoryActivities) ConfirmInventory(ctx context.Context, orderCode st
 		OrderCode: orderCode,
 	})
 	if err != nil {
+		// A business rejection from inventory-svc (the hold already expired
+		// and the stock was resold, or the reservation is in a conflicting
+		// state) arrives as FailedPrecondition. That order is definitively
+		// unfulfillable, not a fault to retry, so it is tagged non-retryable
+		// and distinguishable from an infrastructure failure on the same call.
+		if status.Code(err) == codes.FailedPrecondition {
+			return temporal.NewNonRetryableApplicationError(
+				order.ErrInventoryCannotConfirm.Error(),
+				order.ErrTypeInventoryCannotConfirm,
+				err,
+			)
+		}
 		return err
 	}
 

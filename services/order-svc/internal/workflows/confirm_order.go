@@ -1,9 +1,12 @@
 package workflows
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -48,23 +51,47 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 
 	if o.Status != models.OrderStatusPending {
 		logger.Warn("Order already processed", "orderCode", in.OrderCode, "status", o.Status)
-		if o.Status == models.OrderStatusCompleted {
+
+		switch o.Status {
+		case models.OrderStatusCompleted:
 			return nil
+		case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout:
+			// The payment landed on an order that had already been
+			// cancelled, timed out or failed. The money is real; the order
+			// will not be fulfilled.
+			markForRefund(ctx, o, "payment settled on an order in status "+string(o.Status))
+		case models.OrderStatusRefundRequired, models.OrderStatusRefunded:
+			// A redelivered payment event. REFUND_REQUIRED already recorded
+			// the debt and REFUNDED already settled it, so marking again
+			// would overwrite a completed refund with one still owed --
+			// redelivery of either must be a pure no-op.
+		default:
+			// A status this switch does not recognise. Guessing would risk
+			// marking a healthy order for refund, or silently letting a real
+			// one go unmarked, so nothing is written and the event is simply
+			// refused.
+			logger.Error("Order is in an unrecognised status; refusing to guess whether it needs a refund",
+				"orderCode", o.Code, "status", o.Status)
 		}
-		// The payment landed on an order that had already been cancelled,
-		// timed out or failed. The money is real; the order will not be
-		// fulfilled.
-		markForRefund(ctx, o, "payment settled on an order in status "+string(o.Status))
+
 		return ErrOrderAlreadyProcessed
 	}
 
 	// 2. Confirm inventory
 	if err := confirmInventory(ctx, in.OrderCode); err != nil {
 		logger.Error("Failed to confirm inventory", "error", err)
-		// Inventory could not turn the hold into a sale -- typically the
-		// expiry worker released it and the stock was resold before the
-		// confirmation arrived.
-		markForRefund(ctx, o, "inventory could not be confirmed: "+err.Error())
+
+		var appErr *temporal.ApplicationError
+		if errors.As(err, &appErr) && appErr.Type() == order.ErrTypeInventoryCannotConfirm {
+			// Inventory could not turn the hold into a sale -- typically the
+			// expiry worker released it and the stock was resold before the
+			// confirmation arrived. Retrying cannot change that outcome.
+			markForRefund(ctx, o, "inventory could not be confirmed: "+err.Error())
+		}
+		// Any other failure is an infrastructure fault (unavailable, timed
+		// out) rather than a business rejection -- whether the order can
+		// still be fulfilled is unknown, so it is left PENDING for a retried
+		// payment event instead of marked for a refund it may not need.
 		return err
 	}
 

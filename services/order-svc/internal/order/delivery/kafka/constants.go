@@ -7,5 +7,5 @@ const (
 	TopicCheckoutCompleted = "checkout.completed"
 	TopicCheckoutFailed    = "checkout.failed"
 
-	TopicRefundRequired = "order-events"
+	TopicRefundRequired = "order.refund_required"
 )

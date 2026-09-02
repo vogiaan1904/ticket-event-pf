@@ -88,6 +88,7 @@ func (p *implProducer) PublishCheckoutFailed(ctx context.Context, event kafka.Ch
 }
 
 func (p implProducer) PublishRefundRequired(ctx context.Context, event kafka.RefundRequiredEvent) error {
+	event.Timestamp = util.TimeToISO8601Str(time.Now())
 	val, err := json.Marshal(event)
 	if err != nil {
 		p.l.Errorf(ctx, "order.delivery.kafka.producer.PublishRefundRequired: %v", err)
