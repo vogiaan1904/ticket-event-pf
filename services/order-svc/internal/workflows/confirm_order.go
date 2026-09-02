@@ -11,6 +11,23 @@ func GetConfirmOrderWorkflowID(oCode string) string {
 	return fmt.Sprintf("ConfirmOrder:%s", oCode)
 }
 
+// markForRefund records that a paid order cannot be fulfilled: it moves the
+// order to REFUND_REQUIRED and emits the event a refund process consumes.
+// Both are best-effort and their failures are logged rather than returned --
+// the caller is already failing the workflow, and losing the marking must not
+// also lose the reason.
+func markForRefund(ctx workflow.Context, o *models.Order, reason string) {
+	logger := workflow.GetLogger(ctx)
+	logger.Error("Order is paid but cannot be fulfilled", "orderCode", o.Code, "reason", reason)
+
+	if err := updateOrderStatus(ctx, o.Code, models.OrderStatusRefundRequired); err != nil {
+		logger.Error("Failed to mark the order for refund", "error", err, "orderCode", o.Code)
+	}
+	if err := publishRefundRequired(ctx, o, reason); err != nil {
+		logger.Error("Failed to publish the refund-required event", "error", err, "orderCode", o.Code)
+	}
+}
+
 type ConfirmOrderWorkflowInput struct {
 	OrderCode string
 	Status    models.OrderStatus
@@ -34,21 +51,25 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 		if o.Status == models.OrderStatusCompleted {
 			return nil
 		}
+		// The payment landed on an order that had already been cancelled,
+		// timed out or failed. The money is real; the order will not be
+		// fulfilled.
+		markForRefund(ctx, o, "payment settled on an order in status "+string(o.Status))
 		return ErrOrderAlreadyProcessed
 	}
 
 	// 2. Confirm inventory
 	if err := confirmInventory(ctx, in.OrderCode); err != nil {
 		logger.Error("Failed to confirm inventory", "error", err)
-		// This is a critical error - we need manual intervention
-		// TODO: Implement manual intervention task creation or alerting
+		// Inventory could not turn the hold into a sale -- typically the
+		// expiry worker released it and the stock was resold before the
+		// confirmation arrived.
+		markForRefund(ctx, o, "inventory could not be confirmed: "+err.Error())
 		return err
 	}
 
 	// 3. Update order status to COMPLETED
 	if err := updateOrderStatus(ctx, o.Code, models.OrderStatusCompleted); err != nil {
-		// This is a critical error - we need manual intervention
-		// TODO: Implement manual intervention task creation or alerting
 		return err
 	}
 

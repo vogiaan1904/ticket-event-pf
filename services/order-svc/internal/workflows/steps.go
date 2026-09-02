@@ -110,3 +110,13 @@ func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string
 		}).Get(ctx, nil)
 	return err
 }
+
+func publishRefundRequired(ctx workflow.Context, o *models.Order, reason string) error {
+	return workflow.ExecuteActivity(ctx, epActs.PublishRefundRequired,
+		activities.PublishRefundRequiredInput{
+			OrderCode: o.Code,
+			UserID:    o.UserID,
+			EventID:   o.EventID,
+			Reason:    reason,
+		}).Get(ctx, nil)
+}

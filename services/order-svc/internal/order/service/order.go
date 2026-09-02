@@ -388,7 +388,12 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 
 	switch o.Status {
 	case models.OrderStatusPending, models.OrderStatusCompleted:
-	case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout:
+	case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout,
+		models.OrderStatusRefundRequired, models.OrderStatusRefunded:
+		// The buyer holds no ticket in any of these states -- a refund owed
+		// or already paid is tracked independently of their ability to buy
+		// again, so blocking a new purchase here would only punish them for
+		// a failure on our side.
 		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, errPurchaseSlotReleased
 	default:

@@ -143,6 +143,8 @@ func TestClaimPurchaseSlot_ATerminalOrderReleasesTheSlotAndThisCreateTakesIt(t *
 		models.OrderStatusCancelled,
 		models.OrderStatusPaymentFailed,
 		models.OrderStatusTimeout,
+		models.OrderStatusRefundRequired,
+		models.OrderStatusRefunded,
 	} {
 		t.Run(string(status), func(t *testing.T) {
 			s, r := newSlotService(t)

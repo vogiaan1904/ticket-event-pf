@@ -58,3 +58,32 @@ func TestConfirmOrder_AlreadyCompletedIsANoOp(t *testing.T) {
 	}
 	env.AssertNotCalled(t, "ConfirmInventory", mock.Anything, mock.Anything)
 }
+
+// The payment succeeded and the stock is gone. The buyer is owed money, so the
+// order must stop claiming to be PENDING and the fact must leave the service
+// as an event -- not a log line and a TODO.
+func TestConfirmOrder_UnfulfillableOrderIsMarkedForRefund(t *testing.T) {
+	env := newTestEnv(t)
+
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{
+			Code: "TB-TEST-0002", Status: models.OrderStatusPending,
+			SessionID: "sess-2", UserID: "u2", EventID: "e2",
+		}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).
+		Return(errors.New("stock is gone"))
+	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).
+		Return(nil).Once()
+	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
+		OrderCode: "TB-TEST-0002", Status: models.OrderStatusCompleted,
+	})
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatal("workflow did not complete")
+	}
+	if env.GetWorkflowError() == nil {
+		t.Fatal("an unfulfillable paid order must still fail the workflow so it is visible")
+	}
+}

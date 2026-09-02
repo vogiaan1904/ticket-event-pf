@@ -33,3 +33,13 @@ type CheckoutFailedEvent struct {
 	EventID   string `json:"event_id"`
 	Timestamp string `json:"timestamp"`
 }
+
+// RefundRequiredEvent reports an order whose payment succeeded and whose
+// fulfilment cannot. Reason carries what blocked it so the consumer does not
+// have to re-derive it from logs.
+type RefundRequiredEvent struct {
+	OrderCode string `json:"orderCode"`
+	UserID    string `json:"userId"`
+	EventID   string `json:"eventId"`
+	Reason    string `json:"reason"`
+}
