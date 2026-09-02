@@ -61,4 +61,6 @@ const (
 	ErrTypeInsufficientInventory  = "InsufficientInventory"
 	ErrTypeOrderCodeCollision     = "OrderCodeCollision"
 	ErrTypeInventoryCannotConfirm = "InventoryCannotConfirm"
+	ErrTypeOrderAlreadyProcessed  = "OrderAlreadyProcessed"
+	ErrTypeOrderNotFound          = "OrderNotFound"
 )

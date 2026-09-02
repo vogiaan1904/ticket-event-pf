@@ -65,6 +65,10 @@ func mapWorkflowError(err error) error {
 		// code -- a code-generation bug, not a business outcome the buyer
 		// caused. ErrOrderCreationFailed already maps to codes.Internal.
 		return order.ErrOrderCreationFailed
+	case order.ErrTypeOrderAlreadyProcessed:
+		return order.ErrOrderAlreadyProcessed
+	case order.ErrTypeOrderNotFound:
+		return order.ErrOrderNotFound
 	default:
 		return err
 	}

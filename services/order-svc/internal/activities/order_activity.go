@@ -65,6 +65,11 @@ func (a *OrderActivities) CreateOrderItems(ctx context.Context, oCode string, it
 	return itms, nil
 }
 
+// GetOrder tags an order that does not exist as an outcome rather than a
+// fault. No number of attempts makes an order appear that was never written or
+// that a compensation rolled back, and whoever is driving the workflow has to
+// tell that apart from an unreachable datastore, which may well answer next
+// time.
 func (a *OrderActivities) GetOrder(ctx context.Context, code string) (*models.Order, error) {
 	o, err := a.Repo.GetOne(ctx, repo.GetOneOrderOption{
 		FilterOrder: order.FilterOrder{
@@ -72,6 +77,14 @@ func (a *OrderActivities) GetOrder(ctx context.Context, code string) (*models.Or
 		},
 	})
 	if err != nil {
+		if errors.Is(err, repo.ErrOrderNotFound) {
+			return nil, temporal.NewNonRetryableApplicationError(
+				order.ErrOrderNotFound.Error(),
+				order.ErrTypeOrderNotFound,
+				err,
+			)
+		}
+
 		return nil, err
 	}
 

@@ -7,19 +7,17 @@ import (
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
-	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
+// validateOrder loads the order an event is about. The failure comes back as
+// it arrived: GetOrder already tags an order that genuinely does not exist, and
+// relabelling every failure as that one would hide an unreachable datastore
+// behind a claim the order was never written.
 func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 	var ord *models.Order
-	err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord)
-	if err != nil {
-		return nil, temporal.NewNonRetryableApplicationError(
-			"Failed to get order",
-			"ORDER_NOT_FOUND",
-			err,
-		)
+	if err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord); err != nil {
+		return nil, err
 	}
 
 	return ord, nil

@@ -93,7 +93,7 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 				"orderCode", o.Code, "status", o.Status)
 		}
 
-		return ErrOrderAlreadyProcessed
+		return NewOrderAlreadyProcessedError()
 	}
 
 	// 2. Confirm inventory
