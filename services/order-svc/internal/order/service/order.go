@@ -34,6 +34,18 @@ const releaseSlotTimeout = 5 * time.Second
 // settling.
 const claimAttempts = 3
 
+// purchaseSlotSettleMargin is added on top of the configured create timeout
+// to size the window a claim naming an order that was never written is given
+// before it is treated as abandoned rather than a create still running. The
+// create timeout (ORDER_CREATE_TIMEOUT, config.CreateOrderTimeout, plumbed in
+// as implService.createTimeout) already bounds every step between the claim
+// being written and the order row being written -- the ticket-class lookup,
+// the workflow's start round trip, the reserve activity -- so the margin only
+// has to cover the slack around that deadline: the DynamoDB round trips on
+// either end, and clock skew between the process that wrote the claim and the
+// one reading it back.
+const purchaseSlotSettleMargin = 30 * time.Second
+
 // errPurchaseSlotReleased is internal to the claim loop: the slot was held by
 // an order that can no longer hold inventory or money, the claim has been
 // dropped, and this request should take it. It never reaches a caller.
@@ -168,11 +180,13 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	})
 	if err != nil {
 		s.l.Errorf(ctx, "internal.order.service.Create.invSvc.FindManyTicketClass: %v", err)
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, err
 	}
 
 	if tcResp == nil || tcResp.GetTicketClasses() == nil || len(tcResp.GetTicketClasses()) == 0 {
 		s.l.Errorf(ctx, "internal.order.service.Create: %v", in.EventID)
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, order.ErrTicketClassNotFound
 	}
 
@@ -230,26 +244,37 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
 
-		// The saga reserves inventory before it writes the order row, so a
-		// create that fails -- sold out, or a caller who gave up and had the
-		// saga compensated away underneath them -- can leave the slot claimed
-		// with no order behind it. Nothing would ever answer for that claim,
-		// and the buyer's next attempt would be refused on behalf of an order
-		// that does not exist. Sold out has to stay sold out.
-		s.releasePurchaseSlot(ctx, dedupeKey, code)
-
 		// Get only stops waiting: the saga runs server-side and would go on
 		// reserving inventory for a caller that has already given up. Cancel it
-		// so CreateOrder's deferred compensation releases the hold.
+		// so CreateOrder's deferred compensation releases the hold, before
+		// deciding whether the claim can be dropped.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			cancelCtx, cancelDone := context.WithTimeout(context.WithoutCancel(ctx), cancelWorkflowTimeout)
 			defer cancelDone()
 			if cErr := s.temporal.CancelWorkflow(cancelCtx, wfRun.GetID(), wfRun.GetRunID()); cErr != nil {
+				// Cancellation is best-effort, and Get returning does not mean
+				// the workflow stopped: it may complete on its own and write a
+				// live order after this. Releasing anyway would let a retry
+				// mint a second order and a second inventory hold behind that
+				// order's back, so the claim is left standing -- a slot held a
+				// little too long is the safer error than two orders on one.
 				s.l.Errorf(ctx, "failed to cancel abandoned create order workflow %s: %v", wfRun.GetID(), cErr)
+				return order.CreateOrderOutput{}, order.ErrRequestTimeout
 			}
+
+			// The saga reserves inventory before it writes the order row, and
+			// the cancel landed, so this workflow will not go on to write one.
+			// Its claim guards nothing and would refuse every retry on behalf
+			// of an order that will never exist.
+			s.releasePurchaseSlot(ctx, dedupeKey, code)
 			return order.CreateOrderOutput{}, order.ErrRequestTimeout
 		}
 
+		// The workflow ran to completion on its own -- not stopped early here
+		// -- and failed as a business outcome such as sold out, so it holds no
+		// inventory and wrote no order. Its claim would refuse every retry on
+		// behalf of a slot nothing is using anymore.
+		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 
@@ -270,7 +295,7 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 // this create unguarded and hand the slot to whoever asked next.
 func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code string, method models.PaymentMethod) (*order.CreateOrderOutput, error) {
 	for range claimAttempts {
-		heldBy, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
+		heldBy, claimedAt, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
 		if err == nil {
 			return nil, nil
 		}
@@ -279,7 +304,7 @@ func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code str
 			return nil, err
 		}
 
-		out, err := s.resumeExistingOrder(ctx, dedupeKey, heldBy, method)
+		out, err := s.resumeExistingOrder(ctx, dedupeKey, heldBy, claimedAt, method)
 		if err == nil {
 			return &out, nil
 		}
@@ -293,6 +318,15 @@ func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code str
 	// nothing is broken, so the buyer retries rather than being handed a fault.
 	s.l.Warnf(ctx, "internal.order.service.claimPurchaseSlot: slot %s changed hands %d times", dedupeKey, claimAttempts)
 	return nil, order.ErrPurchaseSlotUnsettled
+}
+
+// purchaseSlotSettleWindow is how old a claim naming no order has to be before
+// it is treated as abandoned rather than a create still in flight. It tracks
+// this service's own create timeout rather than a fixed literal because that
+// timeout is what bounds the window in the first place: widen it and a claim
+// that used to look abandoned might still be a live create.
+func (s *implService) purchaseSlotSettleWindow() time.Duration {
+	return s.createTimeout + purchaseSlotSettleMargin
 }
 
 // releasePurchaseSlot drops the buyer's claim after a create that produced no
@@ -321,14 +355,29 @@ func (s *implService) releasePurchaseSlot(ctx context.Context, dedupeKey, code s
 // inventory nor money, so its claim has no work left to do: it is released and
 // errPurchaseSlotReleased tells the caller to take the slot for itself.
 //
-// A claim naming an order that was never written is the same situation with a
-// worse cause -- a create died mid-flight -- and is cleared the same way, but
-// the buyer is asked to retry instead: whatever killed that attempt is more
-// recent than a status transition and is worth a fresh request to find out.
-func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code string, method models.PaymentMethod) (order.CreateOrderOutput, error) {
+// A claim naming an order that was never written is not automatically stale.
+// The saga reserves inventory and starts a workflow before the order row
+// exists, so a duplicate arriving inside that window would see the same
+// "not found" a genuinely abandoned claim shows -- the two are told apart by
+// the claim's age against purchaseSlotSettleWindow. Younger than the window,
+// the create may still be running: the claim is left standing and the caller
+// is told to retry, so a concurrent duplicate cannot destroy the in-flight
+// buyer's claim and win their slot out from under them. Older than it, no
+// create is still running -- it either finished (and this lookup would have
+// found its order) or died -- so the claim is genuinely abandoned and is
+// cleared the same way a terminal order's is, but the buyer is asked to
+// retry rather than handed the loop's own claim, since whatever killed that
+// attempt is worth a fresh request to find out.
+func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code string, claimedAt time.Time, method models.PaymentMethod) (order.CreateOrderOutput, error) {
 	o, err := s.repo.GetByCode(ctx, code)
 	if errors.Is(err, repo.ErrOrderNotFound) {
-		s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, which was never written", dedupeKey, code)
+		age := s.clock().Sub(claimedAt)
+		if age < s.purchaseSlotSettleWindow() {
+			s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, which has not been written yet (claim age %s)", dedupeKey, code, age)
+			return order.CreateOrderOutput{}, order.ErrPurchaseSlotUnsettled
+		}
+
+		s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, abandoned after %s with no order written", dedupeKey, code, age)
 		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, order.ErrPurchaseSlotUnsettled
 	}

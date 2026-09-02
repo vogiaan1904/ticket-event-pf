@@ -65,16 +65,20 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 }
 
 // ClaimPurchaseSlot reserves a buyer's right to one in-flight order, keyed by
-// dedupeKey. It returns ("", nil) when this caller won the claim, and
-// (winningOrderCode, order.ErrPurchaseSlotTaken) when one already exists.
+// dedupeKey. It returns ("", claimedAt, nil) when this caller won the claim,
+// and (winningOrderCode, claimedAt, order.ErrPurchaseSlotTaken) when one
+// already exists. claimedAt is when the winning claim was written, so a
+// caller that loses can tell a claim still within its create's window apart
+// from one old enough to be abandoned.
 //
 // This is a conditional write rather than a read followed by a create because
 // the case that matters is two requests arriving together: both would read
 // nothing, both would proceed, and one queue slot would produce two orders and
 // two inventory holds. Only the database can settle that.
-func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, error) {
+func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, time.Time, error) {
 	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
-	expiresAt := r.clock().Add(purchaseSlotTTL).Unix()
+	now := r.clock()
+	expiresAt := now.Add(purchaseSlotTTL).Unix()
 
 	_, err := r.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
@@ -82,21 +86,23 @@ func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, order
 			"PK":                   &types.AttributeValueMemberS{Value: k},
 			"SK":                   &types.AttributeValueMemberS{Value: k},
 			"order_code":           &types.AttributeValueMemberS{Value: orderCode},
+			"claimed_at":           &types.AttributeValueMemberN{Value: strconv.FormatInt(now.Unix(), 10)},
 			pkgDynamo.TTLAttribute: &types.AttributeValueMemberN{Value: strconv.FormatInt(expiresAt, 10)},
 		},
 		ConditionExpression: aws.String("attribute_not_exists(PK)"),
 	})
 	if err == nil {
-		return "", nil
+		return "", now, nil
 	}
 	if !isConditionalCheckFailed(err) {
 		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.PutItem: %v", err)
-		return "", err
+		return "", time.Time{}, err
 	}
 
-	// The loser reads the winner back so its caller can return that order. The
-	// read is consistent because the write it is chasing landed microseconds
-	// ago, and an eventually-consistent read could still miss it.
+	// The loser reads the winner back so its caller can return that order and
+	// judge its age. The read is consistent because the write it is chasing
+	// landed microseconds ago, and an eventually-consistent read could still
+	// miss it.
 	res, gErr := r.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
@@ -107,15 +113,36 @@ func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, order
 	})
 	if gErr != nil {
 		r.l.Errorf(ctx, "order.repository.ClaimPurchaseSlot.GetItem: %v", gErr)
-		return "", gErr
+		return "", time.Time{}, gErr
 	}
+
+	claimedAt := parseClaimedAt(res.Item)
 
 	winner, _ := res.Item["order_code"].(*types.AttributeValueMemberS)
 	if winner == nil {
-		return "", order.ErrPurchaseSlotTaken
+		return "", claimedAt, order.ErrPurchaseSlotTaken
 	}
 
-	return winner.Value, order.ErrPurchaseSlotTaken
+	return winner.Value, claimedAt, order.ErrPurchaseSlotTaken
+}
+
+// parseClaimedAt reads a claim's claimed_at attribute back into a time.Time.
+// A claim written before this attribute existed, or one whose value fails to
+// parse, comes back as the zero time -- which reads as arbitrarily old to any
+// age check against it, the safe side to fail on since it leads to a stranded
+// claim being cleared rather than a live one being kept forever.
+func parseClaimedAt(item map[string]types.AttributeValue) time.Time {
+	attr, ok := item["claimed_at"].(*types.AttributeValueMemberN)
+	if !ok {
+		return time.Time{}
+	}
+
+	sec, err := strconv.ParseInt(attr.Value, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return time.Unix(sec, 0)
 }
 
 // ReleasePurchaseSlot drops the claim on dedupeKey, but only while it still

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
@@ -13,6 +14,11 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 	"google.golang.org/grpc"
 )
+
+// testCreateTimeout stands in for ORDER_CREATE_TIMEOUT: the settle window a
+// claim naming no order is given before it is treated as abandoned is this
+// plus purchaseSlotSettleMargin.
+const testCreateTimeout = 30 * time.Second
 
 const testPaymentMethod = models.PaymentMethod("STRIPE")
 
@@ -35,9 +41,11 @@ func newSlotService(t *testing.T) (*implService, repo.Repository) {
 	r := repo.New(l, dynamotest.NewClient(t), dynamotest.TableName)
 
 	return &implService{
-		l:      l,
-		repo:   r,
-		pmtSvc: stubPaymentClient{url: "https://pay.test/checkout"},
+		l:             l,
+		repo:          r,
+		pmtSvc:        stubPaymentClient{url: "https://pay.test/checkout"},
+		createTimeout: testCreateTimeout,
+		clock:         time.Now,
 	}, r
 }
 
@@ -53,29 +61,76 @@ func seedOrder(t *testing.T, r repo.Repository, code string, status models.Order
 	}
 }
 
-// A create that dies before writing its order leaves the slot claimed for an
-// order that does not exist. The buyer's next attempt must not be refused on
-// behalf of it: the stale claim is dropped and the buyer is told to retry --
-// never that their order was not found, which is not a thing they can act on.
-func TestClaimPurchaseSlot_AClaimNamingNoOrderIsClearedAndTheBuyerRetries(t *testing.T) {
+// A claim naming an order that does not exist is not proof the create behind
+// it died: the saga reserves inventory and starts a workflow before the order
+// row is written, so a duplicate arriving inside that window sees exactly the
+// same "not found" a genuinely abandoned claim would. Clearing it on sight
+// would destroy the in-flight buyer's claim and hand their slot to this
+// duplicate -- two orders, two inventory holds, from one slot. Within the
+// settle window the claim must be left standing and the duplicate told to
+// retry instead.
+func TestClaimPurchaseSlot_AYoungOrphanClaimIsLeftStandingForTheInFlightCreate(t *testing.T) {
 	s, r := newSlotService(t)
 	ctx := context.Background()
 
-	if _, err := r.ClaimPurchaseSlot(ctx, "sess-orphan", "TB-GHOST-0001"); err != nil {
+	if _, _, err := r.ClaimPurchaseSlot(ctx, "sess-inflight", "TB-GHOST-0001"); err != nil {
 		t.Fatalf("seed claim: %v", err)
 	}
 
-	out, err := s.claimPurchaseSlot(ctx, "sess-orphan", "TB-NEW-0002", testPaymentMethod)
+	out, err := s.claimPurchaseSlot(ctx, "sess-inflight", "TB-DUPLICATE-0002", testPaymentMethod)
 	if !errors.Is(err, order.ErrPurchaseSlotUnsettled) {
-		t.Fatalf("claim over an orphan returned (%v, %v), want ErrPurchaseSlotUnsettled", out, err)
+		t.Fatalf("duplicate claim inside the settle window returned (%v, %v), want ErrPurchaseSlotUnsettled", out, err)
 	}
 	if errors.Is(err, repo.ErrOrderNotFound) {
-		t.Fatal("claim over an orphan surfaced ErrOrderNotFound to the buyer")
+		t.Fatal("duplicate claim inside the settle window surfaced ErrOrderNotFound to the buyer")
 	}
 
-	existing, err := r.ClaimPurchaseSlot(ctx, "sess-orphan", "TB-RETRY-0003")
+	held, _, err := r.ClaimPurchaseSlot(ctx, "sess-inflight", "TB-INTRUDER-0003")
+	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
+		t.Fatal("a fresh orphan claim was cleared before its create could finish")
+	}
+	if held != "TB-GHOST-0001" {
+		t.Fatalf("slot is held by %q, want the in-flight create's own claim TB-GHOST-0001", held)
+	}
+}
+
+// Past the settle window, no create is still running behind an orphaned
+// claim: it either finished -- and this lookup would have found its order --
+// or it died. The claim is genuinely abandoned, so it is cleared and the
+// buyer is told to retry into the now-free slot.
+func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *testing.T) {
+	l := logger.InitializeTestZapLogger()
+	db := dynamotest.NewClient(t)
+
+	// A dedicated repo whose clock is pinned to well before the settle window
+	// writes the claim, so its age does not depend on how fast the test runs.
+	abandonedAt := time.Now().Add(-2 * time.Minute)
+	staleRepo := repo.NewWithClock(l, db, dynamotest.TableName, func() time.Time { return abandonedAt })
+	ctx := context.Background()
+
+	if _, _, err := staleRepo.ClaimPurchaseSlot(ctx, "sess-abandoned", "TB-GHOST-0001"); err != nil {
+		t.Fatalf("seed claim: %v", err)
+	}
+
+	s := &implService{
+		l:             l,
+		repo:          repo.New(l, db, dynamotest.TableName),
+		pmtSvc:        stubPaymentClient{url: "https://pay.test/checkout"},
+		createTimeout: testCreateTimeout,
+		clock:         time.Now,
+	}
+
+	out, err := s.claimPurchaseSlot(ctx, "sess-abandoned", "TB-RETRY-0002", testPaymentMethod)
+	if !errors.Is(err, order.ErrPurchaseSlotUnsettled) {
+		t.Fatalf("claim over an abandoned orphan returned (%v, %v), want ErrPurchaseSlotUnsettled", out, err)
+	}
+	if errors.Is(err, repo.ErrOrderNotFound) {
+		t.Fatal("claim over an abandoned orphan surfaced ErrOrderNotFound to the buyer")
+	}
+
+	existing, _, err := staleRepo.ClaimPurchaseSlot(ctx, "sess-abandoned", "TB-RETRY-0003")
 	if err != nil {
-		t.Fatalf("slot is still held by %q after the orphan was found: %v", existing, err)
+		t.Fatalf("slot is still held by %q after its settle window passed: %v", existing, err)
 	}
 }
 
@@ -95,7 +150,7 @@ func TestClaimPurchaseSlot_ATerminalOrderReleasesTheSlotAndThisCreateTakesIt(t *
 
 			dedupeKey := "sess-" + string(status)
 			seedOrder(t, r, "TB-DEAD-0001", status)
-			if _, err := r.ClaimPurchaseSlot(ctx, dedupeKey, "TB-DEAD-0001"); err != nil {
+			if _, _, err := r.ClaimPurchaseSlot(ctx, dedupeKey, "TB-DEAD-0001"); err != nil {
 				t.Fatalf("seed claim: %v", err)
 			}
 
@@ -107,7 +162,7 @@ func TestClaimPurchaseSlot_ATerminalOrderReleasesTheSlotAndThisCreateTakesIt(t *
 				t.Fatalf("claim over a %s order returned an order to resume: %+v", status, out)
 			}
 
-			held, err := r.ClaimPurchaseSlot(ctx, dedupeKey, "TB-INTRUDER-0003")
+			held, _, err := r.ClaimPurchaseSlot(ctx, dedupeKey, "TB-INTRUDER-0003")
 			if !errors.Is(err, order.ErrPurchaseSlotTaken) {
 				t.Fatalf("slot was left free after a %s order released it", status)
 			}
@@ -125,7 +180,7 @@ func TestClaimPurchaseSlot_ACompletedOrderKeepsTheSlot(t *testing.T) {
 	ctx := context.Background()
 
 	seedOrder(t, r, "TB-DONE-0001", models.OrderStatusCompleted)
-	if _, err := r.ClaimPurchaseSlot(ctx, "sess-done", "TB-DONE-0001"); err != nil {
+	if _, _, err := r.ClaimPurchaseSlot(ctx, "sess-done", "TB-DONE-0001"); err != nil {
 		t.Fatalf("seed claim: %v", err)
 	}
 
@@ -143,7 +198,7 @@ func TestClaimPurchaseSlot_ACompletedOrderKeepsTheSlot(t *testing.T) {
 		t.Fatalf("resumed order has payment url %q", out.PaymentUrl)
 	}
 
-	held, err := r.ClaimPurchaseSlot(ctx, "sess-done", "TB-INTRUDER-0003")
+	held, _, err := r.ClaimPurchaseSlot(ctx, "sess-done", "TB-INTRUDER-0003")
 	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
 		t.Fatal("a completed order gave up its slot")
 	}
@@ -159,7 +214,7 @@ func TestClaimPurchaseSlot_APendingOrderIsResumed(t *testing.T) {
 	ctx := context.Background()
 
 	seedOrder(t, r, "TB-LIVE-0001", models.OrderStatusPending)
-	if _, err := r.ClaimPurchaseSlot(ctx, "sess-live", "TB-LIVE-0001"); err != nil {
+	if _, _, err := r.ClaimPurchaseSlot(ctx, "sess-live", "TB-LIVE-0001"); err != nil {
 		t.Fatalf("seed claim: %v", err)
 	}
 

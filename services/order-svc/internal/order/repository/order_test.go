@@ -43,7 +43,7 @@ func TestClaimPurchaseSlot_SecondCallerLosesAndLearnsTheWinner(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	existing, err := repo.ClaimPurchaseSlot(ctx, "sess-42", "TB-WIN-0001")
+	existing, _, err := repo.ClaimPurchaseSlot(ctx, "sess-42", "TB-WIN-0001")
 	if err != nil {
 		t.Fatalf("first claim: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestClaimPurchaseSlot_SecondCallerLosesAndLearnsTheWinner(t *testing.T) {
 		t.Fatalf("first claim reported an existing order %q", existing)
 	}
 
-	existing, err = repo.ClaimPurchaseSlot(ctx, "sess-42", "TB-LOSE-0002")
+	existing, _, err = repo.ClaimPurchaseSlot(ctx, "sess-42", "TB-LOSE-0002")
 	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
 		t.Fatalf("second claim returned %v, want ErrPurchaseSlotTaken", err)
 	}
@@ -84,7 +84,7 @@ func TestClaimPurchaseSlot_ConcurrentClaimsLeaveExactlyOneWinner(t *testing.T) {
 		code := fmt.Sprintf("TB-RACE-%04d", i)
 		wg.Go(func() {
 			<-start
-			existing, err := repo.ClaimPurchaseSlot(ctx, "sess-race", code)
+			existing, _, err := repo.ClaimPurchaseSlot(ctx, "sess-race", code)
 			outcomes <- outcome{code: code, existing: existing, err: err}
 		})
 	}
@@ -132,7 +132,7 @@ func TestReleasePurchaseSlot_FreesTheSlotForTheNextClaim(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-FIRST-0001"); err != nil {
+	if _, _, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-FIRST-0001"); err != nil {
 		t.Fatalf("first claim: %v", err)
 	}
 
@@ -140,7 +140,7 @@ func TestReleasePurchaseSlot_FreesTheSlotForTheNextClaim(t *testing.T) {
 		t.Fatalf("release: %v", err)
 	}
 
-	existing, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-SECOND-0002")
+	existing, _, err := repo.ClaimPurchaseSlot(ctx, "sess-rel", "TB-SECOND-0002")
 	if err != nil {
 		t.Fatalf("claim after release: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestReleasePurchaseSlot_LeavesAClaimTakenBySomeoneElseStanding(t *testing.T
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-CURRENT-0002"); err != nil {
+	if _, _, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-CURRENT-0002"); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
 
@@ -164,7 +164,7 @@ func TestReleasePurchaseSlot_LeavesAClaimTakenBySomeoneElseStanding(t *testing.T
 		t.Fatalf("stale release: %v", err)
 	}
 
-	existing, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-INTRUDER-0003")
+	existing, _, err := repo.ClaimPurchaseSlot(ctx, "sess-late", "TB-INTRUDER-0003")
 	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
 		t.Fatalf("claim after stale release returned %v, want ErrPurchaseSlotTaken", err)
 	}
@@ -179,7 +179,7 @@ func TestClaimPurchaseSlot_WritesATTLBeyondTheCheckoutWindow(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
 
-	if _, err := repo.ClaimPurchaseSlot(ctx, "sess-ttl", "TB-TTL-0001"); err != nil {
+	if _, _, err := repo.ClaimPurchaseSlot(ctx, "sess-ttl", "TB-TTL-0001"); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
 
@@ -213,5 +213,35 @@ func TestClaimPurchaseSlot_WritesATTLBeyondTheCheckoutWindow(t *testing.T) {
 	floor := time.Now().Add(24 * time.Hour)
 	if !time.Unix(expiresAt, 0).After(floor) {
 		t.Fatalf("claim expires at %v, which is not beyond the checkout window ending %v", time.Unix(expiresAt, 0), floor)
+	}
+}
+
+// A claim records when it was written, not just who holds it: the service
+// tells an in-flight create apart from an abandoned one by this claim's age,
+// and it can only do that if the write puts it there.
+func TestClaimPurchaseSlot_ReportsWhenTheClaimWasWritten(t *testing.T) {
+	repo := newTestRepo(t)
+	ctx := context.Background()
+
+	before := time.Now()
+	_, claimedAt, err := repo.ClaimPurchaseSlot(ctx, "sess-age", "TB-AGE-0001")
+	if err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	after := time.Now()
+
+	if claimedAt.Before(before.Add(-time.Second)) || claimedAt.After(after.Add(time.Second)) {
+		t.Fatalf("claimed_at %v is not within the claim's own call window [%v, %v]", claimedAt, before, after)
+	}
+
+	// The loser reads the same claimed_at back, not just the winner. It comes
+	// off a Number attribute storing whole seconds, so the comparison allows
+	// for the sub-second truncation a round trip through DynamoDB costs.
+	_, lostClaimedAt, err := repo.ClaimPurchaseSlot(ctx, "sess-age", "TB-AGE-0002")
+	if !errors.Is(err, order.ErrPurchaseSlotTaken) {
+		t.Fatalf("second claim returned %v, want ErrPurchaseSlotTaken", err)
+	}
+	if diff := claimedAt.Sub(lostClaimedAt); diff < 0 || diff >= time.Second {
+		t.Fatalf("loser was told claimed_at %v, want within a second of the winner's %v", lostClaimedAt, claimedAt)
 	}
 }
