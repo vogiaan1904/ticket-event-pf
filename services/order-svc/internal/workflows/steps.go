@@ -3,6 +3,7 @@ package workflows
 import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/activities"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
@@ -95,6 +96,12 @@ func processPayment(ctx workflow.Context, in *CreateOrderWorkflowInput) (*paymen
 func confirmInventory(ctx workflow.Context, code string) error {
 	err := workflow.ExecuteActivity(ctx, iActs.ConfirmInventory, code).Get(ctx, nil)
 	return err
+}
+
+func releasePurchaseSlot(ctx workflow.Context, o *models.Order) error {
+	key := order.PurchaseSlotKey(o.SessionID, o.UserID, o.EventID)
+
+	return workflow.ExecuteActivity(ctx, oActs.ReleasePurchaseSlot, key, o.Code).Get(ctx, nil)
 }
 
 func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string) error {

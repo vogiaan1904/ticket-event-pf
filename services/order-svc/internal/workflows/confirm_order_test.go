@@ -26,6 +26,7 @@ func TestConfirmOrder_PublishFailureDoesNotFailTheOrder(t *testing.T) {
 		}, nil).Once()
 	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity("PublishCheckoutCompleted", mock.Anything, mock.Anything).
 		Return(errors.New("broker unavailable"))
 
@@ -52,6 +53,7 @@ func TestConfirmOrder_AlreadyCompletedIsANoOp(t *testing.T) {
 	// called runs the real zero-value struct and panics instead of failing
 	// the AssertNotCalled below with a readable message.
 	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
 		OrderCode: "TB-TEST-0001", Status: models.OrderStatusCompleted,
@@ -61,6 +63,7 @@ func TestConfirmOrder_AlreadyCompletedIsANoOp(t *testing.T) {
 		t.Fatalf("a redelivered payment event failed: %v", err)
 	}
 	requireNotCalled(t, env, "ConfirmInventory", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // The payment succeeded and the stock is gone. The buyer is owed money, so the
@@ -81,6 +84,8 @@ func TestConfirmOrder_UnfulfillableOrderIsMarkedForRefund(t *testing.T) {
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).
 		Return(nil).Once()
 	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, "sess-2", "TB-TEST-0002").
+		Return(nil).Once()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
 		OrderCode: "TB-TEST-0002", Status: models.OrderStatusCompleted,
@@ -111,6 +116,7 @@ func TestConfirmOrder_InventoryInfrastructureFailureIsNotMarkedForRefund(t *test
 		Return(status.Error(codes.Unavailable, "inventory-svc unreachable"))
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
 		OrderCode: "TB-TEST-0006", Status: models.OrderStatusCompleted,
@@ -124,6 +130,7 @@ func TestConfirmOrder_InventoryInfrastructureFailureIsNotMarkedForRefund(t *test
 	}
 	requireNotCalled(t, env, "UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "PublishRefundRequired", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 }
 
 // A payment event lands on an order already cancelled or timed out. The money
@@ -141,6 +148,8 @@ func TestConfirmOrder_PaymentOnATerminalOrderIsMarkedForRefund(t *testing.T) {
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).
 		Return(nil).Once()
 	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, "user#u7:event#e7", "TB-TEST-0007").
+		Return(nil).Once()
 	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
@@ -166,6 +175,7 @@ func TestConfirmOrder_RedeliveredPaymentOnRefundRequiredOrderIsANoOp(t *testing.
 		Return(&models.Order{Code: "TB-TEST-0008", Status: models.OrderStatusRefundRequired}, nil).Once()
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
@@ -180,6 +190,7 @@ func TestConfirmOrder_RedeliveredPaymentOnRefundRequiredOrderIsANoOp(t *testing.
 	}
 	requireNotCalled(t, env, "UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "PublishRefundRequired", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "ConfirmInventory", mock.Anything, mock.Anything)
 }
 
@@ -193,6 +204,7 @@ func TestConfirmOrder_RedeliveredPaymentOnRefundedOrderIsANoOp(t *testing.T) {
 		Return(&models.Order{Code: "TB-TEST-0009", Status: models.OrderStatusRefunded}, nil).Once()
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
@@ -207,5 +219,80 @@ func TestConfirmOrder_RedeliveredPaymentOnRefundedOrderIsANoOp(t *testing.T) {
 	}
 	requireNotCalled(t, env, "UpdateOrderStatus", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "PublishRefundRequired", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "ConfirmInventory", mock.Anything, mock.Anything)
+}
+
+// The purchase slot admits one purchase at a time, and a completed purchase is
+// over. Leaving the claim standing would keep it naming a COMPLETED order, and
+// for an event with no waiting room the key is the buyer and the event -- the
+// same string next week -- so the buyer would be handed that finished order and
+// its dead payment URL instead of a new checkout, with no way back.
+func TestConfirmOrder_CompletionGivesThePurchaseSlotBack(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		sessionID string
+		wantKey   string
+	}{
+		{name: "waiting room", sessionID: "sess-10", wantKey: "sess-10"},
+		{name: "no waiting room", sessionID: "", wantKey: "user#u10:event#e10"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+
+			env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+				Return(&models.Order{
+					Code: "TB-TEST-0010", Status: models.OrderStatusPending,
+					SessionID: tc.sessionID, UserID: "u10", EventID: "e10",
+				}, nil).Once()
+			env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Once()
+			env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusCompleted).
+				Return(nil).Once()
+			env.OnActivity("ReleasePurchaseSlot", mock.Anything, tc.wantKey, "TB-TEST-0010").
+				Return(nil).Once()
+			env.OnActivity("PublishCheckoutCompleted", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+			env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
+				OrderCode: "TB-TEST-0010", Status: models.OrderStatusCompleted,
+			})
+
+			if !env.IsWorkflowCompleted() {
+				t.Fatal("workflow did not complete")
+			}
+			if err := env.GetWorkflowError(); err != nil {
+				t.Fatalf("a completed purchase failed: %v", err)
+			}
+		})
+	}
+}
+
+// The slot is released for the buyer's benefit, not the order's: a release that
+// fails costs one held slot until its TTL, while failing the workflow over it
+// would report a purchase the buyer has already paid for and received as a
+// failed one, and send the payment event round again.
+func TestConfirmOrder_AFailedSlotReleaseDoesNotFailTheOrder(t *testing.T) {
+	env := newTestEnv(t)
+
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{
+			Code: "TB-TEST-0011", Status: models.OrderStatusPending,
+			UserID: "u11", EventID: "e11",
+		}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusCompleted).
+		Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).
+		Return(errors.New("dynamodb unavailable"))
+	env.OnActivity("PublishCheckoutCompleted", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{
+		OrderCode: "TB-TEST-0011", Status: models.OrderStatusCompleted,
+	})
+
+	if !env.IsWorkflowCompleted() {
+		t.Fatal("workflow did not complete")
+	}
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("a failed slot release failed the order: %v", err)
+	}
 }

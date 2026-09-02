@@ -89,6 +89,14 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 	return nil
 }
 
+// ReleasePurchaseSlot gives a buyer's purchase slot back once their purchase
+// has an outcome. The repository refuses to delete a claim that has since moved
+// on to another order, so a late release cannot take a live claim away from a
+// create that has already started behind it.
+func (a *OrderActivities) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
+	return a.Repo.ReleasePurchaseSlot(ctx, dedupeKey, orderCode)
+}
+
 func (a *OrderActivities) DeleteOrder(ctx context.Context, code string) error {
 	err := a.Repo.Delete(ctx, code)
 	if err != nil {

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -146,15 +145,9 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		ssID = claim.SessionID
 	}
 
-	// One in-flight order per buyer. With a waiting room the slot is the
-	// session, because that is what admission handed out; without one it is the
-	// buyer and the event, so an event that skips the queue is not left with no
-	// suppression at all -- which is what happened when this check lived inside
-	// the AllowWaitRoom branch.
-	dedupeKey := ssID
-	if dedupeKey == "" {
-		dedupeKey = fmt.Sprintf("user#%s:event#%s", in.UserID, in.EventID)
-	}
+	// One in-flight order per buyer. The same derivation runs in the workflow
+	// when the purchase ends, which is what gives the slot back.
+	dedupeKey := order.PurchaseSlotKey(ssID, in.UserID, in.EventID)
 
 	existing, err := s.claimPurchaseSlot(ctx, dedupeKey, code, in.PaymentMethod)
 	if err != nil {

@@ -29,6 +29,25 @@ func markForRefund(ctx workflow.Context, o *models.Order, reason string) {
 	if err := publishRefundRequired(ctx, o, reason); err != nil {
 		logger.Error("Failed to publish the refund-required event", "error", err, "orderCode", o.Code)
 	}
+	freePurchaseSlot(ctx, o)
+}
+
+// freePurchaseSlot ends the buyer's claim on their one in-flight purchase. The
+// claim is taken before the order exists and is what a duplicate create is
+// answered with, so it has to be given back the moment the purchase has an
+// outcome. Without that, an event with no waiting room keys the slot on the
+// buyer and the event -- stable for that buyer's lifetime -- and every later
+// purchase of the same event is answered with the finished order and its dead
+// payment URL instead of a new checkout.
+//
+// A failure is logged rather than returned: the outcome it follows is already
+// recorded, and failing the workflow over the claim would report a purchase
+// that actually landed as a failed one. The claim's TTL is the backstop.
+func freePurchaseSlot(ctx workflow.Context, o *models.Order) {
+	if err := releasePurchaseSlot(ctx, o); err != nil {
+		workflow.GetLogger(ctx).Error("Failed to release the buyer's purchase slot; it stays held until its TTL expires",
+			"error", err, "orderCode", o.Code)
+	}
 }
 
 type ConfirmOrderWorkflowInput struct {
@@ -100,7 +119,11 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 		return err
 	}
 
-	// 4. Free the waiting room slot. The buyer already has their ticket, so a
+	// 4. Give the buyer's purchase slot back. The purchase is over, so the
+	//    claim that suppressed a duplicate create has nothing left to guard.
+	freePurchaseSlot(ctx, o)
+
+	// 5. Free the waiting room slot. The buyer already has their ticket, so a
 	//    failure here is not the order's failure: it costs one slot until the
 	//    waiting room's session TTL reclaims it. Returning the error would mark
 	//    a fulfilled purchase as a failed workflow and page someone for it.
