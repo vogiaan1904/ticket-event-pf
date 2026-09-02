@@ -10,14 +10,15 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/internal/testutil/dynamotest"
+	"github.com/vogiaan1904/ticketbottle-order/internal/workflows"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 	"google.golang.org/grpc"
 )
 
-// testCreateTimeout stands in for ORDER_CREATE_TIMEOUT: the settle window a
-// claim naming no order is given before it is treated as abandoned is this
-// plus purchaseSlotSettleMargin.
+// testCreateTimeout stands in for ORDER_CREATE_TIMEOUT. It is only the
+// caller's own leg of the settle window -- purchaseSlotSettleWindow adds the
+// workflow's server-side budget on top of it.
 const testCreateTimeout = 30 * time.Second
 
 const testPaymentMethod = models.PaymentMethod("STRIPE")
@@ -101,16 +102,7 @@ func TestClaimPurchaseSlot_AYoungOrphanClaimIsLeftStandingForTheInFlightCreate(t
 func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *testing.T) {
 	l := logger.InitializeTestZapLogger()
 	db := dynamotest.NewClient(t)
-
-	// A dedicated repo whose clock is pinned to well before the settle window
-	// writes the claim, so its age does not depend on how fast the test runs.
-	abandonedAt := time.Now().Add(-2 * time.Minute)
-	staleRepo := repo.NewWithClock(l, db, dynamotest.TableName, func() time.Time { return abandonedAt })
 	ctx := context.Background()
-
-	if _, _, err := staleRepo.ClaimPurchaseSlot(ctx, "sess-abandoned", "TB-GHOST-0001"); err != nil {
-		t.Fatalf("seed claim: %v", err)
-	}
 
 	s := &implService{
 		l:             l,
@@ -118,6 +110,17 @@ func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *t
 		pmtSvc:        stubPaymentClient{url: "https://pay.test/checkout"},
 		createTimeout: testCreateTimeout,
 		clock:         time.Now,
+	}
+
+	// A dedicated repo whose clock is pinned to well past the settle window
+	// writes the claim, so its age does not depend on how fast the test runs
+	// and follows the window rather than a literal that would go stale the
+	// moment the create's budget changes.
+	abandonedAt := time.Now().Add(-2 * s.purchaseSlotSettleWindow())
+	staleRepo := repo.NewWithClock(l, db, dynamotest.TableName, func() time.Time { return abandonedAt })
+
+	if _, _, err := staleRepo.ClaimPurchaseSlot(ctx, "sess-abandoned", "TB-GHOST-0001"); err != nil {
+		t.Fatalf("seed claim: %v", err)
 	}
 
 	out, err := s.claimPurchaseSlot(ctx, "sess-abandoned", "TB-RETRY-0002", testPaymentMethod)
@@ -239,5 +242,21 @@ func TestClaimPurchaseSlot_AFreeSlotIsWonOutright(t *testing.T) {
 	}
 	if out != nil {
 		t.Fatalf("claim a free slot returned an order to resume: %+v", out)
+	}
+}
+
+// The window that tells an abandoned claim from a create still running has to
+// outlive the create, and the create is not bounded by the caller's deadline:
+// wfRun.Get returning does not stop the workflow, which carries on reserving
+// inventory and writing the order row on Temporal's own retry budget. A window
+// sized on the caller's timeout alone judges a live workflow dead, hands its
+// slot to the buyer's retry, and lets one slot produce two orders and two
+// inventory holds.
+func TestPurchaseSlotSettleWindow_OutlivesACreateStillRunningServerSide(t *testing.T) {
+	s := &implService{createTimeout: testCreateTimeout}
+
+	budget := workflows.CreateOrderSlotBudget()
+	if window := s.purchaseSlotSettleWindow(); window <= budget {
+		t.Fatalf("settle window is %v, but a create can legitimately spend %v server-side before an order row exists", window, budget)
 	}
 }

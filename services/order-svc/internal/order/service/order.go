@@ -33,16 +33,11 @@ const releaseSlotTimeout = 5 * time.Second
 // settling.
 const claimAttempts = 3
 
-// purchaseSlotSettleMargin is added on top of the configured create timeout
-// to size the window a claim naming an order that was never written is given
-// before it is treated as abandoned rather than a create still running. The
-// create timeout (ORDER_CREATE_TIMEOUT, config.CreateOrderTimeout, plumbed in
-// as implService.createTimeout) already bounds every step between the claim
-// being written and the order row being written -- the ticket-class lookup,
-// the workflow's start round trip, the reserve activity -- so the margin only
-// has to cover the slack around that deadline: the DynamoDB round trips on
-// either end, and clock skew between the process that wrote the claim and the
-// one reading it back.
+// purchaseSlotSettleMargin is the slack purchaseSlotSettleWindow adds around
+// the deadlines it is built from: the DynamoDB round trips on either end of
+// the window, and clock skew between the process that wrote a claim and the one
+// reading it back. It is not the budget itself -- the budget comes from the
+// deadlines that bound the create.
 const purchaseSlotSettleMargin = 30 * time.Second
 
 // errPurchaseSlotReleased is internal to the claim loop: the slot was held by
@@ -314,12 +309,24 @@ func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code str
 }
 
 // purchaseSlotSettleWindow is how old a claim naming no order has to be before
-// it is treated as abandoned rather than a create still in flight. It tracks
-// this service's own create timeout rather than a fixed literal because that
-// timeout is what bounds the window in the first place: widen it and a claim
-// that used to look abandoned might still be a live create.
+// it is treated as abandoned rather than a create still in flight.
+//
+// Two budgets run back to back between the claim being written and the order
+// row existing, and the window has to cover both. createTimeout
+// (ORDER_CREATE_TIMEOUT, config.CreateOrderTimeout) bounds only this caller's
+// own leg -- the ticket-class lookup and the workflow's start round trip --
+// and stops applying the moment ExecuteWorkflow returns: wfRun.Get is a wait,
+// not a leash, and nothing on this side cancels a workflow that outlives it.
+// After that the saga runs on Temporal's budget, where reserving inventory and
+// writing the order row each get their whole retry policy, which is what
+// workflows.CreateOrderSlotBudget adds up.
+//
+// Sizing the window on the caller's deadline alone would call a workflow still
+// legitimately reserving inventory abandoned, hand its slot to the buyer's
+// retry, and end with two orders, two holds and two payment intents out of one
+// slot -- precisely what the claim exists to prevent.
 func (s *implService) purchaseSlotSettleWindow() time.Duration {
-	return s.createTimeout + purchaseSlotSettleMargin
+	return s.createTimeout + workflows.CreateOrderSlotBudget() + purchaseSlotSettleMargin
 }
 
 // releasePurchaseSlot drops the buyer's claim after a create that produced no
