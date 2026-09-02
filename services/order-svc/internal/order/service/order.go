@@ -17,6 +17,8 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/util"
 	"go.temporal.io/sdk/client"
 	sdktemporal "go.temporal.io/sdk/temporal"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // Cancellation has to outlive the deadline that triggered it, but the handler
@@ -414,6 +416,17 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 		IdempotencyKey: generatePaymentIdempotencyKey(o.Code, string(method)),
 	})
 	if err != nil {
+		// The saga writes the order row two steps before it creates the payment
+		// intent, so a pending order with no payment behind it yet is a
+		// checkout still being set up, not a broken one -- and every duplicate
+		// create now takes this path. Passing the lookup's refusal on tells a
+		// buyer whose purchase is in the middle of succeeding that they are
+		// forbidden; the truth is only that their slot has not settled yet.
+		if o.Status == models.OrderStatusPending && isPaymentRecordMissing(err) {
+			s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, whose payment intent does not exist yet", dedupeKey, code)
+			return order.CreateOrderOutput{}, order.ErrPurchaseSlotUnsettled
+		}
+
 		s.l.Errorf(ctx, "internal.order.service.resumeExistingOrder.GetPaymentUrlByIdempotencyKey: %v", err)
 		return order.CreateOrderOutput{}, err
 	}
@@ -423,6 +436,20 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 		OrderItems: itms,
 		PaymentUrl: pmtResp.PaymentUrl,
 	}, nil
+}
+
+// isPaymentRecordMissing reports whether a payment lookup failed because there
+// is no payment for that key rather than because the lookup itself failed.
+// payment-svc answers an unknown idempotency key with PermissionDenied rather
+// than NotFound, so both codes are read the same way here; any other code is a
+// real failure and stays one.
+func isPaymentRecordMissing(err error) bool {
+	switch status.Code(err) {
+	case codes.PermissionDenied, codes.NotFound:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *implService) handlePaymentFailure(ctx context.Context, code string) error {

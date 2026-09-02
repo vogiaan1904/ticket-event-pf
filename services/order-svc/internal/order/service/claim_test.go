@@ -14,6 +14,8 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // testCreateTimeout stands in for ORDER_CREATE_TIMEOUT. It is only the
@@ -29,9 +31,14 @@ const testPaymentMethod = models.PaymentMethod("STRIPE")
 type stubPaymentClient struct {
 	payment.PaymentServiceClient
 	url string
+	err error
 }
 
 func (c stubPaymentClient) GetPaymentUrlByIdempotencyKey(ctx context.Context, in *payment.GetPaymentUrlByIdempotencyKeyRequest, opts ...grpc.CallOption) (*payment.GetPaymentUrlByIdempotencyKeyResponse, error) {
+	if c.err != nil {
+		return nil, c.err
+	}
+
 	return &payment.GetPaymentUrlByIdempotencyKeyResponse{PaymentUrl: c.url}, nil
 }
 
@@ -258,5 +265,35 @@ func TestPurchaseSlotSettleWindow_OutlivesACreateStillRunningServerSide(t *testi
 	budget := workflows.CreateOrderSlotBudget()
 	if window := s.purchaseSlotSettleWindow(); window <= budget {
 		t.Fatalf("settle window is %v, but a create can legitimately spend %v server-side before an order row exists", window, budget)
+	}
+}
+
+// The order row is written two saga steps before the payment intent, and every
+// duplicate create is now answered from that row. Inside that window
+// payment-svc has no record to return and refuses the lookup, which is not the
+// buyer's answer: they are not forbidden, their checkout is simply still being
+// set up. Handing them a 403 stops a purchase that is in the middle of
+// succeeding.
+func TestClaimPurchaseSlot_APendingOrderWithNoPaymentYetIsNotForbidden(t *testing.T) {
+	s, r := newSlotService(t)
+	s.pmtSvc = stubPaymentClient{err: status.Error(codes.PermissionDenied, "permission denied")}
+	ctx := context.Background()
+
+	seedOrder(t, r, "TB-EARLY-0001", models.OrderStatusPending)
+	if _, _, err := r.ClaimPurchaseSlot(ctx, "sess-early", "TB-EARLY-0001"); err != nil {
+		t.Fatalf("seed claim: %v", err)
+	}
+
+	out, err := s.claimPurchaseSlot(ctx, "sess-early", "TB-DUPLICATE-0002", testPaymentMethod)
+	if !errors.Is(err, order.ErrPurchaseSlotUnsettled) {
+		t.Fatalf("duplicate create on an order with no payment yet returned (%v, %v), want ErrPurchaseSlotUnsettled", out, err)
+	}
+	if status.Code(err) == codes.PermissionDenied {
+		t.Fatal("a buyer whose checkout is still being set up was told they are forbidden")
+	}
+
+	held, _, err := r.ClaimPurchaseSlot(ctx, "sess-early", "TB-INTRUDER-0003")
+	if !errors.Is(err, order.ErrPurchaseSlotTaken) || held != "TB-EARLY-0001" {
+		t.Fatalf("slot is held by %q (%v), want the in-flight order TB-EARLY-0001", held, err)
 	}
 }
