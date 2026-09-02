@@ -8,24 +8,9 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-// requireNotCalled exists because TestWorkflowEnvironment.AssertNotCalled
-// checks a dummy *testing.T before the real one and short-circuits its `&&`
-// chain on the first failure, so when the failing check is the activity one
-// -- the common case, since these names are never workflow names -- it
-// returns false without ever calling t.Errorf on the real t. Only the return
-// value is trustworthy; this makes that value the thing that fails the test.
-func requireNotCalled(t *testing.T, env *testsuite.TestWorkflowEnvironment, name string, args ...interface{}) {
-	t.Helper()
-	if env.AssertNotCalled(t, name, args...) {
-		return
-	}
-	t.Fatalf("%s was called but must not have been", name)
-}
 
 // By the time the notification is sent the buyer has their ticket: inventory is
 // confirmed and the order is COMPLETED. A publish that fails costs a waiting

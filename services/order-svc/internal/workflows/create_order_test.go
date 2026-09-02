@@ -50,10 +50,10 @@ func TestCreateOrder_ReserveFailsBeforeAnyOrderIsWritten(t *testing.T) {
 	if env.GetWorkflowError() == nil {
 		t.Fatal("expected the sold-out rejection to fail the workflow")
 	}
-	env.AssertNotCalled(t, "CreateOrder", mock.Anything, mock.Anything)
-	env.AssertNotCalled(t, "CreateOrderItems", mock.Anything, mock.Anything, mock.Anything)
-	env.AssertNotCalled(t, "DeleteOrder", mock.Anything, mock.Anything)
-	env.AssertNotCalled(t, "ReleaseInventory", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "CreateOrder", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "CreateOrderItems", mock.Anything, mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "DeleteOrder", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleaseInventory", mock.Anything, mock.Anything)
 }
 
 // Availability is decided once, under the row lock inside Reserve. A separate
@@ -77,7 +77,7 @@ func TestCreateOrder_DoesNotPreCheckAvailability(t *testing.T) {
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("happy path failed: %v", err)
 	}
-	env.AssertNotCalled(t, "CheckAvailability", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "CheckAvailability", mock.Anything, mock.Anything)
 }
 
 // A payment failure arrives after the hold and both order writes, so all three
