@@ -60,10 +60,9 @@ func TestClaimPurchaseSlot_SecondCallerLosesAndLearnsTheWinner(t *testing.T) {
 	}
 }
 
-// Requests arriving together are the case the claim exists for. A read followed
-// by a create lets every racer through, because they all read nothing; only the
-// database can settle it, so exactly one writer may come back a winner and every
-// loser must be told the same winning code.
+// Simultaneous requests are the case the claim exists for: read-then-create lets
+// every racer through, since they all read nothing. Exactly one winner, and every
+// loser told the same winning code.
 func TestClaimPurchaseSlot_ConcurrentClaimsLeaveExactlyOneWinner(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
@@ -149,9 +148,8 @@ func TestReleasePurchaseSlot_FreesTheSlotForTheNextClaim(t *testing.T) {
 	}
 }
 
-// A release is scoped to the order that took the slot. A late release from an
-// abandoned create must not delete the claim a fresh request has since taken,
-// or two creates run at once -- exactly what the claim exists to prevent.
+// A release is scoped to the order that took the slot: a late one must not
+// delete the claim a fresh request has since taken, or two creates run at once.
 func TestReleasePurchaseSlot_LeavesAClaimTakenBySomeoneElseStanding(t *testing.T) {
 	repo := newTestRepo(t)
 	ctx := context.Background()
@@ -206,10 +204,9 @@ func TestClaimPurchaseSlot_WritesATTLBeyondTheCheckoutWindow(t *testing.T) {
 		t.Fatalf("parse %s: %v", pkgDynamo.TTLAttribute, err)
 	}
 
-	// A claim on a live order has to outlive the buyer's whole checkout, so the
-	// floor is well past the payment window plus its hold grace (9 minutes in
-	// workflows), not merely "now". The workflows package imports this one, so
-	// the constants cannot be named here without a cycle.
+	// A live claim must outlive the whole checkout, so the floor is past the
+	// payment window plus hold grace (9m in workflows), not merely "now".
+	// Named literally: workflows imports this package, so referencing would cycle.
 	floor := time.Now().Add(24 * time.Hour)
 	if !time.Unix(expiresAt, 0).After(floor) {
 		t.Fatalf("claim expires at %v, which is not beyond the checkout window ending %v", time.Unix(expiresAt, 0), floor)

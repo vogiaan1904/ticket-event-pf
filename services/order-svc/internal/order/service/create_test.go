@@ -194,10 +194,9 @@ func slotHolder(t *testing.T, r repo.Repository, dedupeKey string) string {
 	return held
 }
 
-// Without a waiting room there is no session to key the slot on, so it is keyed
-// on the buyer and the event. Dropping the event from that key would give a
-// buyer one in-flight purchase across the whole platform: a checkout open for
-// one show would refuse them every other show on sale.
+// With no waiting room the slot keys on buyer + event. Dropping the event would
+// give a buyer one in-flight purchase platform-wide: a checkout open for one
+// show would refuse them every other show on sale.
 func TestCreate_WithoutAWaitingRoomTheSlotIsTheBuyerAndTheEvent(t *testing.T) {
 	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{}}
 	s, r := newCreateService(t, tprCli, false, "")
@@ -228,11 +227,9 @@ func TestCreate_WithAWaitingRoomTheSlotIsTheSession(t *testing.T) {
 	}
 }
 
-// The caller's deadline expiring does not stop the workflow, and a cancellation
-// that failed did not stop it either: it may still go on to reserve inventory
-// and write a live order. Releasing the slot here would let the buyer's retry
-// mint a second order and a second hold behind the first one's back. A slot
-// held too long is the recoverable error; two orders on one slot is not.
+// Neither the deadline nor a failed cancellation stops the workflow: it may
+// still write a live order. Releasing here lets the retry mint a second order
+// behind its back. A slot held too long is recoverable; two orders are not.
 func TestCreate_AFailedCancellationKeepsTheSlot(t *testing.T) {
 	tprCli := &fakeTemporalClient{
 		run:       &fakeWorkflowRun{outliveCaller: true},

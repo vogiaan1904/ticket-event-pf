@@ -10,10 +10,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// validateOrder loads the order an event is about. The failure comes back as
-// it arrived: GetOrder already tags an order that genuinely does not exist, and
-// relabelling every failure as that one would hide an unreachable datastore
-// behind a claim the order was never written.
+// validateOrder loads the order an event is about, passing the failure through
+// as it arrived. GetOrder already tags a genuinely missing order; relabelling
+// every failure that way would hide an unreachable datastore.
 func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 	var ord *models.Order
 	if err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord); err != nil {

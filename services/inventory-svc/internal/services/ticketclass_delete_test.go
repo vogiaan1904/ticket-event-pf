@@ -37,10 +37,8 @@ func ticketClassExists(t *testing.T, repo *pkgGorm.Repository, id int64) bool {
 	return count > 0
 }
 
-// The P0 case this fix exists for: a CASCADE-configured FK let
-// DeleteTicketClass silently destroy every reservation referencing it,
-// including CONFIRMED ones -- paid orders. Both the class and the
-// reservation must survive a refused delete.
+// The P0: a CASCADE FK let DeleteTicketClass destroy every reservation,
+// CONFIRMED ones included. A refused delete must leave both rows intact.
 func TestDelete_ActiveReservation_ReturnsConflict(t *testing.T) {
 	tcSvc, rSvc, repo := deleteSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)
@@ -121,14 +119,9 @@ func TestDelete_UnknownID_NoOp(t *testing.T) {
 	}
 }
 
-// The guard above (liveCount check) already refuses the whole Delete when a
-// live reservation is present, so the full service method can never reach
-// deleteTerminalReservations with a mix of live and terminal rows -- proving
-// that requires calling the child-delete step directly, bypassing the guard,
-// the way a future code path that skips the ticket_class lock would. This is
-// the load-bearing check for Fix 1: it pins down that the statement itself
-// scopes to terminal rows, regardless of whether the guard above it also
-// happens to catch the same case today.
+// Calls the child-delete directly, bypassing the liveCount guard the way a
+// future path that skips the ticket_class lock would: the statement itself
+// must scope to terminal rows, not lean on the guard in front of it.
 func TestDeleteTerminalReservations_LeavesLiveRowsUntouched(t *testing.T) {
 	_, _, repo := deleteSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)

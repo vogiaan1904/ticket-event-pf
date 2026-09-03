@@ -5,9 +5,8 @@ import (
 	"time"
 )
 
-// A trailing bare "Z" is a literal to time.Format, not the Z07:00 offset
-// directive. Formatting a non-UTC time with it emits that wall clock labelled
-// UTC, which silently shifts the instant by the host's offset.
+// A bare "Z" is a literal to time.Format, not the Z07:00 offset directive: it
+// emits the local wall clock labelled UTC, shifting the instant by the offset.
 func TestTimeToISO8601StrDenotesTheSameInstantFromAnyZone(t *testing.T) {
 	instant := time.Date(2026, 7, 21, 6, 29, 4, 0, time.UTC)
 
@@ -35,8 +34,7 @@ func TestTimeToISO8601StrDenotesTheSameInstantFromAnyZone(t *testing.T) {
 	}
 }
 
-// Formatting then parsing must be a fixed point. With the literal-Z layout a
-// non-UTC value drifted by the offset on every round trip.
+// Format-then-parse must be a fixed point; a literal-Z layout drifts each trip.
 func TestISO8601RoundTripDoesNotDrift(t *testing.T) {
 	start := time.Date(2026, 7, 21, 6, 29, 4, 0, time.FixedZone("+07:00", 7*3600))
 

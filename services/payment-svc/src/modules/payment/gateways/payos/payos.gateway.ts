@@ -64,24 +64,11 @@ export class PayOSGateway implements PaymentGatewayInterface {
   }
 
   /**
-   * Reverse lookup: PayOS numeric code -> original orderCode
-   *
-   * We can't fully reconstruct the original orderCode from just the number
-   * (we lose EVENT_CODE and first 3 chars of alphanumeric).
-   *
-   * Solution: Query database using providerTransactionId
-   * The payment record contains both:
-   * - orderCode (original string)
-   * - providerTransactionId (PayOS numeric code as string)
+   * Returns the PayOS code as a string, for lookup by providerTransactionId.
+   * The original orderCode is not reconstructible from the number: it loses
+   * EVENT_CODE and the first 3 alphanumeric characters.
    */
   private getOrderCodeFromPayOSOrderCode(payosOrderCode: number): string {
-    // NOTE: This is called from webhook handler
-    // PayOS sends us the numeric orderCode in the webhook
-    // We need to find the original orderCode from our database
-
-    // Return PayOS orderCode as string
-    // The payment service will use this to look up the payment record
-    // by providerTransactionId and get the actual orderCode
     return payosOrderCode.toString();
   }
 
@@ -188,10 +175,6 @@ export class PayOSGateway implements PaymentGatewayInterface {
     }
   }
 
-  /**
-   * Optional: Get payment information by orderCode
-   * Useful for checking payment status
-   */
   async getPaymentInfo(orderCode: string): Promise<any> {
     try {
       const payosOrderCode = this.buildPayOSOrderCode(orderCode);
@@ -203,9 +186,6 @@ export class PayOSGateway implements PaymentGatewayInterface {
     }
   }
 
-  /**
-   * Optional: Cancel payment
-   */
   async cancelPayment(orderCode: string, reason?: string): Promise<any> {
     try {
       const payosOrderCode = this.buildPayOSOrderCode(orderCode);

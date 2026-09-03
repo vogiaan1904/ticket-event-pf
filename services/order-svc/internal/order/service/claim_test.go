@@ -25,9 +25,8 @@ const testCreateTimeout = 30 * time.Second
 
 const testPaymentMethod = models.PaymentMethod("STRIPE")
 
-// stubPaymentClient answers only the lookup resumeExistingOrder makes. The
-// slot tests run against a real repository on DynamoDB local, so this is the
-// one collaborator that has to be faked.
+// stubPaymentClient answers only the lookup resumeExistingOrder makes -- the one
+// collaborator faked, since the slot tests use a real repo on DynamoDB local.
 type stubPaymentClient struct {
 	payment.PaymentServiceClient
 	url string
@@ -69,14 +68,10 @@ func seedOrder(t *testing.T, r repo.Repository, code string, status models.Order
 	}
 }
 
-// A claim naming an order that does not exist is not proof the create behind
-// it died: the saga reserves inventory and starts a workflow before the order
-// row is written, so a duplicate arriving inside that window sees exactly the
-// same "not found" a genuinely abandoned claim would. Clearing it on sight
-// would destroy the in-flight buyer's claim and hand their slot to this
-// duplicate -- two orders, two inventory holds, from one slot. Within the
-// settle window the claim must be left standing and the duplicate told to
-// retry instead.
+// A claim naming no order is not proof the create died: the saga reserves and
+// starts the workflow before writing the row, so a duplicate inside that window
+// sees the same "not found". Clearing on sight hands the live buyer's slot to
+// the duplicate -- two orders, two holds. Inside the window: leave it, retry.
 func TestClaimPurchaseSlot_AYoungOrphanClaimIsLeftStandingForTheInFlightCreate(t *testing.T) {
 	s, r := newSlotService(t)
 	ctx := context.Background()
@@ -102,10 +97,9 @@ func TestClaimPurchaseSlot_AYoungOrphanClaimIsLeftStandingForTheInFlightCreate(t
 	}
 }
 
-// Past the settle window, no create is still running behind an orphaned
-// claim: it either finished -- and this lookup would have found its order --
-// or it died. The claim is genuinely abandoned, so it is cleared and the
-// buyer is told to retry into the now-free slot.
+// Past the settle window nothing is still running: it finished (this lookup
+// would have found the order) or it died. Clear the claim, tell the buyer to
+// retry into the now-free slot.
 func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *testing.T) {
 	l := logger.InitializeTestZapLogger()
 	db := dynamotest.NewClient(t)
@@ -119,10 +113,8 @@ func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *t
 		clock:         time.Now,
 	}
 
-	// A dedicated repo whose clock is pinned to well past the settle window
-	// writes the claim, so its age does not depend on how fast the test runs
-	// and follows the window rather than a literal that would go stale the
-	// moment the create's budget changes.
+	// The claim is written by a repo with its clock pinned past the settle
+	// window, so its age tracks the window instead of the test's wall clock.
 	abandonedAt := time.Now().Add(-2 * s.purchaseSlotSettleWindow())
 	staleRepo := repo.NewWithClock(l, db, dynamotest.TableName, func() time.Time { return abandonedAt })
 
@@ -144,10 +136,8 @@ func TestClaimPurchaseSlot_AnOldOrphanClaimIsClearedAndTheRetryTakesTheSlot(t *t
 	}
 }
 
-// An order that ended without buying anything holds nothing, so its claim has
-// no work left to do. The buyer must be able to start again -- and this
-// request has to take the slot itself, not merely free it, or the create it
-// goes on to run would be unguarded.
+// A terminal order holds nothing, so its claim has no work left. This request
+// must take the slot, not merely free it, or the create it runs is unguarded.
 func TestClaimPurchaseSlot_ATerminalOrderReleasesTheSlotAndThisCreateTakesIt(t *testing.T) {
 	for _, status := range []models.OrderStatus{
 		models.OrderStatusCancelled,
@@ -252,13 +242,10 @@ func TestClaimPurchaseSlot_AFreeSlotIsWonOutright(t *testing.T) {
 	}
 }
 
-// The window that tells an abandoned claim from a create still running has to
-// outlive the create, and the create is not bounded by the caller's deadline:
-// wfRun.Get returning does not stop the workflow, which carries on reserving
-// inventory and writing the order row on Temporal's own retry budget. A window
-// sized on the caller's timeout alone judges a live workflow dead, hands its
-// slot to the buyer's retry, and lets one slot produce two orders and two
-// inventory holds.
+// The settle window has to outlive the create, and the create is not bounded by
+// the caller's deadline -- wfRun.Get returning does not stop the workflow. Sized
+// on the caller's timeout alone it judges a live workflow dead and lets one slot
+// produce two orders and two holds.
 func TestPurchaseSlotSettleWindow_OutlivesACreateStillRunningServerSide(t *testing.T) {
 	s := &implService{createTimeout: testCreateTimeout}
 
@@ -268,12 +255,9 @@ func TestPurchaseSlotSettleWindow_OutlivesACreateStillRunningServerSide(t *testi
 	}
 }
 
-// The order row is written two saga steps before the payment intent, and every
-// duplicate create is now answered from that row. Inside that window
-// payment-svc has no record to return and refuses the lookup, which is not the
-// buyer's answer: they are not forbidden, their checkout is simply still being
-// set up. Handing them a 403 stops a purchase that is in the middle of
-// succeeding.
+// The order row lands two saga steps before the payment intent, so inside that
+// window payment-svc refuses the lookup. That is not the buyer's answer -- their
+// checkout is still being set up, and a 403 stops a purchase mid-success.
 func TestClaimPurchaseSlot_APendingOrderWithNoPaymentYetIsNotForbidden(t *testing.T) {
 	s, r := newSlotService(t)
 	s.pmtSvc = stubPaymentClient{err: status.Error(codes.PermissionDenied, "permission denied")}

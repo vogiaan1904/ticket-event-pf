@@ -15,10 +15,7 @@ export class OutboxService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Save an event to the outbox table
-   * Must be called within a transaction context
-   */
+  /** Saves an event to the outbox. Must be called inside a transaction. */
   async saveEvent(
     aggregateId: string,
     aggregateType: string,
@@ -48,9 +45,6 @@ export class OutboxService {
     }
   }
 
-  /**
-   * Payment-specific: Save payment completed event
-   */
   async savePaymentCompletedEvent(
     payment: PaymentEntity,
     tx?: Prisma.TransactionClient,
@@ -68,9 +62,6 @@ export class OutboxService {
     return this.saveEvent(payment.id, 'Payment', EventType.PAYMENT_COMPLETED, event, tx);
   }
 
-  /**
-   * Payment-specific: Save payment failed event
-   */
   async savePaymentFailedEvent(
     payment: PaymentEntity,
     errorCode?: string,

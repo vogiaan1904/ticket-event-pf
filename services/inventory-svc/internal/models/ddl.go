@@ -1,21 +1,16 @@
 package models
 
-// PostMigrateStatements are the DDL statements applied immediately after
-// AutoMigrate, in order. Every statement must be idempotent: both the service
-// boot path and the test harness run them unconditionally on every start.
-//
-// This is the single source of truth for schema that AutoMigrate cannot
-// express (partial indexes, CHECK constraints). Versioned migrations will
-// eventually replace both this and AutoMigrate.
+// PostMigrateStatements returns the DDL applied right after AutoMigrate, in order.
+// Invariant: every statement is idempotent -- boot and the test harness rerun
+// them unconditionally. Source of truth for schema AutoMigrate cannot express
+// (partial indexes, CHECK constraints). See docs/POST_MIGRATE_DDL.md.
 func PostMigrateStatements() []string {
 	return []string{
 		`CREATE INDEX IF NOT EXISTS idx_reservation_active_expiry
 		   ON reservation (status, expires_at) WHERE status = 'ACTIVE'`,
 
-		// The oversell backstop. NOT VALID means the constraint enforces every
-		// new write immediately but does not scan pre-existing rows -- a boot
-		// that fails on historical drift would take the service down rather
-		// than surface the drift. Validate deliberately, out of band:
+		// The oversell backstop, NOT VALID: enforced on new writes, history unscanned
+		// so old drift cannot fail a boot. Validate out of band once drift is clean:
 		//   ALTER TABLE ticket_class VALIDATE CONSTRAINT chk_ticket_class_capacity;
 		`DO $$ BEGIN
 		   ALTER TABLE ticket_class ADD CONSTRAINT chk_ticket_class_capacity
@@ -32,33 +27,10 @@ func PostMigrateStatements() []string {
 		     CHECK (qty > 0) NOT VALID;
 		 EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 
-		// fk_ticket_class_reservations was created with contradictory OnDelete
-		// tags on the two sides of the GORM relation (CASCADE on
-		// TicketClass.Reservations, RESTRICT on Reservation.TicketClass).
-		// AutoMigrate creates the constraint once, the first time either model
-		// is migrated and it does not yet exist, and never revisits it after
-		// that -- so whichever side was migrated first (TicketClass, in
-		// main.go's AutoMigrate call) won, and every database ever bootstrapped
-		// against these tags is stuck on CASCADE. That let DeleteTicketClass
-		// silently destroy every reservation referencing it, including
-		// CONFIRMED ones (paid orders). The struct tags are now both RESTRICT,
-		// but changing them does not touch an already-migrated database, so
-		// this statement repairs one in place.
-		//
-		// Guarded: dropping and re-adding a foreign key constraint takes
-		// ACCESS EXCLUSIVE on both tables, which on a busy reservation table
-		// would queue behind in-flight transactions and then block new ones
-		// behind it. Only run that DDL when confdeltype is actually wrong
-		// ('c' = CASCADE, 'a' = NO ACTION) -- the already-correct case
-		// ('r' = RESTRICT) does a plain catalog SELECT and takes no lock.
-		// The lookup is qualified by conrelid so it can only ever match the
-		// reservation table's own constraint, never a same-named one
-		// elsewhere -- SELECT ... INTO without STRICT would otherwise
-		// silently take an arbitrary matching row.
-		// The re-add is NOT VALID, like every other constraint in this file:
-		// the rows were under a foreign key the whole time, only the
-		// ON DELETE action was wrong, so the data is already known-valid and
-		// a full validating scan under lock would be pure waste.
+		// Repairs a database left on ON DELETE CASCADE by the old contradictory
+		// GORM tags: AutoMigrate never revisits an existing FK, so correcting the
+		// tags is not enough. Guarded -- the DROP/ADD takes ACCESS EXCLUSIVE.
+		// See docs/POST_MIGRATE_DDL.md#the-fk_ticket_class_reservations-repair.
 		`DO $$
 		   DECLARE
 		     current_action "char";

@@ -27,11 +27,9 @@ func (a *InventoryActivities) ReserveInventory(ctx context.Context, orderCode st
 		Items:     items,
 	})
 	if err != nil {
-		// A business rejection from inventory-svc (sold out, sale closed, state
-		// conflict) arrives as FailedPrecondition. Retrying it burns the default
-		// five attempts with backoff before failing anyway, and reaches the
-		// caller as an opaque activity error, so mark it non-retryable and tag
-		// it for the gRPC layer to turn into a 4xx.
+		// FailedPrecondition = sold out / sale closed / state conflict. Retrying
+		// burns five attempts to fail anyway, so tag it non-retryable and let
+		// the gRPC layer turn it into a 4xx.
 		if status.Code(err) == codes.FailedPrecondition {
 			return temporal.NewNonRetryableApplicationError(
 				order.ErrNotEnoughTickets.Error(),
@@ -61,17 +59,11 @@ func (a *InventoryActivities) ConfirmInventory(ctx context.Context, orderCode st
 		OrderCode: orderCode,
 	})
 	if err != nil {
-		// A business rejection from inventory-svc arrives as either of two
-		// codes, and both mean the order is definitively unfulfillable, not a
-		// fault to retry: FailedPrecondition is the hold already expired and
-		// the stock was resold, or the reservation is in a conflicting state;
-		// NotFound is no reservation rows at all, which happens when they were
-		// hard-deleted (an admin ticket-class delete) or a reserve never
-		// happened for this order. Either way it is tagged non-retryable and
-		// distinguishable from an infrastructure failure on the same call.
-		// Internal (a counter/row drift) is deliberately left out of this --
-		// that is our own bug, not the buyer's, and belongs with whoever gets
-		// paged rather than being silently refunded.
+		// Unfulfillable, not a fault to retry:
+		//	FailedPrecondition -> hold expired and resold, or state conflict
+		//	NotFound           -> rows hard-deleted, or reserve never ran
+		// Internal is excluded on purpose: counter drift is our bug, and pages
+		// someone rather than silently refunding the buyer.
 		code := status.Code(err)
 		if code == codes.FailedPrecondition || code == codes.NotFound {
 			return temporal.NewNonRetryableApplicationError(

@@ -14,10 +14,8 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// eventServiceError classifies a failed call to event-svc. Only NOT_FOUND is a
-// verdict about the event; every other code means the dependency failed, and
-// event-svc's errors carry none of our sentinels for the delivery layer to
-// match on.
+// eventServiceError classifies a failed call to event-svc.
+// NOT_FOUND -> a verdict about the event; anything else -> the dependency failed.
 func eventServiceError(err error, notFound error) error {
 	switch status.Code(err) {
 	case codes.NotFound:

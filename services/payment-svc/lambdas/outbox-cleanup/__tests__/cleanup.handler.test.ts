@@ -4,13 +4,9 @@ import { getDb, closeDb } from '@/common/db/kysely';
 const mockSqsSend = jest.fn().mockResolvedValue({});
 const mockCwSend = jest.fn().mockResolvedValue({});
 
-// The dev cluster (kind) runs a live `outbox-relay` pod against this same
-// Postgres. It LISTENs on the outbox table and claims+publishes any
-// unpublished row with retryCount below its real OUTBOX_MAX_RETRIES (5, see
-// deploy/helm/ticketbottle/templates/apps/config.yaml). Every unpublished row
-// seeded below therefore uses a retryCount >= 5 so the relay can never claim
-// it out from under an assertion; "pending" vs "exhausted" is then decided
-// purely by this test's own mocked maxRetries (10).
+// A live outbox-relay may share this Postgres and claim any row with retryCount
+// below its real OUTBOX_MAX_RETRIES (5). Seeding at or above that keeps rows out
+// of its reach; pending vs exhausted is then decided by this test's mocked 10.
 const RELAY_IMMUNE_RETRY_COUNT = 5;
 const EXHAUSTED_RETRY_COUNT = 10;
 

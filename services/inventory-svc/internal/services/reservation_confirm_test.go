@@ -69,9 +69,8 @@ func TestConfirm_MixedState_ReturnsConflict(t *testing.T) {
 	}
 }
 
-// An ACTIVE hold past its expires_at still holds its reserved quantity --
-// the worker has not swept it yet. Confirming it is exactly correct, and
-// refusing was the bug that left payments captured with no seat.
+// An ACTIVE hold past expires_at still holds its qty (unswept), so confirming
+// is correct -- refusing left payments captured with no seat.
 func TestConfirm_ActivePastExpiry_Succeeds(t *testing.T) {
 	svc, repo := reserveSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)

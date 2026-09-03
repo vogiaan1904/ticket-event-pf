@@ -38,30 +38,18 @@ func (r *Repository) FindByID(ctx context.Context, model interface{}, id interfa
 
 // Update updates a record.
 //
-// Deprecated: this is Save(model) under the hood, which writes every column
-// on the row -- including counters like ticket_class.reserved/sold. Calling
-// it with a model loaded outside the current transaction clobbers whatever a
-// concurrent, properly-locked writer changed in the meantime; this is what
-// caused this service's oversell P0 (a concurrent reservation's `reserved`
-// increment was silently erased). Callers must instead issue a
-// column-targeted Updates(map) inside a `SELECT ... FOR UPDATE` transaction,
-// or a guarded conditional UPDATE, as internal/services/reservation.go does.
+// Deprecated: Save(model) writes every column, so a stale in-memory row wipes
+// a concurrent writer's counters -- this service's oversell P0. Use a targeted
+// Updates(map) inside SELECT ... FOR UPDATE (internal/services/reservation.go).
 func (r *Repository) Update(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Save(model).Error
 }
 
 // Delete deletes a record.
 //
-// Deprecated: this is a hard delete (neither model has a DeletedAt field, so
-// there is no soft-delete to speak of) that takes no lock on the row being
-// deleted and performs no state check before deleting it. Calling this on a
-// ticket_class is exactly the unguarded, unlocked delete that let
-// DeleteTicketClass silently destroy live reservations, including paid
-// (CONFIRMED) ones -- the bug the FK RESTRICT and the in-service guard now
-// exist to prevent. Callers must instead follow the guarded pattern in
-// internal/services/ticketclass.go's implTicketClassService.Delete: lock the
-// parent row FOR UPDATE, check for non-terminal children, and only then
-// delete.
+// Deprecated: an unlocked, unguarded hard delete -- on a ticket_class this is
+// what destroyed live and paid reservations. Use the guarded pattern in
+// internal/services/ticketclass.go: lock the parent, refuse live children.
 func (r *Repository) Delete(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Delete(model).Error
 }

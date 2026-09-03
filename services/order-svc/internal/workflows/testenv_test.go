@@ -22,17 +22,11 @@ func newTestEnv(t *testing.T) *testsuite.TestWorkflowEnvironment {
 	return env
 }
 
-// requireNotCalled exists because TestWorkflowEnvironment.AssertNotCalled ANDs
-// four sub-checks together -- a dummy *testing.T pass for the workflow mock,
-// then the activity mock, then the same pair again against the real t -- and
-// Go's && short-circuits on the first false. An activity name never matches
-// anything in the workflow mock, so that term is always true, which means the
-// very next term, the dummy-T activity check, is the one that decides the
-// outcome. When the activity actually was called, that term is false, the
-// chain stops right there, and the two terms holding the real t never run: no
-// t.Errorf, no failure, no matter what actually happened. Only the bool
-// AssertNotCalled returns is trustworthy; this makes that value the thing
-// that fails the test.
+// requireNotCalled fails on the bool AssertNotCalled returns, not on its own
+// t.Errorf. That method ANDs four sub-checks and Go short-circuits: an activity
+// name never matches the workflow mock, so the dummy-T activity check decides,
+// and when the activity *was* called the two terms holding the real t never run
+// -- no t.Errorf, no failure, whatever actually happened.
 func requireNotCalled(t *testing.T, env *testsuite.TestWorkflowEnvironment, name string, args ...interface{}) {
 	t.Helper()
 	if env.AssertNotCalled(t, name, args...) {

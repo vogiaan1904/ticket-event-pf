@@ -20,11 +20,9 @@ const (
 	GSI2Name = "GSI2"
 )
 
-// TTLAttribute is the item attribute DynamoDB's time-to-live reads: an item
-// carrying it is deleted some time after the epoch second it holds, and an
-// item without it lives forever. Deletion is best-effort and can lag by many
-// hours, so nothing may depend on it for correctness -- it is garbage
-// collection, not a deadline.
+// TTLAttribute is the epoch-second attribute DynamoDB's time-to-live reads; an
+// item without it lives forever. Deletion can lag by hours, so nothing may
+// depend on it for correctness -- it is garbage collection, not a deadline.
 const TTLAttribute = "expires_at"
 
 // BuildOrderPK builds the partition key for an order
@@ -37,10 +35,9 @@ func BuildOrderSK(code string) string {
 	return OrderPrefix + code
 }
 
-// BuildPurchaseSlotKey builds the partition and sort key of a buyer's
-// purchase-slot claim. The claim is a bare item in the orders table rather than
-// an attribute of the order, because it has to exist before the order does:
-// it is what decides which of two concurrent requests gets to create one.
+// BuildPurchaseSlotKey builds the keys of a buyer's purchase-slot claim. It is
+// a bare item, not an attribute of the order, because it has to exist before the
+// order does -- it decides which concurrent request gets to create one.
 func BuildPurchaseSlotKey(dedupeKey string) string {
 	return ClaimPrefix + dedupeKey
 }

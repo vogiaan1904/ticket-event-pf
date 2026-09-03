@@ -41,7 +41,6 @@ func main() {
 		Encoding: cfg.Log.Encoding,
 	})
 
-	// Connect to DynamoDB
 	ddbClient, err := dynamodb.Connect(cfg.DynamoDB)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to connect to DynamoDB: %v", err)
@@ -49,7 +48,6 @@ func main() {
 	}
 	defer dynamodb.Disconnect(ddbClient)
 
-	// Initialize gRpc service clients
 	iSvc, iClose, err := iSvc.NewInventoryClient(cfg.Microservice.Inventory)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create inventory service client: %v", err)
@@ -71,30 +69,24 @@ func main() {
 	}
 	defer pClose()
 
-	// Initialize Kafka producer
 	kProd, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Kafka producer: %v", err)
 		os.Exit(1)
 	}
 
-	// Initialize Kafka consumer group
 	kConsGr, err := kafka.NewConsumerGroup(cfg.Kafka)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Kafka consumer group: %v", err)
 		os.Exit(1)
 	}
 
-	// Initialize producers
 	oProd := oProd.NewProducer(kProd, l)
 
-	// Initialize repositories
 	oRepo := oRepo.New(l, ddbClient.DB(), ddbClient.TableName())
 
-	// Initialize JWT manager
 	jwtMgr := pkgJwt.NewManager(cfg.JWT.Secret, l)
 
-	// Initialize Temporal client
 	tCli, err := pkgTemporal.NewClient(cfg.Temporal)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Temporal client: %v", err)
@@ -102,7 +94,6 @@ func main() {
 	}
 	defer tCli.Close()
 
-	// Initialize activities
 	oActs := acts.NewOrderActivities(oRepo)
 	pActs := acts.NewPaymentActivities(pSvc)
 	iActs := acts.NewInventoryActivities(iSvc)
@@ -116,7 +107,6 @@ func main() {
 	w.RegisterActivity(iActs)
 	w.RegisterActivity(epActs)
 
-	// Start worker
 	go func() {
 		l.Infof(ctx, "Starting Temporal worker on task queue: %s", temporal.ConfirmOrderTaskQueue)
 		if err := w.Run(nil); err != nil {
@@ -124,13 +114,10 @@ func main() {
 		}
 	}()
 
-	// Initialize services
 	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
-	// Create consumer
 	cons := oCons.NewConsumer(kConsGr, oSvc, l)
 
-	// Start message processors
 	if err := cons.Start(ctx); err != nil {
 		l.Fatalf(ctx, "Failed to start consumer: %v", err)
 		os.Exit(1)

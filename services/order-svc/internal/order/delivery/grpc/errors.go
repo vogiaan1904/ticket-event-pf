@@ -33,16 +33,13 @@ var (
 
 	ErrGRPCRequestTimeout = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
 
-	// FailedPrecondition, not Internal: the buyer's purchase slot is held by an
-	// order that has already finished. Nothing is broken -- the world is simply
-	// in a state this request cannot be served from, and the buyer has to start
-	// a new checkout rather than retry this one.
+	// FailedPrecondition, not Internal: the slot is held by an order that has
+	// already finished. Nothing is broken; the buyer starts a new checkout.
 	ErrGRPCOrderAlreadyProcessed = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD018", "Order already processed")
 
-	// FailedPrecondition again, and specifically not NotFound: the buyer's
-	// slot was held by a create that died before writing an order. Telling
-	// them their order was missing would describe our own leftover state as
-	// their mistake. The slot has been cleared, so the retry can succeed.
+	// FailedPrecondition, not NotFound: the slot was held by a create that died
+	// before writing an order, and NotFound would describe our leftover state as
+	// the buyer's mistake. The slot is cleared, so the retry can succeed.
 	ErrGRPCPurchaseSlotUnsettled = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD019", "Could not start checkout, please try again")
 )
 

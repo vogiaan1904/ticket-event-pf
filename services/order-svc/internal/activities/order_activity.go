@@ -20,14 +20,11 @@ func NewOrderActivities(repo repo.Repository) *OrderActivities {
 	}
 }
 
-// CreateOrder must be idempotent: Temporal's retry policy guarantees a worker
-// can crash after a PutItem lands but before the activity result is recorded,
-// which replays this same call. repository.Create correctly refuses the
-// replay with ErrOrderAlreadyExists, so the retry path reads the order back
-// by code instead of failing. It is only served if it actually belongs to
-// this request -- otherwise the code was reused by a different order, which
-// is a code-generation bug, not a retry, and must not be served to the wrong
-// buyer.
+// CreateOrder is idempotent: a worker can crash between a landed PutItem and
+// the recorded result, replaying this call.
+//
+//	already exists, same buyer+event -> serve the written order
+//	already exists, different one    -> code collision, fail non-retryably
 func (a *OrderActivities) CreateOrder(ctx context.Context, opt repo.CreateOrderOption) (*models.Order, error) {
 	o, err := a.Repo.Create(ctx, opt)
 	if err == nil {
@@ -37,9 +34,8 @@ func (a *OrderActivities) CreateOrder(ctx context.Context, opt repo.CreateOrderO
 		return nil, err
 	}
 
-	// The read-back failing (network flake, or the row not visible yet) is
-	// itself a transient condition: surface it as-is so Temporal's retry
-	// policy runs again, rather than masking it behind ErrOrderAlreadyExists.
+	// A failed read-back is transient (flake, row not yet visible): surface it
+	// so Temporal retries, rather than masking it as ErrOrderAlreadyExists.
 	existing, getErr := a.Repo.GetByCode(ctx, opt.Code)
 	if getErr != nil {
 		return nil, getErr
@@ -65,11 +61,9 @@ func (a *OrderActivities) CreateOrderItems(ctx context.Context, oCode string, it
 	return itms, nil
 }
 
-// GetOrder tags an order that does not exist as an outcome rather than a
-// fault. No number of attempts makes an order appear that was never written or
-// that a compensation rolled back, and whoever is driving the workflow has to
-// tell that apart from an unreachable datastore, which may well answer next
-// time.
+// GetOrder tags a missing order as an outcome, not a fault: retrying never
+// materialises an order that was never written or was rolled back, and the
+// caller has to tell that from an unreachable datastore.
 func (a *OrderActivities) GetOrder(ctx context.Context, code string) (*models.Order, error) {
 	o, err := a.Repo.GetOne(ctx, repo.GetOneOrderOption{
 		FilterOrder: order.FilterOrder{
@@ -102,10 +96,9 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 	return nil
 }
 
-// ReleasePurchaseSlot gives a buyer's purchase slot back once their purchase
-// has an outcome. The repository refuses to delete a claim that has since moved
-// on to another order, so a late release cannot take a live claim away from a
-// create that has already started behind it.
+// ReleasePurchaseSlot gives a buyer's slot back once their purchase has an
+// outcome. The repository refuses to delete a claim that has moved on to another
+// order, so a late release cannot strip a create that started behind it.
 func (a *OrderActivities) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
 	return a.Repo.ReleasePurchaseSlot(ctx, dedupeKey, orderCode)
 }

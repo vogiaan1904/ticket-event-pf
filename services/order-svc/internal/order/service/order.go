@@ -29,28 +29,22 @@ const cancelWorkflowTimeout = 5 * time.Second
 // it, for the same reason cancellation does.
 const releaseSlotTimeout = 5 * time.Second
 
-// claimAttempts bounds the claim loop. Each pass costs one round trip and only
-// happens when the slot was held by an order that had already ended, so a
-// second pass is normal and a fourth means the slot is churning rather than
-// settling.
+// claimAttempts bounds the retake loop: a second pass is normal, a fourth means
+// the slot is churning rather than settling.
 const claimAttempts = 3
 
-// purchaseSlotSettleMargin is the slack purchaseSlotSettleWindow adds around
-// the deadlines it is built from: the DynamoDB round trips on either end of
-// the window, and clock skew between the process that wrote a claim and the one
-// reading it back. It is not the budget itself -- the budget comes from the
-// deadlines that bound the create.
+// purchaseSlotSettleMargin is slack on top of purchaseSlotSettleWindow's real
+// budget: the DynamoDB round trips on either end, plus clock skew between the
+// process that wrote a claim and the one reading it back.
 const purchaseSlotSettleMargin = 30 * time.Second
 
-// errPurchaseSlotReleased is internal to the claim loop: the slot was held by
-// an order that can no longer hold inventory or money, the claim has been
-// dropped, and this request should take it. It never reaches a caller.
+// errPurchaseSlotReleased tells the claim loop the slot's order is terminal and
+// the claim is dropped, so this request should retake it. Never reaches a caller.
 var errPurchaseSlotReleased = errors.New("purchase slot released")
 
-// mapWorkflowError translates a Temporal failure into a domain error. wfRun.Get
-// returns the workflow's error rebuilt from a serialised failure proto, so the
-// original sentinel is gone; the ApplicationError type string is what survives,
-// and it is what separates a business rejection from a fault.
+// mapWorkflowError translates a Temporal failure into a domain error.
+// Why match on the type string: wfRun.Get rebuilds the error from a serialised
+// failure proto, so the sentinel is gone and only ApplicationError.Type survives.
 func mapWorkflowError(err error) error {
 	var appErr *sdktemporal.ApplicationError
 	if !errors.As(err, &appErr) {
@@ -61,9 +55,7 @@ func mapWorkflowError(err error) error {
 	case order.ErrTypeInsufficientInventory:
 		return order.ErrNotEnoughTickets
 	case order.ErrTypeOrderCodeCollision:
-		// A code collision means two different orders landed on the same
-		// code -- a code-generation bug, not a business outcome the buyer
-		// caused. ErrOrderCreationFailed already maps to codes.Internal.
+		// Two orders on one code is a code-generation bug, not a buyer outcome.
 		return order.ErrOrderCreationFailed
 	case order.ErrTypeOrderAlreadyProcessed:
 		return order.ErrOrderAlreadyProcessed
@@ -130,9 +122,6 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, order.ErrEventNotReadyForSale
 	}
 
-	// The order's code is generated here rather than at the workflow call
-	// because the purchase-slot claim records it: the claim is what a duplicate
-	// create is answered with, so it has to name the order it is protecting.
 	code := util.GenerateOrderCodeWithEventPrefix(e.Name)
 
 	var ssID string
@@ -146,8 +135,8 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		ssID = claim.SessionID
 	}
 
-	// One in-flight order per buyer. The same derivation runs in the workflow
-	// when the purchase ends, which is what gives the slot back.
+	// One in-flight order per buyer; the workflow gives it back. See
+	// docs/PURCHASE_SLOT.md.
 	dedupeKey := order.PurchaseSlotKey(ssID, in.UserID, in.EventID)
 
 	existing, err := s.claimPurchaseSlot(ctx, dedupeKey, code, in.PaymentMethod)
@@ -238,36 +227,27 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	if err != nil {
 		s.l.Errorf(ctx, "create order workflow failed: %v", err)
 
-		// Get only stops waiting: the saga runs server-side and would go on
-		// reserving inventory for a caller that has already given up. Cancel it
-		// so CreateOrder's deferred compensation releases the hold, before
-		// deciding whether the claim can be dropped.
+		// Get only stops waiting; the saga runs on and keeps reserving inventory
+		// for a caller that gave up. See docs/PURCHASE_SLOT.md#caller-timeout.
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			cancelCtx, cancelDone := context.WithTimeout(context.WithoutCancel(ctx), cancelWorkflowTimeout)
 			defer cancelDone()
 			if cErr := s.temporal.CancelWorkflow(cancelCtx, wfRun.GetID(), wfRun.GetRunID()); cErr != nil {
-				// Cancellation is best-effort, and Get returning does not mean
-				// the workflow stopped: it may complete on its own and write a
-				// live order after this. Releasing anyway would let a retry
-				// mint a second order and a second inventory hold behind that
-				// order's back, so the claim is left standing -- a slot held a
-				// little too long is the safer error than two orders on one.
+				// Cancel failed -> keep the claim. The workflow may still write a
+				// live order, and releasing would let a retry mint a second one
+				// behind its back.
 				s.l.Errorf(ctx, "failed to cancel abandoned create order workflow %s: %v", wfRun.GetID(), cErr)
 				return order.CreateOrderOutput{}, order.ErrRequestTimeout
 			}
 
-			// The saga reserves inventory before it writes the order row, and
-			// the cancel landed, so this workflow will not go on to write one.
-			// Its claim guards nothing and would refuse every retry on behalf
-			// of an order that will never exist.
+			// Cancel landed -> no order row will be written, so the claim guards
+			// nothing and would refuse every retry.
 			s.releasePurchaseSlot(ctx, dedupeKey, code)
 			return order.CreateOrderOutput{}, order.ErrRequestTimeout
 		}
 
-		// The workflow ran to completion on its own -- not stopped early here
-		// -- and failed as a business outcome such as sold out, so it holds no
-		// inventory and wrote no order. Its claim would refuse every retry on
-		// behalf of a slot nothing is using anymore.
+		// Ran to completion and lost on a business outcome such as sold out: no
+		// inventory held, no order written, so the claim guards nothing.
 		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
@@ -279,14 +259,10 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	}, nil
 }
 
-// claimPurchaseSlot takes the buyer's slot for this request. It returns a
-// non-nil order when the slot is held by one the buyer should be sent back to,
-// and nil when this request won the slot and should go on to create one.
-//
-// The loop is here because a slot held by an order that has already ended is
-// released rather than honoured, and a release has to be followed by a fresh
-// claim: freeing the slot and then proceeding without retaking it would leave
-// this create unguarded and hand the slot to whoever asked next.
+// claimPurchaseSlot takes the buyer's slot for this request: a non-nil order
+// means the slot is held and the buyer is sent back to it, nil means this
+// request won it. It loops because releasing a terminal order's slot has to be
+// followed by a fresh claim. See docs/PURCHASE_SLOT.md#lifecycle.
 func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code string, method models.PaymentMethod) (*order.CreateOrderOutput, error) {
 	for range claimAttempts {
 		heldBy, claimedAt, err := s.repo.ClaimPurchaseSlot(ctx, dedupeKey, code)
@@ -307,42 +283,25 @@ func (s *implService) claimPurchaseSlot(ctx context.Context, dedupeKey, code str
 		}
 	}
 
-	// Every pass found the slot held and then released it, so it is changing
-	// hands faster than this request can take it. No order was created and
-	// nothing is broken, so the buyer retries rather than being handed a fault.
+	// The slot is changing hands faster than this request can take it. Nothing
+	// is broken and no order exists, so the buyer retries rather than faults.
 	s.l.Warnf(ctx, "internal.order.service.claimPurchaseSlot: slot %s changed hands %d times", dedupeKey, claimAttempts)
 	return nil, order.ErrPurchaseSlotUnsettled
 }
 
 // purchaseSlotSettleWindow is how old a claim naming no order has to be before
-// it is treated as abandoned rather than a create still in flight.
-//
-// Two budgets run back to back between the claim being written and the order
-// row existing, and the window has to cover both. createTimeout
-// (ORDER_CREATE_TIMEOUT, config.CreateOrderTimeout) bounds only this caller's
-// own leg -- the ticket-class lookup and the workflow's start round trip --
-// and stops applying the moment ExecuteWorkflow returns: wfRun.Get is a wait,
-// not a leash, and nothing on this side cancels a workflow that outlives it.
-// After that the saga runs on Temporal's budget, where reserving inventory and
-// writing the order row each get their whole retry policy, which is what
-// workflows.CreateOrderSlotBudget adds up.
-//
-// Sizing the window on the caller's deadline alone would call a workflow still
-// legitimately reserving inventory abandoned, hand its slot to the buyer's
-// retry, and end with two orders, two holds and two payment intents out of one
-// slot -- precisely what the claim exists to prevent.
+// it counts as abandoned rather than a create still in flight. Two budgets run
+// back to back -- this caller's leg, then the saga's -- and sizing on the first
+// alone hands an in-flight buyer's slot to their own retry.
+// See docs/PURCHASE_SLOT.md#settle-window.
 func (s *implService) purchaseSlotSettleWindow() time.Duration {
 	return s.createTimeout + workflows.CreateOrderSlotBudget() + purchaseSlotSettleMargin
 }
 
 // releasePurchaseSlot drops the buyer's claim after a create that produced no
-// order it could point at.
-//
-// It runs on a context detached from the request because the case that needs
-// it most is the one where the caller already gave up and the request context
-// is dead. A failure is logged and swallowed: the claim carries a TTL behind
-// it, the next request to find it stranded clears it, and the caller is owed
-// the error that actually failed their create, not this one.
+// order to point at. The ctx is detached because the case that needs it most is
+// a caller that already gave up; a failure is swallowed, since the claim has a
+// TTL and the caller is owed the error that failed their create, not this one.
 func (s *implService) releasePurchaseSlot(ctx context.Context, dedupeKey, code string) {
 	relCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseSlotTimeout)
 	defer cancel()
@@ -352,28 +311,11 @@ func (s *implService) releasePurchaseSlot(ctx context.Context, dedupeKey, code s
 	}
 }
 
-// resumeExistingOrder answers a duplicate create with the order that already
-// holds the buyer's slot.
-//
-// A live or completed order is returned with its payment URL, so a retrying
-// client lands back on the same checkout and a buyer who has bought does not
-// buy twice. An order that ended without buying anything holds neither
-// inventory nor money, so its claim has no work left to do: it is released and
-// errPurchaseSlotReleased tells the caller to take the slot for itself.
-//
-// A claim naming an order that was never written is not automatically stale.
-// The saga reserves inventory and starts a workflow before the order row
-// exists, so a duplicate arriving inside that window would see the same
-// "not found" a genuinely abandoned claim shows -- the two are told apart by
-// the claim's age against purchaseSlotSettleWindow. Younger than the window,
-// the create may still be running: the claim is left standing and the caller
-// is told to retry, so a concurrent duplicate cannot destroy the in-flight
-// buyer's claim and win their slot out from under them. Older than it, no
-// create is still running -- it either finished (and this lookup would have
-// found its order) or died -- so the claim is genuinely abandoned and is
-// cleared the same way a terminal order's is, but the buyer is asked to
-// retry rather than handed the loop's own claim, since whatever killed that
-// attempt is worth a fresh request to find out.
+// resumeExistingOrder answers a duplicate create with the order already holding
+// the buyer's slot: a live one comes back with its payment URL, a terminal one
+// releases the slot (errPurchaseSlotReleased), and a claim naming no order is
+// judged against purchaseSlotSettleWindow rather than assumed stale.
+// See docs/PURCHASE_SLOT.md#lifecycle.
 func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code string, claimedAt time.Time, method models.PaymentMethod) (order.CreateOrderOutput, error) {
 	o, err := s.repo.GetByCode(ctx, code)
 	if errors.Is(err, repo.ErrOrderNotFound) {
@@ -392,20 +334,19 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 		return order.CreateOrderOutput{}, err
 	}
 
+	// pending | completed -> resume; the buyer lands back on the same checkout
+	// terminal             -> release the slot, let this request retake it
+	// unknown              -> refuse; guessing double-sells or strands
 	switch o.Status {
 	case models.OrderStatusPending, models.OrderStatusCompleted:
 	case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout,
 		models.OrderStatusRefundRequired, models.OrderStatusRefunded:
-		// The buyer holds no ticket in any of these states -- a refund owed
-		// or already paid is tracked independently of their ability to buy
-		// again, so blocking a new purchase here would only punish them for
-		// a failure on our side.
+		// No ticket is held in any of these, and a refund owed is tracked
+		// separately from the ability to buy again.
 		s.releasePurchaseSlot(ctx, dedupeKey, code)
 		return order.CreateOrderOutput{}, errPurchaseSlotReleased
 	default:
-		// A status nobody here recognises. Guessing would either sell the
-		// buyer a second order or strand them, so the slot is left alone and
-		// the request is refused.
+		// Leave the slot alone: guessing double-sells or strands the buyer.
 		s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: order %s holds slot %s in unhandled status %s", code, dedupeKey, o.Status)
 		return order.CreateOrderOutput{}, order.ErrOrderAlreadyProcessed
 	}
@@ -420,12 +361,8 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 		IdempotencyKey: generatePaymentIdempotencyKey(o.Code, string(method)),
 	})
 	if err != nil {
-		// The saga writes the order row two steps before it creates the payment
-		// intent, so a pending order with no payment behind it yet is a
-		// checkout still being set up, not a broken one -- and every duplicate
-		// create now takes this path. Passing the lookup's refusal on tells a
-		// buyer whose purchase is in the middle of succeeding that they are
-		// forbidden; the truth is only that their slot has not settled yet.
+		// The order row lands two steps before the payment intent, so pending
+		// with no payment is a checkout still being set up, not a forbidden one.
 		if o.Status == models.OrderStatusPending && isPaymentRecordMissing(err) {
 			s.l.Warnf(ctx, "internal.order.service.resumeExistingOrder: slot %s names order %s, whose payment intent does not exist yet", dedupeKey, code)
 			return order.CreateOrderOutput{}, order.ErrPurchaseSlotUnsettled
@@ -442,11 +379,9 @@ func (s *implService) resumeExistingOrder(ctx context.Context, dedupeKey, code s
 	}, nil
 }
 
-// isPaymentRecordMissing reports whether a payment lookup failed because there
-// is no payment for that key rather than because the lookup itself failed.
-// payment-svc answers an unknown idempotency key with PermissionDenied rather
-// than NotFound, so both codes are read the same way here; any other code is a
-// real failure and stays one.
+// isPaymentRecordMissing reports whether a payment lookup found nothing rather
+// than failing. Why two codes: payment-svc answers an unknown idempotency key
+// with PermissionDenied, not NotFound.
 func isPaymentRecordMissing(err error) bool {
 	switch status.Code(err) {
 	case codes.PermissionDenied, codes.NotFound:

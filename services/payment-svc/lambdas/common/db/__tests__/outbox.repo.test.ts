@@ -2,9 +2,8 @@ import { randomUUID } from 'crypto';
 import { getDb, closeDb } from '../kysely';
 import { claimBatch, markPublished } from '../outbox.repo';
 
-// id has no DB-level default (Prisma's @default(uuid()) is applied client-side, not
-// as a Postgres DEFAULT), and createdAt must differ across rows for the
-// oldest-first ordering to be well-defined instead of tied at statement timestamp.
+// id has no DB default (Prisma's @default(uuid()) is client-side), and createdAt
+// must differ per row or the oldest-first ordering ties at statement timestamp.
 const seed = async () => {
   const db = getDb();
   await db.deleteFrom('outbox').execute();
@@ -57,10 +56,9 @@ test('markPublished sets publishedAt so rows are no longer claimable', async () 
 test('two concurrent claims never return the same row (SKIP LOCKED)', async () => {
   await seed();
   const db = getDb();
-  // Hold each transaction open briefly after claiming so the two SELECT ... FOR
-  // UPDATE statements genuinely overlap in Postgres, regardless of pool connection
-  // acquisition latency — otherwise one transaction can commit before the other
-  // even queries, and the SKIP LOCKED exclusion never gets exercised.
+  // Hold each transaction open after claiming so the two FOR UPDATE statements
+  // genuinely overlap; otherwise one commits before the other queries and
+  // SKIP LOCKED is never exercised.
   const claimAndHold = () =>
     db.transaction().execute(async (trx) => {
       const rows = await claimBatch(trx, 10, 5);

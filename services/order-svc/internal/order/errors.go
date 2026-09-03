@@ -25,10 +25,9 @@ var (
 	// should return that order rather than creating a second one.
 	ErrPurchaseSlotTaken = errors.New("purchase slot already taken")
 
-	// The buyer's slot is held by an order in a state this service does not
-	// know how to resume. The workflows package declares its own sentinel of
-	// the same name; the service layer must not import it, and neither
-	// survives Temporal's failure proto anyway.
+	// The slot is held by an order in a state this service cannot resume. The
+	// workflows package has its own same-named sentinel; neither survives
+	// Temporal's failure proto, and the service layer must not import it.
 	ErrOrderAlreadyProcessed = errors.New("order already processed")
 
 	// The buyer's purchase slot could not be settled: it named an order that
@@ -45,18 +44,11 @@ var (
 	ErrInventoryCannotConfirm = errors.New("inventory cannot confirm this order")
 )
 
-// Temporal ApplicationError type strings.
-//
-// A workflow failure reaches the caller as a *temporal.WorkflowExecutionError
-// rebuilt from a serialised failure proto, so sentinel identity does not survive
-// the round trip and errors.Is against the vars above can never match. The
-// ApplicationError type string does survive, which makes it the contract between
-// the workflow and the gRPC layer.
-//
-// It also does not survive only at that final boundary: an activity's failure
-// is itself recorded to workflow history as the same kind of failure proto, so
-// a workflow inspecting an activity's error is subject to the identical loss
-// and must key off these same strings, not the sentinel above.
+// Temporal ApplicationError type strings -- the contract between a workflow and
+// its callers, because a failure-proto round trip destroys sentinel identity and
+// errors.Is against the vars above can never match. This holds at every boundary,
+// not just the outermost: an activity's error is recorded to history the same
+// way, so workflows must key off these strings too.
 const (
 	ErrTypeInsufficientInventory  = "InsufficientInventory"
 	ErrTypeOrderCodeCollision     = "OrderCodeCollision"

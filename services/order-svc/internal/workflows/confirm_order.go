@@ -14,11 +14,10 @@ func GetConfirmOrderWorkflowID(oCode string) string {
 	return fmt.Sprintf("ConfirmOrder:%s", oCode)
 }
 
-// markForRefund records that a paid order cannot be fulfilled: it moves the
-// order to REFUND_REQUIRED and emits the event a refund process consumes.
-// Both are best-effort and their failures are logged rather than returned --
-// the caller is already failing the workflow, and losing the marking must not
-// also lose the reason.
+// markForRefund records that a paid order cannot be fulfilled: REFUND_REQUIRED
+// plus the event a refund process consumes. Both are best-effort -- the caller
+// is already failing the workflow, and losing the marking must not lose the
+// reason too.
 func markForRefund(ctx workflow.Context, o *models.Order, reason string) {
 	logger := workflow.GetLogger(ctx)
 	logger.Error("Order is paid but cannot be fulfilled", "orderCode", o.Code, "reason", reason)
@@ -32,17 +31,11 @@ func markForRefund(ctx workflow.Context, o *models.Order, reason string) {
 	freePurchaseSlot(ctx, o)
 }
 
-// freePurchaseSlot ends the buyer's claim on their one in-flight purchase. The
-// claim is taken before the order exists and is what a duplicate create is
-// answered with, so it has to be given back the moment the purchase has an
-// outcome. Without that, an event with no waiting room keys the slot on the
-// buyer and the event -- stable for that buyer's lifetime -- and every later
-// purchase of the same event is answered with the finished order and its dead
-// payment URL instead of a new checkout.
-//
-// A failure is logged rather than returned: the outcome it follows is already
-// recorded, and failing the workflow over the claim would report a purchase
-// that actually landed as a failed one. The claim's TTL is the backstop.
+// freePurchaseSlot ends the buyer's claim once the purchase has an outcome.
+// Holding it is a lockout, not a leak: without a waiting room the key is stable
+// per buyer and event, so every later purchase would be answered with the
+// finished order. Failure is logged, not returned -- the TTL is the backstop.
+// See docs/PURCHASE_SLOT.md#release.
 func freePurchaseSlot(ctx workflow.Context, o *models.Order) {
 	if err := releasePurchaseSlot(ctx, o); err != nil {
 		workflow.GetLogger(ctx).Error("Failed to release the buyer's purchase slot; it stays held until its TTL expires",
@@ -123,10 +116,8 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 	//    claim that suppressed a duplicate create has nothing left to guard.
 	freePurchaseSlot(ctx, o)
 
-	// 5. Free the waiting room slot. The buyer already has their ticket, so a
-	//    failure here is not the order's failure: it costs one slot until the
-	//    waiting room's session TTL reclaims it. Returning the error would mark
-	//    a fulfilled purchase as a failed workflow and page someone for it.
+	// 5. Free the waiting room slot. The ticket is already the buyer's, so a
+	//    failure costs one slot until the session TTL, not the order.
 	if err := publishCheckoutCompleted(ctx, o.SessionID, o.UserID, o.EventID); err != nil {
 		logger.Warn("Order is complete but the waiting room was not notified; the slot will be reclaimed by its session TTL",
 			"error", err, "orderCode", o.Code, "sessionID", o.SessionID)

@@ -12,10 +12,9 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// By the time the notification is sent the buyer has their ticket: inventory is
-// confirmed and the order is COMPLETED. A publish that fails costs a waiting
-// room slot until its session TTL expires -- it does not un-sell the ticket, so
-// it must not mark the workflow failed.
+// By notification time the ticket is the buyer's -- inventory confirmed, order
+// COMPLETED. A failed publish costs a waiting room slot until its session TTL;
+// it does not un-sell the ticket, so it must not fail the workflow.
 func TestConfirmOrder_PublishFailureDoesNotFailTheOrder(t *testing.T) {
 	env := newTestEnv(t)
 
@@ -99,11 +98,9 @@ func TestConfirmOrder_UnfulfillableOrderIsMarkedForRefund(t *testing.T) {
 	}
 }
 
-// ConfirmInventory failing on an infrastructure fault -- the gRPC call itself
-// could not be completed -- says nothing about whether the order can still be
-// fulfilled. It must fail the workflow so the payment event is retried, but it
-// must not be marked for refund: that would pay back a buyer whose ticket may
-// still be confirmable once inventory-svc is reachable again.
+// An infrastructure fault says nothing about whether the order is fulfillable.
+// Fail the workflow so the event is retried, but do not mark for refund: the
+// ticket may still be confirmable once inventory-svc is reachable.
 func TestConfirmOrder_InventoryInfrastructureFailureIsNotMarkedForRefund(t *testing.T) {
 	env := newTestEnv(t)
 
@@ -133,10 +130,9 @@ func TestConfirmOrder_InventoryInfrastructureFailureIsNotMarkedForRefund(t *test
 	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 }
 
-// A payment event lands on an order already cancelled or timed out. The money
-// is real and the order will never be fulfilled, so this branch of the status
-// guard -- not just the inventory-confirm branch -- must also mark it for
-// refund and still fail the workflow.
+// A payment landing on an already cancelled or timed-out order: the money is
+// real and the order never fulfillable, so this branch of the status guard must
+// also mark for refund and still fail the workflow.
 func TestConfirmOrder_PaymentOnATerminalOrderIsMarkedForRefund(t *testing.T) {
 	env := newTestEnv(t)
 
@@ -223,11 +219,9 @@ func TestConfirmOrder_RedeliveredPaymentOnRefundedOrderIsANoOp(t *testing.T) {
 	requireNotCalled(t, env, "ConfirmInventory", mock.Anything, mock.Anything)
 }
 
-// The purchase slot admits one purchase at a time, and a completed purchase is
-// over. Leaving the claim standing would keep it naming a COMPLETED order, and
-// for an event with no waiting room the key is the buyer and the event -- the
-// same string next week -- so the buyer would be handed that finished order and
-// its dead payment URL instead of a new checkout, with no way back.
+// A completed purchase is over. Leaving the claim naming a COMPLETED order locks
+// the buyer out: with no waiting room the key is buyer + event, the same string
+// next week, so they get that finished order and its dead payment URL forever.
 func TestConfirmOrder_CompletionGivesThePurchaseSlotBack(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -266,10 +260,8 @@ func TestConfirmOrder_CompletionGivesThePurchaseSlotBack(t *testing.T) {
 	}
 }
 
-// The slot is released for the buyer's benefit, not the order's: a release that
-// fails costs one held slot until its TTL, while failing the workflow over it
-// would report a purchase the buyer has already paid for and received as a
-// failed one, and send the payment event round again.
+// A failed release costs one slot until its TTL. Failing the workflow over it
+// would report a paid, delivered purchase as failed and redeliver the event.
 func TestConfirmOrder_AFailedSlotReleaseDoesNotFailTheOrder(t *testing.T) {
 	env := newTestEnv(t)
 

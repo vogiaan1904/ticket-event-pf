@@ -1,4 +1,3 @@
-// src/middleware/logger.middleware.ts
 import { LoggerService } from '@/shared/services/logger.service';
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
@@ -10,7 +9,7 @@ export class LoggerMiddleware implements NestMiddleware {
     const { method, originalUrl, ip } = req;
     const start = process.hrtime();
 
-    // Add response tracking
+    // Tee res.send so the body length can be logged after the response.
     const originalSend = res.send;
     let responseBody: any;
 

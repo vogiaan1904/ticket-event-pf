@@ -32,9 +32,8 @@ func newTestDB(t *testing.T) *pkgGorm.Repository {
 		ConnMaxIdleTime: 10 * time.Minute,
 	})
 	if err != nil {
-		// A missing database must never let the suite report success in CI --
-		// these tests are the only thing standing between a refactor and an
-		// oversell. Locally, skipping keeps `go test ./...` usable.
+		// CI: fail -- these tests are all that stands between a refactor and an
+		// oversell. Local: skip, so `go test ./...` stays usable.
 		if os.Getenv("CI") != "" {
 			t.Fatalf("CI requires a reachable test postgres (%s): %v", dsn, err)
 		}

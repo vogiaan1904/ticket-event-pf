@@ -40,63 +40,54 @@ func NewClient(cfg config.RedisConfig) *Client {
 }
 
 // Get retrieves the value of the specified key from Redis.
-// Returns the value as bytes and any error encountered.
 func (r *Client) Get(ctx context.Context, key string) ([]byte, error) {
 	return r.redis.Get(ctx, key).Bytes()
 }
 
 // GetString retrieves the value of the specified key from Redis as a string.
-// Returns the value as a string and any error encountered.
 func (r *Client) GetString(ctx context.Context, key string) (string, error) {
 	return r.redis.Get(ctx, key).Result()
 }
 
 // Set stores a key-value pair in Redis with an optional expiration time.
 // If expiration is 0, the key will have no expiration.
-// Returns an error if the operation fails.
 func (r *Client) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	return r.redis.Set(ctx, key, value, expiration).Err()
 }
 
 // Del deletes the specified key from Redis.
-// Returns an error if the operation fails.
 func (r *Client) Del(ctx context.Context, key string) error {
 	return r.redis.Del(ctx, key).Err()
 }
 
 // Exists checks whether a given key exists in Redis.
-// Returns the count of existing keys and any error encountered.
 func (r *Client) Exists(ctx context.Context, key string) (int64, error) {
 	return r.redis.Exists(ctx, key).Result()
 }
 
 // TTL returns the remaining time to live of a key that has a timeout.
-// Returns the TTL duration and any error encountered.
 func (r *Client) TTL(ctx context.Context, key string) (time.Duration, error) {
 	return r.redis.TTL(ctx, key).Result()
 }
 
-// Pipeline creates a pipeline for executing multiple commands atomically.
-// Returns a Pipeliner that can be used to queue commands and execute them together.
+// Pipeline batches commands into one round trip. Not atomic -- use a
+// transaction for that.
 func (r *Client) Pipeline() redis.Pipeliner {
 	return r.redis.Pipeline()
 }
 
 // HSet sets a field in a hash stored at key in Redis.
-// Returns an error if the operation fails.
 func (r *Client) HSet(ctx context.Context, key string, value any) error {
 	return r.redis.HSet(ctx, key, value).Err()
 }
 
 // HGetAll retrieves all fields and values of a hash stored at the specified key.
 // The results are scanned into the provided destination structure.
-// Returns an error if the operation fails.
 func (r *Client) HGetAll(ctx context.Context, key string, desc any) error {
 	return r.redis.HGetAll(ctx, key).Scan(desc)
 }
 
 // Ping sends a PING command to Redis to check connectivity.
-// Returns an error if Redis is not reachable.
 func (r *Client) Ping(ctx context.Context) error {
 	return r.redis.Ping(ctx).Err()
 }

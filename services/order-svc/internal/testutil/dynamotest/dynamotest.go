@@ -1,7 +1,6 @@
 // Package dynamotest gives every package's integration tests the same real
-// DynamoDB local, so a fix to the datastore contract (a new conditional
-// write, a new index) can be exercised from the repository layer and from
-// anything that calls it -- currently the Temporal activities -- without
+// DynamoDB local, so a datastore-contract change (a new conditional write, a new
+// index) can be exercised from the repository layer and from its callers without
 // each package re-deriving how to reach and seed the table.
 package dynamotest
 
@@ -26,13 +25,10 @@ const (
 	TableName       = "ticketbottle-orders"
 )
 
-// NewClient returns a DynamoDB client wired to TEST_DYNAMO_ENDPOINT (falling
-// back to DefaultEndpoint) with TableName already created and empty. A
-// missing datastore skips the test locally -- these tests are the only thing
-// standing between a retried write and a paid order getting silently
-// overwritten, but a developer without dynamodb-local running still needs
-// `go test ./...` to work -- and hard-fails when CI is set, so a missing
-// datastore can never let the suite report success in CI.
+// NewClient returns a DynamoDB client wired to TEST_DYNAMO_ENDPOINT (default
+// DefaultEndpoint), with TableName created and empty. A missing datastore skips
+// locally, so `go test ./...` works without dynamodb-local, and hard-fails when
+// CI is set, so the suite can never report success having asserted nothing.
 func NewClient(t *testing.T) *dynamodb.Client {
 	t.Helper()
 
@@ -72,10 +68,9 @@ func NewClient(t *testing.T) *dynamodb.Client {
 }
 
 // ensureOrdersTable creates the single-table schema the Helm chart's
-// dynamodb-init job creates in every other environment, so a test run needs
-// nothing beyond a running dynamodb-local. A DescribeTable error other than
-// "table does not exist" means the endpoint itself is unreachable and is
-// returned as-is for the caller to treat as a skip/fail signal.
+// dynamodb-init job creates elsewhere, so a test run needs only a running
+// dynamodb-local. A DescribeTable error other than "table does not exist" means
+// the endpoint is unreachable and is returned as-is.
 func ensureOrdersTable(ctx context.Context, db *dynamodb.Client) error {
 	_, err := db.DescribeTable(ctx, &dynamodb.DescribeTableInput{
 		TableName: aws.String(TableName),

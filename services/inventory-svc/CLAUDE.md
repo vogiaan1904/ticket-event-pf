@@ -67,3 +67,11 @@ All of this is still interim — versioned migrations are the target. Default Po
 - **`Release`** — an unknown order code or all-terminal rows are a no-op; a `CONFIRMED` row returns `ErrStateConflict`.
 
 Order-svc sets the hold to `PaymentTimeout + ReservationHoldGrace` (`internal/workflows/shared.go`) so the hold strictly outlives the payment window — the expiry worker must never win that race.
+
+## Design docs
+
+Rationale that does not fit a comment lives here, and comments point at it
+(see the root `CLAUDE.md`, "Comment conventions"):
+
+- `docs/MODELS.md` — tables, GORM models, repository usage.
+- `docs/POST_MIGRATE_DDL.md` — the post-`AutoMigrate` statements: why every constraint is `NOT VALID`, and the guarded `fk_ticket_class_reservations` repair.

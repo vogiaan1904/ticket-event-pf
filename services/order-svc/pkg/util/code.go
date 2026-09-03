@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 	"time"
 )
@@ -26,7 +27,7 @@ func GenerateOrderCode() string {
 	codeLength := 8
 
 	var code strings.Builder
-	for i := 0; i < codeLength; i++ {
+	for range codeLength {
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		code.WriteByte(charset[n.Int64()])
 	}
@@ -34,15 +35,11 @@ func GenerateOrderCode() string {
 	return fmt.Sprintf("TB-%s-%s", dateStr, code.String())
 }
 
-// GenerateOrderCodeWithEventPrefix generates a unique order code with event-specific prefix
-// Format: TB-PREFIX-YYYYMMDD-XXXXXXXX
-// Examples:
-//   - "Taylor Swift Eras Tour 2024" -> TB-TSE24-20251008-A3B7K9M2
-//   - "Rock Concert" -> TB-RC-20251008-A3B7K9M2
-//   - "Jazz Festival 2024" -> TB-JF24-20251008-A3B7K9M2
-//   - "Coldplay" -> TB-COLDPL-20251008-A3B7K9M2
+// GenerateOrderCodeWithEventPrefix builds TB-PREFIX-YYYYMMDD-XXXXXXXX, the
+// prefix being the event name's initials minus common words.
 //
-// The prefix is generated from the event name by taking initials and removing common words
+//	"Taylor Swift Eras Tour 2024" -> TB-TSE24-20251008-A3B7K9M2
+//	"Coldplay"                    -> TB-COLDPL-20251008-A3B7K9M2
 func GenerateOrderCodeWithEventPrefix(eventName string) string {
 	dateStr := time.Now().Format("20060102")
 
@@ -50,7 +47,7 @@ func GenerateOrderCodeWithEventPrefix(eventName string) string {
 	codeLength := 8
 
 	var code strings.Builder
-	for i := 0; i < codeLength; i++ {
+	for range codeLength {
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		code.WriteByte(charset[n.Int64()])
 	}
@@ -68,13 +65,7 @@ func generateEventPrefix(eventName string) string {
 
 	var meaningfulWords []string
 	for _, word := range words {
-		isCommon := false
-		for _, common := range commonWords {
-			if word == common {
-				isCommon = true
-				break
-			}
-		}
+		isCommon := slices.Contains(commonWords, word)
 		if !isCommon && len(word) > 1 {
 			meaningfulWords = append(meaningfulWords, word)
 		}
@@ -163,7 +154,7 @@ func GenerateShortOrderCode() string {
 	codeLength := 8
 
 	var code strings.Builder
-	for i := 0; i < codeLength; i++ {
+	for range codeLength {
 		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
 		code.WriteByte(charset[n.Int64()])
 	}

@@ -19,12 +19,10 @@ import (
 
 var ErrOrderNotFound = errors.New("order not found")
 
-// purchaseSlotTTL garbage collects a claim nothing ever comes back for. It is
-// not the recovery path: a stranded claim is released when the create fails,
-// and the next request to find one naming an order that was never written
-// deletes it on the spot. This only stops an item nobody revisits from living
-// forever, and DynamoDB's TTL sweep can lag by hours, so it is set far beyond
-// any checkout window rather than tuned to one.
+// purchaseSlotTTL garbage collects a claim nothing comes back for. Not the
+// recovery path -- a stranded claim is cleared by the failing create or by the
+// next request to find it -- so it is set far beyond any checkout window rather
+// than tuned to one, since DynamoDB's sweep can lag by hours.
 const purchaseSlotTTL = 30 * 24 * time.Hour
 
 // isConditionalCheckFailed reports whether a DynamoDB write was refused by its
@@ -64,17 +62,11 @@ func (r *implRepository) Create(ctx context.Context, opt CreateOrderOption) (mod
 	return o, nil
 }
 
-// ClaimPurchaseSlot reserves a buyer's right to one in-flight order, keyed by
-// dedupeKey. It returns ("", claimedAt, nil) when this caller won the claim,
-// and (winningOrderCode, claimedAt, order.ErrPurchaseSlotTaken) when one
-// already exists. claimedAt is when the winning claim was written, so a
-// caller that loses can tell a claim still within its create's window apart
-// from one old enough to be abandoned.
-//
-// This is a conditional write rather than a read followed by a create because
-// the case that matters is two requests arriving together: both would read
-// nothing, both would proceed, and one queue slot would produce two orders and
-// two inventory holds. Only the database can settle that.
+// ClaimPurchaseSlot reserves a buyer's right to one in-flight order, returning
+// ("", claimedAt, nil) on a win and (winnerCode, claimedAt, ErrPurchaseSlotTaken)
+// on a loss, so a loser can age the winning claim. A conditional write, not
+// read-then-create: two requests arriving together would both read nothing and
+// both proceed. See docs/PURCHASE_SLOT.md#lifecycle.
 func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, orderCode string) (string, time.Time, error) {
 	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
 	now := r.clock()
@@ -126,11 +118,10 @@ func (r *implRepository) ClaimPurchaseSlot(ctx context.Context, dedupeKey, order
 	return winner.Value, claimedAt, order.ErrPurchaseSlotTaken
 }
 
-// parseClaimedAt reads a claim's claimed_at attribute back into a time.Time.
-// A claim written before this attribute existed, or one whose value fails to
-// parse, comes back as the zero time -- which reads as arbitrarily old to any
-// age check against it, the safe side to fail on since it leads to a stranded
-// claim being cleared rather than a live one being kept forever.
+// parseClaimedAt reads a claim's claimed_at back into a time.Time. A missing or
+// unparseable value returns the zero time, which any age check reads as
+// arbitrarily old -- the safe side, clearing a stranded claim rather than keeping
+// a live one forever.
 func parseClaimedAt(item map[string]types.AttributeValue) time.Time {
 	attr, ok := item["claimed_at"].(*types.AttributeValueMemberN)
 	if !ok {
@@ -145,16 +136,10 @@ func parseClaimedAt(item map[string]types.AttributeValue) time.Time {
 	return time.Unix(sec, 0)
 }
 
-// ReleasePurchaseSlot drops the claim on dedupeKey, but only while it still
-// names orderCode.
-//
-// The condition is what stops a release from undoing someone else's claim. A
-// stranded claim is released by whoever notices it, and by the time a late
-// release lands the slot may already have been taken by a fresh request; an
-// unconditional delete would remove that new claim and let two creates run at
-// once -- the very thing the claim exists to prevent. A refused delete means
-// the slot has already moved on, which is the outcome the caller wanted, so it
-// is not an error.
+// ReleasePurchaseSlot drops the claim on dedupeKey, but only while it still names
+// orderCode. Unconditional would let a late release delete the claim a fresh
+// request has since taken, running two creates at once. A refused delete means
+// the slot already moved on -- the outcome the caller wanted, not an error.
 func (r *implRepository) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
 	k := pkgDynamo.BuildPurchaseSlotKey(dedupeKey)
 

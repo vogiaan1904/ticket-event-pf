@@ -10,11 +10,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 )
 
-// Temporal guarantees an activity can be retried after its side effect
-// already landed -- a worker crashing between a successful PutItem and the
-// result being recorded is exactly the case the retry policy exists for. A
-// retry of CreateOrder with the same input must return the order that was
-// already written, not fail the workflow and trigger compensation.
+// An activity can be retried after its side effect already landed -- a worker
+// crashing between a successful PutItem and the recorded result. The retry must
+// return the written order, not fail the workflow into compensation.
 func TestCreateOrder_RetryOfALandedWriteReturnsTheSameOrder(t *testing.T) {
 	a := newTestOrderActivities(t)
 
@@ -38,10 +36,9 @@ func TestCreateOrder_RetryOfALandedWriteReturnsTheSameOrder(t *testing.T) {
 	}
 }
 
-// A code reused by a different user/event is not a retry -- it is a
-// code-generation collision, and serving the first buyer's order back to the
-// second would hand over someone else's order. It must fail, and fail
-// without Temporal retrying it into the same wrong answer five times.
+// A code reused by a different user/event is a collision, not a retry: serving
+// the first buyer's order to the second hands over someone else's order. Fail,
+// and fail without retrying into the same wrong answer five times.
 func TestCreateOrder_CodeReusedByADifferentOrderIsRefused(t *testing.T) {
 	a := newTestOrderActivities(t)
 

@@ -12,10 +12,9 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 )
 
-// redeliveryBackoff paces a message that keeps failing. Ending the session is
-// what puts the message back: the next session re-reads the same offset
-// immediately, so without this pause a message that fails every time would spin
-// its partition through a rebalance as fast as the broker can answer.
+// redeliveryBackoff paces a message that keeps failing. Ending the session puts
+// it back and the next session re-reads the same offset immediately, so without
+// the pause a permanently failing message spins its partition through rebalances.
 const redeliveryBackoff = 5 * time.Second
 
 type Consumer struct {
@@ -99,28 +98,19 @@ func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-// isSettled reports whether a failed message has already been given its final
-// answer, so that another delivery could only reach the same one. Both cases
-// are outcomes rather than faults: the order's state already accounts for this
-// payment, or there is no order for it to account for. Everything else -- an
-// unreachable dependency, a deadline, a bug -- may succeed on a later attempt.
+// isSettled reports whether a failed message already has its final answer, so
+// another delivery could only reach the same one: the order's state accounts for
+// this payment, or there is no order to account for it. Everything else -- an
+// unreachable dependency, a deadline, a bug -- may succeed later.
 func isSettled(err error) bool {
 	return errors.Is(err, order.ErrOrderAlreadyProcessed) || errors.Is(err, order.ErrOrderNotFound)
 }
 
-// ConsumeClaim processes a partition's messages in order, marking each one only
-// once it has been handled.
-//
-// A message that fails is deliberately left unmarked and ends the session:
-// sarama commits the highest marked offset, so continuing past a failure would
-// let the next successful message commit an offset beyond it and drop the
-// event for good -- a captured payment whose order stays PENDING with nothing
-// left to notice it. Ending the session leaves the committed offset before the
-// failed message, and the next one re-reads it.
-//
-// A message whose failure is settled is marked instead: redelivering it would
-// re-derive the same answer forever and hold every later event on the partition
-// behind it.
+// ConsumeClaim processes a partition's messages in order, marking each only once
+// handled. A failure is left unmarked and ends the session -- sarama commits the
+// highest marked offset, so moving on would drop the event for good. A settled
+// failure is marked instead; redelivering it re-derives the same answer forever
+// and holds every later event on the partition behind it.
 func (c *Consumer) ConsumeClaim(ss sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for {
 		select {

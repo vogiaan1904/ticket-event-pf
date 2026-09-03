@@ -19,9 +19,8 @@ func updateSvc(t *testing.T) (TicketClassService, ReservationService, *pkgGorm.R
 		repo
 }
 
-// A rename must not touch total, currency, or the sale window. The old
-// buildUpdate assigned every field unconditionally, so {id, name} wiped
-// total to 0 and currency to "".
+// A rename must not touch total, currency, or the sale window -- an
+// unconditional field assignment wiped total to 0 and currency to "".
 func TestUpdate_PartialUpdate_PreservesUnsetFields(t *testing.T) {
 	tcSvc, _, repo := updateSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)
@@ -89,9 +88,8 @@ func TestUpdate_ConcurrentReserve_DoesNotLoseHolds(t *testing.T) {
 		t.Errorf("concurrent Update: %v", err)
 	}
 
-	// total 500 against 40 single-seat reserves: every single one must fit,
-	// so a partial success count is itself evidence of a defect (lost
-	// holds, spurious conflicts, etc.) -- not just a possible outcome.
+	// 500 total against 40 single-seat reserves: all must fit, so any partial
+	// success count is itself a defect (lost holds, spurious conflicts).
 	if okCount != reserves {
 		t.Fatalf("successful reserves = %d, want %d (all should have fit within total=500)", okCount, reserves)
 	}
@@ -101,8 +99,7 @@ func TestUpdate_ConcurrentReserve_DoesNotLoseHolds(t *testing.T) {
 		t.Fatalf("reserved = %d but %d reserves succeeded -- holds were lost by a concurrent Update", got.Reserved, okCount)
 	}
 
-	// Prove at least one concurrent Update actually committed, rather than
-	// every one of them silently failing while the reserved/sold asserts
+	// At least one concurrent Update must have committed, or the asserts
 	// above pass vacuously.
 	if !regexp.MustCompile(`^rename-\d+$`).MatchString(got.Name) {
 		t.Fatalf("name = %q, want it to match rename-<n> (no concurrent Update appears to have committed)", got.Name)
@@ -136,14 +133,9 @@ func TestUpdate_TotalAtCommitted_Succeeds(t *testing.T) {
 		t.Fatalf("total = %d, want 8", got.Total)
 	}
 
-	// Read the committed row back, not the in-memory value the service
-	// returned: a Save()-based read-modify-write would put the live
-	// reserved/sold counters back to whatever they were at read time, so
-	// asserting only against `got` would not catch a regression that
-	// clobbers a *concurrently changing* counter. Here nothing else is
-	// writing concurrently, so the committed row must still show the
-	// seeded reserved/sold -- if it doesn't, the update path is
-	// overwriting counter columns it has no business touching.
+	// Assert on the committed row, not the returned value: a Save()-based
+	// read-modify-write hands back the counters it read, so `got` alone would
+	// not catch the update path overwriting columns it must not touch.
 	reloaded := ticketClassByID(t, repo, tc.ID)
 	if reloaded.Reserved != 5 {
 		t.Fatalf("reserved = %d, want 5 (must survive an unrelated Total update)", reloaded.Reserved)

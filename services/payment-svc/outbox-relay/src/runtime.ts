@@ -3,9 +3,8 @@ import { closeDb, composeDrain } from './db';
 import { getKafkaProducer, disconnectKafka } from './kafka';
 import { logger } from './logger';
 
-// Serializes drains and coalesces any triggers that arrive mid-drain into a single
-// follow-up run, so a burst of NOTIFYs (or NOTIFY + safety-poll firing together)
-// never launches concurrent drains against the same rows.
+// Serializes drains, coalescing mid-drain triggers into one follow-up run, so a
+// burst of NOTIFYs never launches concurrent drains against the same rows.
 export const createDrainScheduler = (drain: () => Promise<void>): { trigger: () => void } => {
   let running = false;
   let pending = false;
@@ -41,16 +40,13 @@ export const startRuntime = async (): Promise<() => Promise<void>> => {
 
   const scheduler = createDrainScheduler(composeDrain());
 
-  // Dedicated LISTEN connection: a pooled client would be handed back to the pool
-  // between queries, silently dropping the LISTEN registration. If this connection
-  // drops (DB restart / network blip), `scheduleReconnect` below reconnects it with
-  // exponential backoff instead of leaving NOTIFY dead until process restart; the
-  // safety poll is the backstop for any gap while disconnected.
+  // Dedicated LISTEN connection: a pooled client returns to the pool between
+  // queries and silently drops the registration. scheduleReconnect below revives
+  // it with backoff; the safety poll covers the gap while disconnected.
   let listener: Client | undefined;
   let stopped = false;
-  // True from the moment a reconnect is queued until that attempt (delay + connect
-  // + LISTEN) settles, so a second error/end firing mid-attempt can't queue an
-  // overlapping reconnect on top of it.
+  // True from queueing a reconnect until that attempt settles, so an error/end
+  // firing mid-attempt cannot queue an overlapping one.
   let reconnecting = false;
   let backoffMs = RECONNECT_BASE_MS;
   let reconnectTimer: NodeJS.Timeout | undefined;

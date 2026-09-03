@@ -94,6 +94,47 @@ element of the `ErrorCode` tuple — `[message, httpStatus, grpcCode]` — so a 
 one fails `tsc`. Neither side has a default: a silent fallback is how an error
 ends up with the wrong class.
 
+## Comment conventions (binding for every service)
+
+A comment earns its place only by saying what the code cannot. It is read at a
+glance or not at all, so it is budgeted like code, not written like prose.
+
+**Budget — hard limits.**
+
+| Where | Limit |
+|---|---|
+| Inline, inside a function body | **3 lines** |
+| Doc comment on a symbol | **5 lines**, first line one sentence: `// X does Y.` |
+| Package doc | 8 lines |
+
+The budget counts **prose** lines. An indented case table or step list does not
+count against it — that form is the point — but the whole block stays under 10.
+
+**No paragraphs.** A block of running prose explaining a design decision is not
+a comment — it is documentation in the wrong file. If the rationale does not fit
+the budget, put it in the service's `docs/` and leave a one-line pointer:
+
+```go
+// Sized so an in-flight create is never mistaken for an abandoned one.
+// See docs/PURCHASE_SLOT.md#settle-window.
+```
+
+**Compress with structure, not sentences.** Branching or multi-case reasoning
+goes in a form the eye can scan:
+
+```go
+// pending | completed  -> resume, return the same checkout
+// cancelled | failed   -> release the slot, let the retry take it
+// unknown              -> refuse; guessing double-sells or strands
+```
+
+Single-line prefixes carry the rest: `// Why:`, `// Invariant:`,
+`// Trade-off:`, `// Fails when:`.
+
+**Never write.** Restatements of the line below; narrative history ("this used
+to...", "changed because..."); walkthroughs of what a *different* function
+does; justification aimed at a reviewer rather than the next reader.
+
 ## Conventions that span services
 
 - **Go services** (`order`, `inventory`, `waitroom`) share a layout: `cmd/<binary>/main.go` → `internal/{delivery,service(s),repository,models}` → shared `pkg/` (logger, errors, grpc, response, util). Logging uses the custom zap wrapper with `f`-suffixed, ctx-first methods: `l.Errorf(ctx, "...", err)`, `l.Infof(ctx, "...")`. (The "use error vars, never `fmt.Errorf`" rule is **Order-specific** — see `services/order-svc/CLAUDE.md`; the other Go services use `fmt.Errorf` freely.)

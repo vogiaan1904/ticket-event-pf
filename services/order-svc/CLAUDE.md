@@ -50,4 +50,13 @@ go build ./...
 ## Layout
 
 - `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
-- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`. See `docs/SYSTEM.md` for a deeper design write-up.
+- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`.
+
+## Design docs
+
+Rationale that does not fit a comment lives here, and comments point at it
+(see the root `CLAUDE.md`, "Comment conventions"):
+
+- `docs/SYSTEM.md` — the deeper design write-up.
+- `docs/PURCHASE_SLOT.md` — the one-in-flight-purchase claim: key, lifecycle, settle window, release.
+- `docs/RESERVATION_HOLD.md` — why the inventory hold outlives the payment window.

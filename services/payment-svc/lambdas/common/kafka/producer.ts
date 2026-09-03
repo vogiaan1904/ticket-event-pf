@@ -128,5 +128,4 @@ export const publishWithRetry = async <T = any>(
   throw new Error(`Failed to publish to Kafka after ${maxRetries} attempts: ${lastError?.message}`);
 };
 
-// Export Kafka types for convenience
 export type { Producer, ProducerRecord, RecordMetadata } from 'kafkajs';

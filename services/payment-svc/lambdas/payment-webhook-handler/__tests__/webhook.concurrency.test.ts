@@ -7,9 +7,8 @@ beforeEach(async () => {
   const db = getDb();
   await db.deleteFrom('outbox').execute();
   await db.deleteFrom('payments').execute();
-  // updatedAt has no DB-level default (Prisma's @updatedAt is client-side only), so it
-  // must be supplied explicitly here — same gotcha already documented for `id` in
-  // common/db/__tests__/outbox.repo.test.ts.
+  // updatedAt has no DB default (Prisma's @updatedAt is client-side), so supply it
+  // explicitly. Same gotcha as `id` in common/db/__tests__/outbox.repo.test.ts.
   await db.insertInto('payments').values({
     id: 'pay-1', orderCode: 'ORD-1', amountCents: 1000, currency: 'VND', provider: 'zalopay',
     providerTransactionId: 'tx-1', idempotencyKey: 'idem-1', redirectUrl: 'x', paymentUrl: 'y', status: 'PENDING',

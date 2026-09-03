@@ -113,8 +113,8 @@ func TestExhaustedTransientFailureGoesToDLQAndCommits(t *testing.T) {
 	}
 }
 
-// A payload that cannot be decoded fails identically forever; burning the retry
-// budget on it just delays every checkout release behind it.
+// An undecodable payload fails identically forever; retrying it just delays
+// every checkout release behind it.
 func TestPermanentFailureSkipsRetriesAndGoesToDLQ(t *testing.T) {
 	dlq := &fakeDLQ{}
 	var calls atomic.Int32

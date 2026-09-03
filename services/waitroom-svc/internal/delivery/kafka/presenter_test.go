@@ -6,10 +6,8 @@ import (
 	"time"
 )
 
-// The waitroom frees a checkout slot only when it can decode the event that
-// order-svc publishes. A decode failure strands the slot, so the invariant under
-// test is that the routing fields survive *every* timestamp shape we have ever
-// put on this topic -- not just the current one.
+// A decode failure strands the checkout slot, so the routing fields must survive
+// every timestamp shape this topic has ever carried, not just the current one.
 func TestCheckoutCompletedEventDecodesRegardlessOfTimestampFormat(t *testing.T) {
 	broker := time.Date(2026, 7, 21, 6, 29, 4, 0, time.UTC)
 

@@ -29,11 +29,9 @@ func NewInsufficientInventoryError(cause error) error {
 	)
 }
 
-// NewOrderAlreadyProcessedError carries the already-answered outcome across the
-// Temporal boundary: the payment event landed on an order whose state already
-// accounts for it. Non-retryable because an outcome that has been recorded does
-// not change on another attempt, and tagged so the consumer can tell it from a
-// fault and stop redelivering the event.
+// NewOrderAlreadyProcessedError says the payment event landed on an order whose
+// state already accounts for it. Non-retryable -- a recorded outcome does not
+// change on another attempt -- and tagged so the consumer stops redelivering.
 func NewOrderAlreadyProcessedError() error {
 	return temporal.NewNonRetryableApplicationError(
 		ErrOrderAlreadyProcessed.Error(),

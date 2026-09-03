@@ -26,12 +26,9 @@ func (f *fakeInventoryClient) Confirm(ctx context.Context, in *inventory.Confirm
 	return &emptypb.Empty{}, f.confirmErr
 }
 
-// A reservation that was hard-deleted (an admin ticket-class delete) or never
-// created for this order at all leaves inventory-svc with no rows to confirm.
-// That is just as unfulfillable as a resold hold: the order cannot be
-// completed by retrying, so it must be tagged the same non-retryable way
-// FailedPrecondition already is, not left in the "infrastructure, might still
-// work" bucket where it would never be marked for refund.
+// Rows hard-deleted (admin ticket-class delete) or never created leave nothing
+// to confirm -- as unfulfillable as a resold hold. Tag it non-retryable like
+// FailedPrecondition, not as infrastructure that might still work.
 func TestConfirmInventory_NotFoundIsUnfulfillable(t *testing.T) {
 	a := NewInventoryActivities(&fakeInventoryClient{
 		confirmErr: status.Error(codes.NotFound, "no reservations for order"),

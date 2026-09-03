@@ -187,9 +187,8 @@ func (s *queueService) GetQueueInfo(ctx context.Context, eID string) (*QueueInfo
 	}, nil
 }
 
-// PeekQueue reads the head of the queue without removing anything. Entries are
-// removed only once admission has reached a terminal outcome -- see
-// queueProcessor.ProcessEventQueue.
+// PeekQueue reads the head of the queue without removing anything.
+// Entries leave only on a terminal outcome -- see queueProcessor.ProcessEventQueue.
 func (s *queueService) PeekQueue(ctx context.Context, eventID string, count int) ([]string, error) {
 	if count <= 0 {
 		return nil, nil

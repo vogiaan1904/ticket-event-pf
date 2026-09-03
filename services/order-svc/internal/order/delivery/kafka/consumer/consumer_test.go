@@ -83,12 +83,9 @@ func newConsumer(svcErr error) (*Consumer, *fakeSession) {
 		}
 }
 
-// The message carries a payment that has already been captured. Sarama commits
-// the highest marked offset, so logging the failure and moving on lets the next
-// message that succeeds commit past this one and drop it for good: money taken,
-// order PENDING forever, ConfirmOrder never run again for that code. The
-// failure has to leave the offset where it is and end the session so the
-// message comes back.
+// The payment is already captured. Sarama commits the highest marked offset, so
+// moving on lets a later success commit past this one and drop it: money taken,
+// order PENDING forever. The failure must leave the offset and end the session.
 func TestConsumeClaim_AFailedMessageIsNotMarkedAndIsRedelivered(t *testing.T) {
 	c, ss := newConsumer(errors.New("inventory-svc unreachable"))
 
@@ -101,10 +98,9 @@ func TestConsumeClaim_AFailedMessageIsNotMarkedAndIsRedelivered(t *testing.T) {
 	}
 }
 
-// A payment event whose order already accounts for it has been answered: the
-// order is completed, or the refund is already recorded. Another delivery can
-// only reach the same answer, so holding the partition for it would stop every
-// later buyer's confirmation behind an event that is finished.
+// An event whose order already accounts for it is answered -- completed, or the
+// refund recorded. Redelivery reaches the same answer, so holding the partition
+// would stall every later buyer behind a finished event.
 func TestConsumeClaim_ASettledFailureIsMarkedAndDoesNotHoldThePartition(t *testing.T) {
 	for _, settled := range []error{order.ErrOrderAlreadyProcessed, order.ErrOrderNotFound} {
 		t.Run(settled.Error(), func(t *testing.T) {
