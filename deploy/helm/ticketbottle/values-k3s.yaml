@@ -2,7 +2,9 @@ target: k3s
 
 image:
   # registry is injected at deploy time via --set (keeps the account id out of git)
-  tag: latest
+  # The box is the everyday development environment, so it tracks dev, not main.
+  # Deploy another branch's build with --set image.tag=<branch, slashes as dashes>.
+  tag: dev
   pullPolicy: Always
 
 # Use REAL AWS DynamoDB (no in-cluster dynamodb-local pod).

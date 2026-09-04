@@ -2,7 +2,7 @@ name: build-push-ecr
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     paths:
       - "services/**"
       - "deploy/adapters/**"
@@ -58,6 +58,18 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      # main -> :latest, every other ref -> its own branch name. A dispatch from
+      # a feature or labs branch therefore cannot repoint :latest or :dev at
+      # code that branch never merged. Slashes are illegal in a Docker tag.
+      - name: Resolve the moving tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ]; then
+            echo "moving=latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "moving=$(echo '${{ github.ref_name }}' | tr '/' '-')" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push ${{ matrix.repo }}
         uses: docker/build-push-action@v6
         with:
@@ -67,7 +79,7 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}:latest
+            ${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}:${{ steps.tag.outputs.moving }}
             ${{ steps.ecr.outputs.registry }}/${{ matrix.repo }}:sha-${{ github.sha }}
           cache-from: type=gha,scope=${{ matrix.repo }}
           cache-to: type=gha,mode=max,scope=${{ matrix.repo }}

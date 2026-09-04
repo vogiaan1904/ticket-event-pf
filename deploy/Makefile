@@ -95,10 +95,15 @@ k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
 	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
+# HELM_EXTRA passes extra flags through, e.g. deploying a branch build:
+#   make k3s-deploy HELM_EXTRA="--set image.tag=my-branch"
+HELM_EXTRA ?=
+
 k3s-deploy: secrets-check  ## Deploy the chart to k3s from ECR (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
 	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
+	  $(HELM_EXTRA) \
 	  --wait --timeout 10m
 
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)

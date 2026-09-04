@@ -16,7 +16,7 @@ State lives in an S3 backend (`backend "s3" {}`, config passed at `init`). `envs
 |---|---|---|
 | `budget` | One monthly COST budget + Cost Anomaly Detection | **Applied before any compute.** Limit is the *panic ceiling* ($40); notifications at 50% ($20, the real target), 100% actual, and 100% forecast. One budget keeps it inside the free tier. |
 | `vpc` | `10.0.0.0/16`, IGW, **2 public subnets** (`10.0.1.0/24`, `10.0.2.0/24`) in the first two AZs, one public route table | **No NAT gateway** — saves ~$32/mo. Subnets are tagged `kubernetes.io/role/elb=1` so a future EKS ALB controller can discover them. |
-| `ecr` | 13 repositories under `ticketbottle/*` | `scan_on_push`, MUTABLE tags (we push `:latest` *and* `:sha-…`), lifecycle: expire untagged after 3 days, keep last 10 tagged. |
+| `ecr` | 13 repositories under `ticketbottle/*` | `scan_on_push`, MUTABLE tags (a per-branch moving tag *and* `:sha-…`), lifecycle: expire untagged after 3 days, keep last 30 tagged. |
 | `dynamodb` | Table `ticketbottle-orders` | `PAY_PER_REQUEST`, `PK`/`SK`, plus `GSI1` and `GSI2` (both projection `ALL`). Single-table design for `order-svc`. |
 | `iam_ci` | GitHub OIDC provider + role `ticketbottle-github-actions-ecr` | Thumbprint fetched dynamically via the `tls` provider so it survives GitHub cert rotations. Trust policy: `repo:<owner>/<repo>:*` (any branch), `aud=sts.amazonaws.com`. |
 
@@ -109,7 +109,7 @@ PVCs are backed by k3s's `local-path` provisioner writing to the **gp3 root volu
 
 ```yaml
 target: k3s
-image: { tag: latest, pullPolicy: Always }   # registry injected at deploy via --set
+image: { tag: dev, pullPolicy: Always }      # registry injected at deploy via --set
 dynamodb: { enabled: false }                 # use the real AWS table
 order:
   dynamodbEndpoint: ""                       # empty -> default AWS endpoint
@@ -131,7 +131,7 @@ helm upgrade --install tb deploy/helm/ticketbottle -n ticketbottle --create-name
   --set image.registry="${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/" --wait --timeout 10m
 ```
 
-`pullPolicy: Always` matters: tags are mutable (`:latest` moves), so `IfNotPresent` would silently keep a stale image after CI pushes a new one.
+`pullPolicy: Always` matters: the branch tag is mutable (`:dev` moves), so `IfNotPresent` would silently keep a stale image after CI pushes a new one.
 
 ---
 
@@ -141,7 +141,7 @@ helm upgrade --install tb deploy/helm/ticketbottle -n ticketbottle --create-name
 
 - `permissions: id-token: write` → `configure-aws-credentials@v4` with `role-to-assume: ${{ vars.AWS_CI_ROLE_ARN }}` — **OIDC, no stored keys**.
 - A 13-entry matrix: 10 runtime images + 3 Prisma `migrate` images (built from the `builder` **target** of the same Dockerfile).
-- Buildx, `cache-from/to: type=gha` scoped per repo, tagged `:latest` **and** `:sha-<commit>`.
+- Buildx, `cache-from/to: type=gha` scoped per repo, tagged `:sha-<commit>` **and** a moving tag named for the branch — `main` → `:latest`, anything else → its own name. Builds on push to `main` and `dev`; other branches build only via `workflow_dispatch`, and cannot repoint another branch's tag.
 
 Nothing is ever built on a developer machine or on the box. CI is the only builder, which is what keeps both of them thin.
 
