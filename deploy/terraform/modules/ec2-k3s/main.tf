@@ -22,6 +22,16 @@ resource "aws_security_group" "this" {
     protocol    = "tcp"
     cidr_blocks = [var.my_ip_cidr]
   }
+  # EC2 Instance Connect proxies the SSH session from AWS's own IP, not the
+  # browser's -- a fallback path that works even when var.my_ip_cidr can't
+  # reach the box. us-east-1 range: ip-ranges.json, service EC2_INSTANCE_CONNECT.
+  ingress {
+    description = "EC2 Instance Connect"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["18.206.107.24/29"]
+  }
   egress {
     from_port   = 0
     to_port     = 0
@@ -108,4 +118,12 @@ resource "aws_instance" "k3s" {
   }
 
   tags = merge(var.tags, { Name = "ticketbottle-k3s" })
+
+  # al2023.value is the "latest" SSM alias, not a pin -- AWS republishing it
+  # forces a replace (ami is a ForceNew attribute) on the next unrelated
+  # apply, e.g. an SSH-only IP change. Ignored here; take a new AMI only via
+  # a deliberate `terraform taint`.
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
