@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -31,6 +32,7 @@ func (a *OrderActivities) CreateOrder(ctx context.Context, opt repo.CreateOrderO
 		return &o, nil
 	}
 	if !errors.Is(err, order.ErrOrderAlreadyExists) {
+		metrics.RecordActivityFailure("CreateOrder", err)
 		return nil, err
 	}
 
@@ -38,15 +40,18 @@ func (a *OrderActivities) CreateOrder(ctx context.Context, opt repo.CreateOrderO
 	// so Temporal retries, rather than masking it as ErrOrderAlreadyExists.
 	existing, getErr := a.Repo.GetByCode(ctx, opt.Code)
 	if getErr != nil {
+		metrics.RecordActivityFailure("CreateOrder", getErr)
 		return nil, getErr
 	}
 
 	if existing.UserID != opt.UserID || existing.EventID != opt.EventID {
-		return nil, temporal.NewNonRetryableApplicationError(
+		collisionErr := temporal.NewNonRetryableApplicationError(
 			order.ErrOrderCreationFailed.Error(),
 			order.ErrTypeOrderCodeCollision,
 			err,
 		)
+		metrics.RecordActivityFailure("CreateOrder", collisionErr)
+		return nil, collisionErr
 	}
 
 	return &existing, nil
@@ -55,6 +60,7 @@ func (a *OrderActivities) CreateOrder(ctx context.Context, opt repo.CreateOrderO
 func (a *OrderActivities) CreateOrderItems(ctx context.Context, oCode string, items []repo.CreateOrderItemOption) ([]models.OrderItem, error) {
 	itms, err := a.Repo.CreateManyItems(ctx, oCode, items)
 	if err != nil {
+		metrics.RecordActivityFailure("CreateOrderItems", err)
 		return nil, err
 	}
 
@@ -72,13 +78,16 @@ func (a *OrderActivities) GetOrder(ctx context.Context, code string) (*models.Or
 	})
 	if err != nil {
 		if errors.Is(err, repo.ErrOrderNotFound) {
-			return nil, temporal.NewNonRetryableApplicationError(
+			notFoundErr := temporal.NewNonRetryableApplicationError(
 				order.ErrOrderNotFound.Error(),
 				order.ErrTypeOrderNotFound,
 				err,
 			)
+			metrics.RecordActivityFailure("GetOrder", notFoundErr)
+			return nil, notFoundErr
 		}
 
+		metrics.RecordActivityFailure("GetOrder", err)
 		return nil, err
 	}
 
@@ -90,6 +99,7 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 		Status: status,
 	})
 	if err != nil {
+		metrics.RecordActivityFailure("UpdateOrderStatus", err)
 		return err
 	}
 
@@ -100,12 +110,15 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 // outcome. The repository refuses to delete a claim that has moved on to another
 // order, so a late release cannot strip a create that started behind it.
 func (a *OrderActivities) ReleasePurchaseSlot(ctx context.Context, dedupeKey, orderCode string) error {
-	return a.Repo.ReleasePurchaseSlot(ctx, dedupeKey, orderCode)
+	err := a.Repo.ReleasePurchaseSlot(ctx, dedupeKey, orderCode)
+	metrics.RecordActivityFailure("ReleasePurchaseSlot", err)
+	return err
 }
 
 func (a *OrderActivities) DeleteOrder(ctx context.Context, code string) error {
 	err := a.Repo.Delete(ctx, code)
 	if err != nil {
+		metrics.RecordActivityFailure("DeleteOrder", err)
 		return err
 	}
 
@@ -115,6 +128,7 @@ func (a *OrderActivities) DeleteOrder(ctx context.Context, code string) error {
 func (a *OrderActivities) DeleteOrderItems(ctx context.Context, code string) error {
 	err := a.Repo.DeleteItemByOrderCode(ctx, code)
 	if err != nil {
+		metrics.RecordActivityFailure("DeleteOrderItems", err)
 		return err
 	}
 

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/dynamodb"
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/kafka"
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	oCons "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/consumer"
 	oProd "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	oRepo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -114,6 +116,14 @@ func main() {
 		}
 	}()
 
+	metricsSrv := metrics.NewServer(cfg.Server.MetricsPort)
+	go func() {
+		l.Infof(ctx, "metrics server is listening on port: %d", cfg.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			l.Fatalf(ctx, "Failed to serve metrics: %v", err)
+		}
+	}()
+
 	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
 	cons := oCons.NewConsumer(kConsGr, oSvc, l)
@@ -132,6 +142,10 @@ func main() {
 	w.Stop()
 
 	cancel()
+
+	if err := metricsSrv.Shutdown(context.Background()); err != nil {
+		l.Errorf(ctx, "Error shutting down metrics server: %v", err)
+	}
 
 	if err := cons.Close(); err != nil {
 		l.Errorf(ctx, "Error closing consumer: %v", err)

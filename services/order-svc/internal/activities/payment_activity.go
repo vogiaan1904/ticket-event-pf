@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
 )
 
@@ -37,6 +38,7 @@ func (a *PaymentActivities) CreatePaymentIntent(ctx context.Context, in *CreateP
 		TimeoutSeconds: in.TimeoutSeconds,
 	})
 	if err != nil {
+		metrics.RecordActivityFailure("CreatePaymentIntent", err)
 		return nil, err
 	}
 

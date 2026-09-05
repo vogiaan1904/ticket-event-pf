@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/kafka"
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
 	"github.com/vogiaan1904/ticketbottle-order/internal/interceptors"
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	oGrpc "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/grpc"
 	oKafka "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	oRepo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -121,7 +123,10 @@ func main() {
 	}
 
 	gRpcSrv := grpc.NewServer(
-		grpc.UnaryInterceptor(interceptors.GrpcLoggingInterceptor(l)),
+		grpc.ChainUnaryInterceptor(
+			interceptors.GrpcLoggingInterceptor(l),
+			interceptors.GrpcMetricsInterceptor(),
+		),
 	)
 	opb.RegisterOrderServiceServer(gRpcSrv, oGrpc)
 
@@ -129,6 +134,14 @@ func main() {
 		l.Infof(ctx, "gRPC server is listening on port: %d", cfg.Server.GRpcPort)
 		if err := gRpcSrv.Serve(lnr); err != nil {
 			l.Fatalf(ctx, "Failed to serve gRPC: %v", err)
+		}
+	}()
+
+	metricsSrv := metrics.NewServer(cfg.Server.MetricsPort)
+	go func() {
+		l.Infof(ctx, "metrics server is listening on port: %d", cfg.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			l.Fatalf(ctx, "Failed to serve metrics: %v", err)
 		}
 	}()
 
@@ -143,6 +156,10 @@ func main() {
 	cancel()
 	time.Sleep(1 * time.Second)
 	gRpcSrv.GracefulStop()
+
+	if err := metricsSrv.Shutdown(context.Background()); err != nil {
+		l.Errorf(ctx, "Error shutting down metrics server: %v", err)
+	}
 
 	if err := kProd.Close(); err != nil {
 		l.Errorf(ctx, "Error closing Kafka producer: %v", err)

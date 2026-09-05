@@ -77,7 +77,7 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 	if err != nil {
 		return nil, err
 	}
-	compensations.AddCompensation(iActs.ReleaseInventory, in.OrderCode)
+	compensations.AddCompensation("ReleaseInventory", iActs.ReleaseInventory, in.OrderCode)
 
 	// 2. Create order
 	o, err := createOrder(ctx, in)
@@ -85,14 +85,14 @@ func CreateOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*CreateOrd
 		return nil, err
 	}
 	code := o.Code
-	compensations.AddCompensation(oActs.DeleteOrder, code)
+	compensations.AddCompensation("DeleteOrder", oActs.DeleteOrder, code)
 
 	// 3. Create order items
 	itms, err := createOrderItems(ctx, code, in.Items)
 	if err != nil {
 		return nil, err
 	}
-	compensations.AddCompensation(oActs.DeleteOrderItems, code)
+	compensations.AddCompensation("DeleteOrderItems", oActs.DeleteOrderItems, code)
 
 	// 4. Create payment intent
 	pmtResp, err := processPayment(ctx, in)

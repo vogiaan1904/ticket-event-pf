@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -222,6 +223,11 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, err
 	}
 
+	startTime := time.Now()
+	observeDuration := func(outcome string) {
+		metrics.WorkflowDuration.WithLabelValues("CreateOrder", outcome).Observe(time.Since(startTime).Seconds())
+	}
+
 	var wfRes workflows.CreateOrderWorkflowResult
 	err = wfRun.Get(ctx, &wfRes)
 	if err != nil {
@@ -237,21 +243,25 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 				// live order, and releasing would let a retry mint a second one
 				// behind its back.
 				s.l.Errorf(ctx, "failed to cancel abandoned create order workflow %s: %v", wfRun.GetID(), cErr)
+				observeDuration("timeout")
 				return order.CreateOrderOutput{}, order.ErrRequestTimeout
 			}
 
 			// Cancel landed -> no order row will be written, so the claim guards
 			// nothing and would refuse every retry.
 			s.releasePurchaseSlot(ctx, dedupeKey, code)
+			observeDuration("timeout")
 			return order.CreateOrderOutput{}, order.ErrRequestTimeout
 		}
 
 		// Ran to completion and lost on a business outcome such as sold out: no
 		// inventory held, no order written, so the claim guards nothing.
 		s.releasePurchaseSlot(ctx, dedupeKey, code)
+		observeDuration("failed")
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 
+	observeDuration("completed")
 	return order.CreateOrderOutput{
 		Order:      wfRes.Order,
 		OrderItems: wfRes.OrderItems,

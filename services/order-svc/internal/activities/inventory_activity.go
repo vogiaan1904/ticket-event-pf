@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	"go.temporal.io/sdk/temporal"
@@ -31,12 +32,15 @@ func (a *InventoryActivities) ReserveInventory(ctx context.Context, orderCode st
 		// burns five attempts to fail anyway, so tag it non-retryable and let
 		// the gRPC layer turn it into a 4xx.
 		if status.Code(err) == codes.FailedPrecondition {
-			return temporal.NewNonRetryableApplicationError(
+			soldOutErr := temporal.NewNonRetryableApplicationError(
 				order.ErrNotEnoughTickets.Error(),
 				order.ErrTypeInsufficientInventory,
 				err,
 			)
+			metrics.RecordActivityFailure("ReserveInventory", soldOutErr)
+			return soldOutErr
 		}
+		metrics.RecordActivityFailure("ReserveInventory", err)
 		return err
 	}
 
@@ -48,6 +52,7 @@ func (a *InventoryActivities) ReleaseInventory(ctx context.Context, orderCode st
 		OrderCode: orderCode,
 	})
 	if err != nil {
+		metrics.RecordActivityFailure("ReleaseInventory", err)
 		return err
 	}
 
@@ -66,12 +71,15 @@ func (a *InventoryActivities) ConfirmInventory(ctx context.Context, orderCode st
 		// someone rather than silently refunding the buyer.
 		code := status.Code(err)
 		if code == codes.FailedPrecondition || code == codes.NotFound {
-			return temporal.NewNonRetryableApplicationError(
+			cannotConfirmErr := temporal.NewNonRetryableApplicationError(
 				order.ErrInventoryCannotConfirm.Error(),
 				order.ErrTypeInventoryCannotConfirm,
 				err,
 			)
+			metrics.RecordActivityFailure("ConfirmInventory", cannotConfirmErr)
+			return cannotConfirmErr
 		}
+		metrics.RecordActivityFailure("ConfirmInventory", err)
 		return err
 	}
 
@@ -83,6 +91,7 @@ func (a *InventoryActivities) CheckAvailability(ctx context.Context, items []*in
 		Items: items,
 	})
 	if err != nil {
+		metrics.RecordActivityFailure("CheckAvailability", err)
 		return false, err
 	}
 

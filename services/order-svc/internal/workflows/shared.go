@@ -3,6 +3,7 @@ package workflows
 import (
 	"time"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -27,11 +28,17 @@ func reservationExpiry(now time.Time) time.Time {
 }
 
 type Compensations struct {
+	names         []string
 	compensations []any
 	arguments     [][]any
 }
 
-func (s *Compensations) AddCompensation(activity any, parameters ...any) {
+// AddCompensation registers an undo step. name labels it for
+// tb_order_compensations_total -- kept explicit here rather than derived by
+// reflecting the activity function's name, which is fragile across renames
+// and refactors.
+func (s *Compensations) AddCompensation(name string, activity any, parameters ...any) {
+	s.names = append(s.names, name)
 	s.compensations = append(s.compensations, activity)
 	s.arguments = append(s.arguments, parameters)
 }
@@ -52,5 +59,15 @@ func (s Compensations) Compensate(ctx workflow.Context) {
 		if errCompensation != nil {
 			logger.Error("Executing compensation failed", "Error", errCompensation)
 		}
+
+		// This is workflow code, replayed on every history reload -- a bare
+		// Inc() here would double-count exactly the way a metric inside the
+		// workflow function itself would. SideEffect records the result once;
+		// replay reads it back instead of re-running the increment.
+		step := s.names[i]
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
+			metrics.Compensations.WithLabelValues(step).Inc()
+			return nil
+		})
 	}
 }

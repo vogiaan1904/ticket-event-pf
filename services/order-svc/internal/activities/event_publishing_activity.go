@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 )
@@ -34,7 +35,9 @@ func (a *EventPublishingActivities) PublishCheckoutCompleted(ctx context.Context
 		EventID:   in.EventID,
 	}
 
-	return a.Prod.PublishCheckoutCompleted(ctx, event)
+	err := a.Prod.PublishCheckoutCompleted(ctx, event)
+	metrics.RecordActivityFailure("PublishCheckoutCompleted", err)
+	return err
 }
 
 type PublishRefundRequiredInput struct {
@@ -45,10 +48,12 @@ type PublishRefundRequiredInput struct {
 }
 
 func (a *EventPublishingActivities) PublishRefundRequired(ctx context.Context, in PublishRefundRequiredInput) error {
-	return a.Prod.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
+	err := a.Prod.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
 		OrderCode: in.OrderCode,
 		UserID:    in.UserID,
 		EventID:   in.EventID,
 		Reason:    in.Reason,
 	})
+	metrics.RecordActivityFailure("PublishRefundRequired", err)
+	return err
 }

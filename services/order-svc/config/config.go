@@ -24,6 +24,7 @@ type Config struct {
 
 type ServerConfig struct {
 	GRpcPort     int
+	MetricsPort  int
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
@@ -90,6 +91,7 @@ func Load() (*Config, error) {
 		Env: getEnv("ENV", "development"),
 		Server: ServerConfig{
 			GRpcPort:     getEnvAsInt("SERVER_GRPC_PORT", 50054),
+			MetricsPort:  getEnvAsInt("SERVER_METRICS_PORT", 2112),
 			ReadTimeout:  getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout: getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
