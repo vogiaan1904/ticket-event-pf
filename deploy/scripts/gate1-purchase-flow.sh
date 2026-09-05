@@ -93,8 +93,10 @@ for i in $(seq 1 10); do
   sleep 1
 done
 [ -n "$USER_ID" ] || fail "waitroom session not found in Redis: $SS"
-JWT_SECRET=$(kubectl -n $NS get configmap order-config -o jsonpath='{.data.JWT_SECRET}')
-[ -n "$JWT_SECRET" ] || fail "could not read JWT_SECRET from order-config"
+# Signing keys live in per-service Secrets, not the ConfigMap; order-config
+# keeps only JWT_EXPIRY.
+JWT_SECRET=$(kubectl -n $NS get secret order-secrets -o jsonpath='{.data.JWT_SECRET}' | base64 -d)
+[ -n "$JWT_SECRET" ] || fail "could not read JWT_SECRET from secret/order-secrets"
 CHECKOUT=$(python3 -c "import hmac,hashlib,base64,json,time,sys
 secret,sid,uid,eid=sys.argv[1:5]
 b64=lambda b: base64.urlsafe_b64encode(b).rstrip(b'=')
