@@ -35,7 +35,7 @@ spec:
             - { name: DURATION,        value: "${DURATION}" }
             - name: ACCESS_SECRET
               valueFrom:
-                configMapKeyRef: { name: gateway-config, key: JWT_ACCESS_SECRET }
+                secretKeyRef: { name: gateway-secrets, key: JWT_ACCESS_SECRET }
           # k6 at 300 VUs is itself a workload. Requesting nothing lets it be
           # scheduled onto a node it then starves, which measures the load
           # generator instead of the system.

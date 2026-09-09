@@ -31,8 +31,15 @@ MAX_CONCURRENT=${MAX_CONCURRENT:-$(kubectl -n $NS get cm waitroom-config -o json
 psql() { kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc "$1" | tr -d '[:space:]'; }
 fail() { echo "GATE 4a FAILED: $1"; exit 1; }
 
-echo "== 0. record the HPA's starting replica count =="
-kubectl -n $NS get hpa app-gateway >/dev/null 2>&1 || fail "no app-gateway HPA — is values-eks.yaml applied?"
+echo "== 0. preflight =="
+# job.yaml mounts the gateway signing key from a Secret. A key that is not there
+# surfaces as CreateContainerConfigError minutes in, after all the seeding.
+kubectl -n $NS get secret gateway-secrets -o jsonpath='{.data.JWT_ACCESS_SECRET}' 2>/dev/null | grep -q . || \
+  fail "secret/gateway-secrets has no JWT_ACCESS_SECRET — run 'make -C deploy secrets-init', then redeploy"
+# Only §7 and §8 assert on the HPA, and a DURATION run exits before them.
+# Requiring it unconditionally would bar the generator from HPA-less k3s.
+[ -n "$DURATION" ] || kubectl -n $NS get hpa app-gateway >/dev/null 2>&1 || \
+  fail "no app-gateway HPA — is values-eks.yaml applied?"
 START_REPLICAS=$(kubectl -n $NS get deploy app-gateway -o jsonpath='{.spec.replicas}')
 echo "  app-gateway starts at $START_REPLICAS replica(s)"
 
