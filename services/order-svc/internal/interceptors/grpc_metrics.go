@@ -26,7 +26,7 @@ func GrpcMetricsInterceptor() grpc.UnaryServerInterceptor {
 		errCode := "OK"
 		if err != nil {
 			st, _ := status.FromError(err)
-			errCode = st.Code().String()
+			errCode = metrics.CodeString(st.Code())
 		}
 
 		metrics.GRPCRequests.WithLabelValues("order-service", info.FullMethod, errCode).Inc()

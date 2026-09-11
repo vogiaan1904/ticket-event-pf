@@ -1,8 +1,11 @@
 package metrics
 
 import (
+	"fmt"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
@@ -67,6 +70,39 @@ var (
 	)
 )
 
+// codeNames is gRPC's canonical code spelling. codes.Code.String() returns the
+// Go spelling ("Internal"), and the canonical form gRPC-Go uses on the wire is
+// unexported, so the table is restated here.
+// Why: `code` is summed across Go and TS services, and @grpc/grpc-js, the error
+// taxonomy in the root CLAUDE.md and the alert rules all spell it this way.
+var codeNames = map[codes.Code]string{
+	codes.OK:                 "OK",
+	codes.Canceled:           "CANCELLED",
+	codes.Unknown:            "UNKNOWN",
+	codes.InvalidArgument:    "INVALID_ARGUMENT",
+	codes.DeadlineExceeded:   "DEADLINE_EXCEEDED",
+	codes.NotFound:           "NOT_FOUND",
+	codes.AlreadyExists:      "ALREADY_EXISTS",
+	codes.PermissionDenied:   "PERMISSION_DENIED",
+	codes.ResourceExhausted:  "RESOURCE_EXHAUSTED",
+	codes.FailedPrecondition: "FAILED_PRECONDITION",
+	codes.Aborted:            "ABORTED",
+	codes.OutOfRange:         "OUT_OF_RANGE",
+	codes.Unimplemented:      "UNIMPLEMENTED",
+	codes.Internal:           "INTERNAL",
+	codes.Unavailable:        "UNAVAILABLE",
+	codes.DataLoss:           "DATA_LOSS",
+	codes.Unauthenticated:    "UNAUTHENTICATED",
+}
+
+// CodeString returns the canonical name of c for the `code` label.
+func CodeString(c codes.Code) string {
+	if name, ok := codeNames[c]; ok {
+		return name
+	}
+	return fmt.Sprintf("CODE(%d)", c)
+}
+
 // RecordActivityFailure classifies err the same way the gRPC interceptor
 // classifies a response -- its gRPC code if it has one (status.Code walks
 // the error's Unwrap chain, so this also sees through a
@@ -77,5 +113,5 @@ func RecordActivityFailure(activity string, err error) {
 	if err == nil {
 		return
 	}
-	ActivityFailures.WithLabelValues(activity, status.Code(err).String()).Inc()
+	ActivityFailures.WithLabelValues(activity, CodeString(status.Code(err))).Inc()
 }
