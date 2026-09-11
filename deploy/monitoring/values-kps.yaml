@@ -1,0 +1,21 @@
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 6h
+    scrapeInterval: 15s
+    # No storageSpec, so the stack falls back to an emptyDir. A PVC here is an
+    # AZ-pinned EBS volume, which would change which node Gate 4b may kill.
+    resources:
+      requests: { cpu: 100m, memory: 512Mi }
+      limits:   { memory: 1Gi }
+grafana:
+  persistence: { enabled: false }
+  # The box is reachable only through the SSH tunnel, so nothing on the internet
+  # can attempt this login.
+  adminPassword: admin
+alertmanager:
+  alertmanagerSpec:
+    replicas: 1
+    resources:
+      requests: { cpu: 20m, memory: 64Mi }

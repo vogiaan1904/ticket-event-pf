@@ -1,8 +1,9 @@
 import { drainOnce } from '../src/relay';
 
+const createdAt = new Date('2026-01-01T00:00:00Z');
 const rows = [
-  { id: 'a', aggregateId: 'p1', aggregateType: 'payment', eventType: 'PaymentCompleted', payload: {} },
-  { id: 'b', aggregateId: 'p2', aggregateType: 'payment', eventType: 'PaymentCompleted', payload: {} },
+  { id: 'a', aggregateId: 'p1', aggregateType: 'payment', eventType: 'PaymentCompleted', payload: {}, createdAt },
+  { id: 'b', aggregateId: 'p2', aggregateType: 'payment', eventType: 'PaymentCompleted', payload: {}, createdAt },
 ];
 
 test('publishes each claimed row and marks the successful ones in one batch', async () => {

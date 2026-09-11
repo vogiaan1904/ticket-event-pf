@@ -7,6 +7,7 @@ export interface OutboxRow {
   aggregateType: string;
   eventType: string;
   payload: unknown;
+  createdAt: Date;
 }
 
 // MUST run inside a transaction: FOR UPDATE SKIP LOCKED only excludes rows
@@ -18,7 +19,7 @@ export const claimBatch = (
 ): Promise<OutboxRow[]> =>
   db
     .selectFrom('outbox')
-    .select(['id', 'aggregateId', 'aggregateType', 'eventType', 'payload'])
+    .select(['id', 'aggregateId', 'aggregateType', 'eventType', 'payload', 'createdAt'])
     .where('publishedAt', 'is', null)
     .where('retryCount', '<', maxRetries)
     .orderBy('createdAt', 'asc')

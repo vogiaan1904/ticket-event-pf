@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -14,6 +15,8 @@ import (
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka/consumer"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka/producer"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/infra/redis"
+	"github.com/vogiaan1904/ticketbottle-waitroom/internal/interceptors"
+	"github.com/vogiaan1904/ticketbottle-waitroom/internal/metrics"
 	repo "github.com/vogiaan1904/ticketbottle-waitroom/internal/repository/redis"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/service"
 	pkgGrpc "github.com/vogiaan1904/ticketbottle-waitroom/pkg/grpc"
@@ -120,7 +123,11 @@ func main() {
 	}
 
 	wrGrpc := wrGrpc.NewGrpcService(wrSvc, l)
-	gRpcSrv := grpc.NewServer()
+	gRpcSrv := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(
+			interceptors.GrpcMetricsInterceptor(),
+		),
+	)
 	waitroompb.RegisterWaitroomServiceServer(gRpcSrv, wrGrpc)
 
 	go func() {
@@ -130,8 +137,26 @@ func main() {
 		}
 	}()
 
-	// http server
-	// ...
+	metricsSrv := metrics.NewServer(cfg.Server.MetricsPort)
+	go func() {
+		l.Infof(ctx, "metrics server is listening on port: %d", cfg.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			l.Fatalf(ctx, "Failed to serve metrics: %v", err)
+		}
+	}()
+
+	sampler := metrics.NewQueueSampler(
+		qSvc.GetActiveEvents,
+		func(ctx context.Context, eventID string) (int64, int64, error) {
+			info, err := qSvc.GetQueueInfo(ctx, eventID)
+			if err != nil {
+				return 0, 0, err
+			}
+			return info.QueueLength, info.ProcessingCount, nil
+		},
+		l,
+	)
+	go sampler.Run(ctx, cfg.Server.MetricsSampleInterval)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -147,6 +172,10 @@ func main() {
 	cancel()
 	time.Sleep(1 * time.Second)
 	gRpcSrv.GracefulStop()
+
+	if err := metricsSrv.Shutdown(context.Background()); err != nil {
+		l.Errorf(ctx, "Error shutting down metrics server: %v", err)
+	}
 
 	l.Info(ctx, "Server exited")
 }

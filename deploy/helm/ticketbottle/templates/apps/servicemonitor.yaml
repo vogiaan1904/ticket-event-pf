@@ -1,0 +1,25 @@
+{{- if .Values.monitoring.enabled }}
+{{- range $name, $on := .Values.monitoring.targets }}
+{{- if $on }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  namespace: {{ include "tb.namespace" $ }}
+  labels:
+    {{- include "tb.labels" $ | nindent 4 }}
+    {{- with $.Values.monitoring.prometheusReleaseLabel }}
+    release: {{ . }}
+    {{- end }}
+spec:
+  # matchLabels selects SERVICES, not pods. The `app` label is on the Service's
+  # metadata only because _appservice.tpl puts it there.
+  selector:
+    matchLabels: { app: {{ $name }} }
+  endpoints:
+    - port: metrics
+      interval: {{ $.Values.monitoring.scrapeInterval }}
+{{- end }}
+{{- end }}
+{{- end }}

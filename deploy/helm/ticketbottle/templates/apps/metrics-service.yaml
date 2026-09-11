@@ -1,0 +1,24 @@
+{{- if .Values.monitoring.enabled }}
+{{- range $name := list "order-consumer" "outbox-relay" }}
+{{- if index $.Values.monitoring.targets $name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}-metrics
+  namespace: {{ include "tb.namespace" $ }}
+  labels:
+    app: {{ $name }}
+    {{- include "tb.labels" $ | nindent 4 }}
+spec:
+  # Headless: no cluster traffic reaches these workloads. The Service exists so
+  # a ServiceMonitor has an object to select and Endpoints to discover.
+  clusterIP: None
+  selector: { app: {{ $name }} }
+  ports:
+    - name: metrics
+      port: 2112
+      targetPort: 2112
+{{- end }}
+{{- end }}
+{{- end }}

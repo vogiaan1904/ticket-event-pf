@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "kafkajs": "^2.2.4",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "prom-client": "^15.1.3"
   }
 }

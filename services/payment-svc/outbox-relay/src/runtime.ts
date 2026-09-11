@@ -2,6 +2,7 @@ import { Client } from 'pg';
 import { closeDb, composeDrain } from './db';
 import { getKafkaProducer, disconnectKafka } from './kafka';
 import { logger } from './logger';
+import { startMetrics } from './metrics';
 
 // Serializes drains, coalescing mid-drain triggers into one follow-up run, so a
 // burst of NOTIFYs never launches concurrent drains against the same rows.
@@ -37,6 +38,8 @@ const RECONNECT_MAX_MS = 30000;
 
 export const startRuntime = async (): Promise<() => Promise<void>> => {
   await getKafkaProducer(); // connect the long-lived producer once at boot
+
+  const stopMetrics = startMetrics();
 
   const scheduler = createDrainScheduler(composeDrain());
 
@@ -106,6 +109,7 @@ export const startRuntime = async (): Promise<() => Promise<void>> => {
   return async () => {
     stopped = true; // stop scheduling further reconnects during shutdown
     clearInterval(safety);
+    await stopMetrics();
     if (reconnectTimer) clearTimeout(reconnectTimer);
     try {
       await listener?.end();

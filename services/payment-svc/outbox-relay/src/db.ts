@@ -6,6 +6,7 @@ import { getDb } from '../../lambdas/common/db/kysely';
 import { claimBatch, markPublished, markFailed, OutboxRow } from '../../lambdas/common/db/outbox.repo';
 import { drainOnce } from './relay';
 import { publishRow, topicFor } from './kafka';
+import { observePublishLag } from './metrics';
 
 const BATCH = Number(process.env.OUTBOX_BATCH_SIZE ?? 100);
 const MAX_RETRIES = Number(process.env.OUTBOX_MAX_RETRIES ?? 5);
@@ -22,7 +23,10 @@ export const composeDrain = () => async (): Promise<void> => {
       .execute((trx) =>
         drainOnce({
           claim: (limit, mr) => claimBatch(trx, limit, mr),
-          publish: (row: OutboxRow, topic: string) => publishRow(topic, row),
+          publish: async (row: OutboxRow, topic: string) => {
+            await publishRow(topic, row);
+            observePublishLag(row.createdAt);
+          },
           markPublished: (ids) => markPublished(trx, ids),
           markFailed: (id, err) => markFailed(trx, id, err),
           topicFor,

@@ -32,8 +32,20 @@ kind: Service
 metadata:
   name: payment-webhook
   namespace: {{ include "tb.namespace" . }}
-  labels: {{- include "tb.labels" . | nindent 4 }}
+  labels:
+    app: payment-webhook
+    {{- include "tb.labels" . | nindent 4 }}
 spec:
   selector: { app: payment-webhook }
-  ports: [{ port: 8080, targetPort: 8080 }]
+  ports:
+    # Named: a Service carrying more than one port rejects an unnamed one, and
+    # the name is the only handle a ServiceMonitor has on a port.
+    - name: http
+      port: 8080
+      targetPort: 8080
+    {{- if .Values.monitoring.enabled }}
+    - name: metrics
+      port: 2112
+      targetPort: 2112
+    {{- end }}
 {{- end }}

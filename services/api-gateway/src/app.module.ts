@@ -1,4 +1,5 @@
 import { GlobalExceptionFilter } from '@filters/global-exception.filter';
+import { HttpMetricsInterceptor } from '@interceptors/http-metrics.interceptor';
 import { ResponseInterceptor } from '@interceptors/response.interceptor';
 import { TransformInterceptor } from '@interceptors/transfrom.interceptor';
 import { LoggerMiddleware } from '@middlewares/logging.middleware';
@@ -27,6 +28,12 @@ import { SharedModule } from './shared.module';
   controllers: [AppController],
   providers: [
     AppService,
+    // Registered first so it is the outermost global interceptor: an exception
+    // raised by an inner one must still be counted.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: HttpMetricsInterceptor,
+    },
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,

@@ -173,3 +173,29 @@ pdb: {}
 # two-node cluster a hard constraint turns a scale-out into a Pending pod.
 topologySpread:
   enabled: false
+
+# --- Observability ------------------------------------------------------------
+# Off everywhere by default. With `enabled: false` the chart renders no
+# ServiceMonitor and no metrics port, so a cluster without the Prometheus
+# Operator installed is unaffected by this block.
+monitoring:
+  enabled: false
+  scrapeInterval: 15s
+  # Set this when kube-prometheus-stack keeps its default
+  # serviceMonitorSelectorNilUsesHelmValues: true, which adopts only
+  # ServiceMonitors labelled `release: <helm release name>`. See §6.
+  prometheusReleaseLabel: ""
+  # Keyed by WORKLOAD name, all ten of them, every one false here. Unit 05
+  # turns the rest on; note payment-webhook (rendered by payment-events.yaml)
+  # and the two order Deployments.
+  targets:
+    order-service: false
+    order-consumer: false
+    inventory-service: false
+    waitroom-service: false
+    app-gateway: false
+    user-service: false
+    event-service: false
+    payment-service: false
+    payment-webhook: false
+    outbox-relay: false

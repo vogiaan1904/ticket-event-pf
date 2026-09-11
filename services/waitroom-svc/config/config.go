@@ -22,10 +22,14 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	GRpcPort     int
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
+	GRpcPort    int
+	MetricsPort int
+	// MetricsSampleInterval paces the queue-gauge sampler. Matching the scrape
+	// interval keeps a scraped depth at most one sample old.
+	MetricsSampleInterval time.Duration
+	ReadTimeout           time.Duration
+	WriteTimeout          time.Duration
+	IdleTimeout           time.Duration
 }
 
 type RedisConfig struct {
@@ -80,10 +84,12 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Env: getEnv("ENV", "development"),
 		Server: ServerConfig{
-			GRpcPort:     getEnvAsInt("SERVER_GRPC_PORT", 50056),
-			ReadTimeout:  getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
-			WriteTimeout: getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
-			IdleTimeout:  getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
+			GRpcPort:              getEnvAsInt("SERVER_GRPC_PORT", 50056),
+			MetricsPort:           getEnvAsInt("SERVER_METRICS_PORT", 2112),
+			MetricsSampleInterval: getEnvAsDuration("SERVER_METRICS_SAMPLE_INTERVAL", 15*time.Second),
+			ReadTimeout:           getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:          getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
+			IdleTimeout:           getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
 		},
 		Redis: RedisConfig{
 			Addr:         getEnv("REDIS_ADDR", "localhost:6379"),

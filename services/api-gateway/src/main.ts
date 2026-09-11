@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppConfigService } from '@services/config.service';
 import { LoggerService } from '@services/logger.service';
 import { AppModule } from './app.module';
+import { startMetricsServer } from './shared/metrics/server';
 import { setupSwagger } from './shared/swagger/setup';
 
 async function bootstrap() {
@@ -30,12 +31,21 @@ async function bootstrap() {
   app.enableCors({ origin: effectiveCorsOrigins, credentials: true });
 
   const port = configService.appConfig.port || 3000;
+  const metricsPort = Number(process.env.SERVER_METRICS_PORT || 2112);
 
   if (isDocsEnv) {
     setupSwagger(app, configService.swaggerConfig);
   }
 
   await app.listen(port);
+
+  const metricsServer = startMetricsServer(metricsPort);
+  logger.log(`metrics server running on: http://localhost:${metricsPort}/metrics`);
+
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => metricsServer.close());
+  }
+
   logger.log(
     `Application is running on: http://localhost:${port}/${configService.appConfig.globalPrefix || 'api'}`,
   );
