@@ -1,8 +1,8 @@
 import { GlobalExceptionFilter } from '@filters/global-exception.filter';
-import { HttpMetricsInterceptor } from '@interceptors/http-metrics.interceptor';
 import { ResponseInterceptor } from '@interceptors/response.interceptor';
 import { TransformInterceptor } from '@interceptors/transfrom.interceptor';
 import { LoggerMiddleware } from '@middlewares/logging.middleware';
+import { MetricsMiddleware } from '@middlewares/metrics.middleware';
 import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -28,12 +28,6 @@ import { SharedModule } from './shared.module';
   controllers: [AppController],
   providers: [
     AppService,
-    // Registered first so it is the outermost global interceptor: an exception
-    // raised by an inner one must still be counted.
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: HttpMetricsInterceptor,
-    },
     {
       provide: APP_FILTER,
       useClass: GlobalExceptionFilter,
@@ -50,6 +44,9 @@ import { SharedModule } from './shared.module';
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes({ path: '*path', method: RequestMethod.ALL });
+    // Metrics first: its timer must start before anything that can reject.
+    consumer
+      .apply(MetricsMiddleware, LoggerMiddleware)
+      .forRoutes({ path: '*path', method: RequestMethod.ALL });
   }
 }
