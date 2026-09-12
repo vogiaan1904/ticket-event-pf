@@ -58,11 +58,11 @@ func (s *QueueSampler) collect(ctx context.Context) {
 		ids = appendMissing(ids, id)
 	}
 
-	// Reset drops the series of events that are gone, which is what bounds this
-	// gauge's cardinality to the events currently in play.
+	// Reset drops the series of events that are gone, which is what bounds these
+	// gauges' cardinality to the events currently in play.
 	QueueDepth.Reset()
+	SlotsInUse.Reset()
 
-	var total int64
 	for _, id := range ids {
 		depth, slots, err := s.sample(ctx, id)
 		if err != nil {
@@ -70,7 +70,7 @@ func (s *QueueSampler) collect(ctx context.Context) {
 			continue
 		}
 		QueueDepth.WithLabelValues(id).Set(float64(depth))
-		total += slots
+		SlotsInUse.WithLabelValues(id).Set(float64(slots))
 
 		if slots > 0 {
 			s.holding[id] = struct{}{}
@@ -78,7 +78,6 @@ func (s *QueueSampler) collect(ctx context.Context) {
 			delete(s.holding, id)
 		}
 	}
-	SlotsInUse.Set(float64(total))
 }
 
 func appendMissing(ids []string, id string) []string {

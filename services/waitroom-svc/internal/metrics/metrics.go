@@ -43,9 +43,9 @@ var (
 		[]string{"service"},
 	)
 
-	// QueueDepth carries event_id, the one label under a cardinality condition:
-	// it is affordable only while the seeded event count stays under 20.
-	// See docs/labs/plans/2026-09-01-aws-deploy-phaseD-observability.md.
+	// event_id is the one label under a cardinality condition. The sampler
+	// Resets both gauges each tick, so the series count tracks events in play
+	// rather than events ever seeded. See docs/METRICS.md.
 	QueueDepth = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "tb_waitroom_queue_depth",
@@ -54,11 +54,14 @@ var (
 		[]string{"event_id"},
 	)
 
-	SlotsInUse = promauto.NewGauge(
+	// Per event, because the limit this is read against is per event
+	// (MaxConcurrentPerEvent). A cluster-wide sum cannot be compared to it.
+	SlotsInUse = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "tb_waitroom_slots_in_use",
-			Help: "Checkout slots currently held, across all events.",
+			Help: "Checkout slots currently held, by event.",
 		},
+		[]string{"event_id"},
 	)
 )
 
