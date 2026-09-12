@@ -94,6 +94,29 @@ element of the `ErrorCode` tuple — `[message, httpStatus, grpcCode]` — so a 
 one fails `tsc`. Neither side has a default: a silent fallback is how an error
 ends up with the wrong class.
 
+## Metric contract (binding for every service)
+
+Every workload publishes `tb_grpc_requests_total`, `tb_grpc_request_duration_seconds`
+and `tb_grpc_in_flight` on port 2112, labelled `service` / `method` / `code`.
+`service` is the workload's own name; `code` is the gRPC code from the taxonomy
+above, which the gateway records too even though it serves HTTP.
+
+**Histogram buckets are tuned per workload** — a boundary is only worth a series
+where that workload's latency lands — and that forces one rule:
+
+> **Every query over `tb_grpc_request_duration_seconds` names its workload:** a
+> `service` matcher, or `service` kept in the `by` list.
+
+`sum by (le)` across mismatched boundaries builds a curve `histogram_quantile`
+silently clamps, so the query returns a plausible wrong number rather than an
+error. Other histograms have a single publisher and need no matcher.
+
+The checkout SLO — **99% of `POST /api/orders` under 2s** — is measured at the
+gateway, not on the saga's `CreateOrder`, so `2` must stay a real boundary
+in the gateway's array. Full contract, bucket tables and the cardinality
+conditions: `docs/METRICS.md`.
+
+
 ## Comment conventions (binding for every service)
 
 A comment earns its place only by saying what the code cannot. It is read at a

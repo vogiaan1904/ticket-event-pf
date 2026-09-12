@@ -13,9 +13,9 @@ import (
 // top out at 10s, which would put every slow-but-legitimate order in +Inf and
 // make 11s indistinguishable from 59s.
 //
-// The 2 boundary is the checkout SLO threshold (99% of POST /orders under 2s).
-// histogram_quantile can interpolate, but an SLO ratio reads one bucket by
-// name -- le="2" returns nothing unless 2 is a real boundary. Don't drop it.
+// The 2 boundary is the saga's own fast-path threshold, not the checkout SLO
+// -- that one is measured at the gateway, on the request the buyer makes.
+// A bucket selector cannot interpolate, so keep 2 a real boundary.
 var durationBuckets = []float64{0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 30, 45, 60, 90, 120}
 
 var (

@@ -60,10 +60,11 @@ docs/*.yaml
 docs/*.yml
 docs/*.html
 
-# keep the architecture guide under root docs/; everything else there is local
+# keep the platform guides under root docs/; everything else there is local
 !/docs/
 /docs/*
 !/docs/ARCHITECTURE.md
+!/docs/METRICS.md
 
 # --- Local data / runtime state -------------------------------------------
 *-data/
