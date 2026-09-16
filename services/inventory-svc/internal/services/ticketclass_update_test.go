@@ -20,7 +20,7 @@ func updateSvc(t *testing.T) (TicketClassService, ReservationService, *pkgGorm.R
 }
 
 // A rename must not touch total, currency, or the sale window -- an
-// unconditional field assignment wiped total to 0 and currency to "".
+// unconditional field assignment resets total to 0 and currency to "".
 func TestUpdate_PartialUpdate_PreservesUnsetFields(t *testing.T) {
 	tcSvc, _, repo := updateSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)
@@ -41,8 +41,8 @@ func TestUpdate_PartialUpdate_PreservesUnsetFields(t *testing.T) {
 	}
 }
 
-// The P0 regression guard. Under the old Save()-based Update, reservations
-// committing between the read and the write were erased from the counter.
+// The oversell guard: a Save()-based read-modify-write erases the holds of
+// every reservation that commits between its read and its write.
 func TestUpdate_ConcurrentReserve_DoesNotLoseHolds(t *testing.T) {
 	tcSvc, rSvc, repo := updateSvc(t)
 	tc := seedTicketClass(t, repo, 500, 0, 0)

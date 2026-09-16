@@ -418,7 +418,7 @@ func (s *waitroomService) buildPositionUpdate(ctx context.Context, ss *models.Se
 
 	if ss.Status == models.SessionStatusAdmitted {
 		upd.CheckoutToken = ss.CheckoutToken
-		upd.CheckoutURL = "/checkout" // This would be configurable
+		upd.CheckoutURL = "/checkout" // Relative: resolved against the client's own origin.
 		upd.CheckoutExpiresAt = ss.CheckoutExpiresAt
 	}
 

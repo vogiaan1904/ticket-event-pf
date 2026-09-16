@@ -27,15 +27,14 @@ func TestCheckoutCompletedEventDecodesRegardlessOfTimestampFormat(t *testing.T) 
 			wantTime:  time.Date(2026, 7, 21, 6, 29, 4, 0, time.UTC),
 		},
 		{
-			// What PublishCheckoutFailed emitted before this fix. It is not
-			// parseable as a timestamp and used to fail the whole message.
+			// A time.Now().String() stamp, unparseable as RFC3339. Strict
+			// decoding fails the whole message over a bookkeeping field.
 			name:      "legacy time.Now().String()",
 			timestamp: `"2026-07-21 13:29:04.148338 +0700 +07 m=+0.000141042"`,
 			wantTime:  broker,
 		},
 		{
-			// What the Temporal activity produced when the producer did not
-			// overwrite the field.
+			// An event published without the producer stamping the field.
 			name:      "empty string",
 			timestamp: `""`,
 			wantTime:  broker,

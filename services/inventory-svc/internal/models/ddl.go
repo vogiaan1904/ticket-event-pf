@@ -27,9 +27,9 @@ func PostMigrateStatements() []string {
 		     CHECK (qty > 0) NOT VALID;
 		 EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
 
-		// Repairs a database left on ON DELETE CASCADE by the old contradictory
-		// GORM tags: AutoMigrate never revisits an existing FK, so correcting the
-		// tags is not enough. Guarded -- the DROP/ADD takes ACCESS EXCLUSIVE.
+		// Repairs a database whose FK is still ON DELETE CASCADE: AutoMigrate never
+		// revisits an existing FK, so correcting the GORM tags cannot correct the
+		// constraint. Guarded -- the DROP/ADD takes ACCESS EXCLUSIVE.
 		// See docs/POST_MIGRATE_DDL.md#the-fk_ticket_class_reservations-repair.
 		`DO $$
 		   DECLARE

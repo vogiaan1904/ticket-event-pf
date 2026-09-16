@@ -70,8 +70,8 @@ func TestSuccessCommitsImmediately(t *testing.T) {
 	}
 }
 
-// The bug this fixes: a failed message used to be skipped, and the next
-// success committed straight past it.
+// A transient failure must be retried in place, never skipped: the next
+// success commits past a skipped offset and the message is gone.
 func TestTransientFailureIsRetriedThenSucceeds(t *testing.T) {
 	dlq := &fakeDLQ{}
 	c := newTestConsumer(t, dlq, fastPolicy(), func(attempt int) error {

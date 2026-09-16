@@ -16,8 +16,8 @@ import (
 	pkgDynamo "github.com/vogiaan1904/ticketbottle-order/pkg/dynamodb"
 )
 
-// A retry that reuses a code must be refused, not served. The old PutItem had
-// no condition, so a replay would overwrite a paid order with a pending one.
+// A retry that reuses a code must be refused, not served. An unconditional
+// PutItem lets a replay overwrite a paid order with a pending one.
 func TestCreate_SecondWriteOfTheSameCodeIsRefused(t *testing.T) {
 	repo := newTestRepo(t)
 

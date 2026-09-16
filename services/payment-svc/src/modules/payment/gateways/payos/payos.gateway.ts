@@ -85,7 +85,6 @@ export class PayOSGateway implements PaymentGatewayInterface {
     let cancelUrl = input.redirectUrl;
     let returnUrl = input.redirectUrl;
 
-    // Add orderCode to URLs
     if (cancelUrl.includes('?')) {
       cancelUrl += `&bookingCode=${input.orderCode}&status=cancelled`;
       returnUrl += `&bookingCode=${input.orderCode}&status=success`;

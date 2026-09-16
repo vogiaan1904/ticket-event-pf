@@ -9,12 +9,6 @@ import (
 	"time"
 )
 
-// Examples:
-//   - "Taylor Swift Eras Tour 2024" -> TB-TSE24-20251008-A3B7K9M2
-//   - "Rock Concert" -> TB-RC-20251008-A3B7K9M2
-//   - "Jazz Festival 2024" -> TB-JF24-20251008-A3B7K9M2
-//   - "Coldplay" -> TB-COLDPL-20251008-A3B7K9M2
-
 // GenerateOrderCode generates a unique, user-friendly order code
 // Format: TB-YYYYMMDD-XXXXXXXX (e.g., TB-20251008-A3B7K9M2)
 // - TB: TicketBottle brand prefix

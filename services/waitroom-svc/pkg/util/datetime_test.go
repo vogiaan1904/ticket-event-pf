@@ -54,7 +54,8 @@ func TestISO8601RoundTripDoesNotDrift(t *testing.T) {
 	}
 }
 
-// Widening the layout must not reject anything it used to accept.
+// The parse layout must accept the trailing-Z form already on the wire as well
+// as explicit offsets.
 func TestParseISO8601AcceptsLegacyAndOffsetForms(t *testing.T) {
 	want := time.Date(2026, 7, 21, 6, 29, 4, 0, time.UTC)
 

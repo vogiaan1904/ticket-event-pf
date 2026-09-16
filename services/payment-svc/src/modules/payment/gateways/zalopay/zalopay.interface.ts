@@ -53,14 +53,12 @@ export interface ZalopayCallbackResponse {
   return_message: string;
 }
 
-// Interface for parsed embed_data
 export interface ZalopayEmbedData {
   redirecturl?: string;
   merchantinfo?: string;
   promotioninfo?: string;
 }
 
-// Interface for item in the callback
 export interface ZalopayItem {
   itemid: string;
   itemname: string;

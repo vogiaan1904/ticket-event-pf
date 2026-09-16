@@ -6,8 +6,8 @@ import (
 )
 
 // Two line items for the same ticket class must be summed.
-// Guard, not discriminator: the old code passed here too (the row-count check
-// short-circuited). Only ...DuplicateIDsWithinCapacity_Accepts discriminates.
+// Guard, not discriminator: a row-count short-circuit passes this one too.
+// Only ...DuplicateIDsWithinCapacity_Accepts discriminates.
 func TestCheckAvailability_DuplicateIDs_SumsQuantities(t *testing.T) {
 	repo := newTestDB(t)
 	tcSvc := NewTicketClassService(newTestLogger(), repo)

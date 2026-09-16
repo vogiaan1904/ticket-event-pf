@@ -35,8 +35,8 @@ func TestTimeToISO8601StrDenotesTheSameInstantFromAnyZone(t *testing.T) {
 	}
 }
 
-// Formatting then parsing must be a fixed point. With the literal-Z layout a
-// non-UTC value drifted by the offset on every round trip.
+// Formatting then parsing must be a fixed point. Under a literal-Z layout a
+// non-UTC value drifts by the offset on every round trip.
 func TestISO8601RoundTripDoesNotDrift(t *testing.T) {
 	start := time.Date(2026, 7, 21, 6, 29, 4, 0, time.FixedZone("+07:00", 7*3600))
 
@@ -56,7 +56,8 @@ func TestISO8601RoundTripDoesNotDrift(t *testing.T) {
 	}
 }
 
-// Widening the layout must not reject anything it used to accept.
+// The parse layout must accept the trailing-Z form already on the wire as well
+// as explicit offsets.
 func TestParseISO8601AcceptsLegacyAndOffsetForms(t *testing.T) {
 	want := time.Date(2026, 7, 21, 6, 29, 4, 0, time.UTC)
 

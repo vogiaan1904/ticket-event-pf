@@ -39,7 +39,7 @@ func (r *Repository) FindByID(ctx context.Context, model interface{}, id interfa
 // Update updates a record.
 //
 // Deprecated: Save(model) writes every column, so a stale in-memory row wipes
-// a concurrent writer's counters -- this service's oversell P0. Use a targeted
+// a concurrent writer's counters and oversells the event. Use a targeted
 // Updates(map) inside SELECT ... FOR UPDATE (internal/services/reservation.go).
 func (r *Repository) Update(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Save(model).Error
@@ -47,8 +47,8 @@ func (r *Repository) Update(ctx context.Context, model interface{}) error {
 
 // Delete deletes a record.
 //
-// Deprecated: an unlocked, unguarded hard delete -- on a ticket_class this is
-// what destroyed live and paid reservations. Use the guarded pattern in
+// Deprecated: an unlocked, unguarded hard delete -- on a ticket_class it takes
+// live and paid reservations with it. Use the guarded pattern in
 // internal/services/ticketclass.go: lock the parent, refuse live children.
 func (r *Repository) Delete(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Delete(model).Error

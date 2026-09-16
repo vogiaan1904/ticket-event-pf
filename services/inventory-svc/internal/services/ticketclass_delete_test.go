@@ -37,7 +37,7 @@ func ticketClassExists(t *testing.T, repo *pkgGorm.Repository, id int64) bool {
 	return count > 0
 }
 
-// The P0: a CASCADE FK let DeleteTicketClass destroy every reservation,
+// A CASCADE FK would let DeleteTicketClass destroy every reservation,
 // CONFIRMED ones included. A refused delete must leave both rows intact.
 func TestDelete_ActiveReservation_ReturnsConflict(t *testing.T) {
 	tcSvc, rSvc, repo := deleteSvc(t)
@@ -60,7 +60,7 @@ func TestDelete_ActiveReservation_ReturnsConflict(t *testing.T) {
 	}
 }
 
-// The whole point of the fix: a CONFIRMED reservation is a paid order.
+// A CONFIRMED reservation is a paid order: a delete must never take it.
 func TestDelete_ConfirmedReservation_ReturnsConflict(t *testing.T) {
 	tcSvc, rSvc, repo := deleteSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)

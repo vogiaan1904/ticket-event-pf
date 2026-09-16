@@ -35,7 +35,7 @@ func markForRefund(ctx workflow.Context, o *models.Order, reason string) {
 // Holding it is a lockout, not a leak: without a waiting room the key is stable
 // per buyer and event, so every later purchase would be answered with the
 // finished order. Failure is logged, not returned -- the TTL is the backstop.
-// See docs/PURCHASE_SLOT.md#release.
+// See docs/PURCHASE_SLOT.md#lifecycle.
 func freePurchaseSlot(ctx workflow.Context, o *models.Order) {
 	if err := releasePurchaseSlot(ctx, o); err != nil {
 		workflow.GetLogger(ctx).Error("Failed to release the buyer's purchase slot; it stays held until its TTL expires",

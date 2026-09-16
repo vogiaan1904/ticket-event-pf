@@ -9,12 +9,12 @@ import (
 
 // A fresh newTestDB already has the FK as RESTRICT, so the repair branch never
 // runs there: a typo in its constraint name would leave every real database on
-// CASCADE with this suite still green. Force the pre-fix state instead.
+// CASCADE with this suite still green. Force the CASCADE state instead.
 func TestPostMigrateStatements_RepairsCascadeToRestrict(t *testing.T) {
 	repo := newTestDB(t)
 	db := repo.GetDB()
 
-	// Pre-fix state: force the FK back onto the wrong ON DELETE action.
+	// Force the FK onto the wrong ON DELETE action so the repair branch runs.
 	if err := db.Exec(`ALTER TABLE reservation DROP CONSTRAINT fk_ticket_class_reservations`).Error; err != nil {
 		t.Fatalf("force-drop constraint: %v", err)
 	}

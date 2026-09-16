@@ -45,10 +45,9 @@ func (a *PaymentActivities) CreatePaymentIntent(ctx context.Context, in *CreateP
 	return resp, nil
 }
 
-// CancelPayment cancels a payment (if supported by payment service)
-// Note: This method may need to be implemented based on your payment service interface
+// CancelPayment is an unused stub: no saga step registers it, so a failed
+// create leaves the intent to expire on payment-svc's own timeout.
+// TODO: wire to payment.CancelPaymentIntent before any caller depends on it.
 func (a *PaymentActivities) CancelPayment(ctx context.Context, orderCode string, reason string) error {
-	// TODO: Implement if payment service supports cancellation
-	// For now, we'll just log the cancellation request
 	return nil
 }

@@ -131,9 +131,8 @@ func TestCreateOrder_PaymentFailureCompensatesInReverse(t *testing.T) {
 	}
 }
 
-// Compensate took an inParallel flag whose true branch had no body, so a
-// caller could disable the entire rollback and get no error back. The
-// signature is the guard: there is nothing to pass.
+// The signature is the guard against a caller switching the rollback off: an
+// opt-out flag would skip every compensation and still hand back no error.
 func TestCompensate_HasNoOptOut(t *testing.T) {
 	var c Compensations
 	// Compile-time assertion: Compensate takes a context and nothing else.

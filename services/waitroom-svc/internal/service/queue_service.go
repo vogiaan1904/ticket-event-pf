@@ -147,7 +147,7 @@ func (s *queueService) GetQueueStatus(ctx context.Context, sessionID string, ses
 		out.CheckoutToken = session.CheckoutToken
 		out.CheckoutExpiresAt = session.CheckoutExpiresAt
 		out.AdmittedAt = session.AdmittedAt
-		out.CheckoutURL = "/checkout" // This would be configurable
+		out.CheckoutURL = "/checkout" // Relative: resolved against the client's own origin.
 	}
 
 	return out, nil
