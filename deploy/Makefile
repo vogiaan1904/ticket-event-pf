@@ -61,6 +61,12 @@ obs-grafana:           ## Port-forward Grafana on :3001 (admin password below)
 	@kubectl -n monitoring get secret kps-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
 	kubectl -n monitoring port-forward svc/kps-grafana 3001:80
 
+.PHONY: temporal-ui
+
+temporal-ui:           ## Port-forward the Temporal web UI on :8233
+	@echo "http://localhost:8233"
+	kubectl -n $(NS) port-forward svc/temporal-ui 8233:8080
+
 
 
 # --- k3s on EC2 -------------------------------------------------------

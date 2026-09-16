@@ -77,6 +77,11 @@ order:
 temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility; Elasticsearch alone wants 1-2GB
+  # auto-setup is the server only; the web UI is a separate image.
+  ui:
+    enabled: false
+    image: temporalio/ui:2.34.0
+    localPort: 8233   # the port `make temporal-ui` forwards to, and the only CORS origin
 
 gateway:
   # JSON array of allowed browser origins. "*" is right for a local cluster with
@@ -136,6 +141,7 @@ resources:
   # idle. The request must clear it or the pod lands on a node too small for it.
   redpanda:           { requests: { cpu: 100m, memory: 1280Mi }, limits: { cpu: "1",  memory: 2Gi } }    #  16m / 1070Mi
   temporal:           { requests: { cpu: 100m, memory: 192Mi },  limits: { cpu: "1",  memory: 768Mi } }  #  59m / 103Mi
+  temporal-ui:        { requests: { cpu: 25m,  memory: 32Mi },   limits: { cpu: 250m, memory: 128Mi } }  # read-only console
   redis:              { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 250m, memory: 256Mi } }  #  13m /   7Mi
   # kind/k3s only — `dynamodb.enabled: false` on EKS, where the real service
   # replaces it. The limit is 768Mi rather than 512Mi because the JVM sizes its

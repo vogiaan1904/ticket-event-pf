@@ -97,3 +97,7 @@ monitoring:
     payment-service: true
     payment-webhook: true
     outbox-relay: true
+
+temporal:
+  ui:
+    enabled: true

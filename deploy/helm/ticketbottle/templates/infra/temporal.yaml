@@ -50,3 +50,49 @@ metadata:
 spec:
   selector: { app: temporal }
   ports: [{ port: 7233, targetPort: 7233 }]
+{{- if .Values.temporal.ui.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-ui
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: temporal-ui }
+  template:
+    metadata:
+      labels: { app: temporal-ui }
+    spec:
+      containers:
+        - name: temporal-ui
+          image: {{ .Values.temporal.ui.image }}
+          {{- include "tb.resources" (dict "ctx" . "name" "temporal-ui") | nindent 10 }}
+          # Reads the frontend over gRPC and calls no AWS API, so it needs no
+          # IRSA and no instance-profile permission of its own.
+          env:
+            - { name: TEMPORAL_ADDRESS, value: "temporal:7233" }
+            # The browser reaches the UI through `kubectl port-forward`, so the
+            # only origin it ever sees is the local forwarded port.
+            - { name: TEMPORAL_CORS_ORIGINS, value: "http://localhost:{{ .Values.temporal.ui.localPort }}" }
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal-ui
+  namespace: {{ include "tb.namespace" . }}
+  labels: {{- include "tb.labels" . | nindent 4 }}
+spec:
+  # ClusterIP on purpose. The UI has no authentication and can terminate and
+  # reset workflows, so it is never given a public listener; reach it with
+  # `make -C deploy temporal-ui`.
+  selector: { app: temporal-ui }
+  ports: [{ port: 8080, targetPort: 8080 }]
+{{- end }}
