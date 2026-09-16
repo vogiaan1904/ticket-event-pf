@@ -159,7 +159,7 @@ make -C deploy stop-ec2-k3s      # THE COST SWITCH — compute billing halts, EB
 make -C deploy k3s-ip            # current public IP
 ```
 
-**Access is SSH-tunnel-only.** `localhost:3000` on the Mac forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives kind and k3s unchanged.
+**Access is SSH-tunnel-only.** `localhost:3000` on the workstation forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives kind and k3s unchanged.
 
 The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` in `k3s-kubeconfig`) — the box's IP is ephemeral and gets recycled by AWS, so pinning it would produce a false MITM warning on every start.
 

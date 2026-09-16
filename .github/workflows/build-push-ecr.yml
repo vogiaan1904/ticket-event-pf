@@ -59,8 +59,8 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       # main -> :latest, every other ref -> its own branch name. A dispatch from
-      # a feature or labs branch therefore cannot repoint :latest or :dev at
-      # code that branch never merged. Slashes are illegal in a Docker tag.
+      # a feature branch therefore cannot repoint :latest or :dev at code that
+      # branch never merged. Slashes are illegal in a Docker tag.
       - name: Resolve the moving tag
         id: tag
         run: |

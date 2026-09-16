@@ -74,7 +74,7 @@ module "lbc_irsa" {
   tags              = local.tags
 }
 
-# ------------------------------------------- order-service identity (the point) -
+# ------------------------------------------------ order-service identity (IRSA) -
 # Exactly one workload may touch the orders table, and it proves who it is with a
 # ServiceAccount token — not with a key, and not by inheriting the node's role
 # (which has no DynamoDB permission at all).

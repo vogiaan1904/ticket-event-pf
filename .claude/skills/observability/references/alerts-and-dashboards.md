@@ -43,7 +43,7 @@ Recording rules use `level:metric:operations` — `tb:checkout_good:ratio1h`. Th
 | `CheckoutBurnRateFast` | 2m | page |
 | `CheckoutBurnRateSlow` | 15m | ticket |
 
-`TicketBottleInternalErrors` is deliberately first in the group: the Break exercise patches `/spec/groups/1/rules/0/for` by index.
+`TicketBottleInternalErrors` is deliberately first in the group, so a JSON-patch by index (`/spec/groups/1/rules/0/for`) reaches it.
 
 ## Two clocks
 
@@ -132,7 +132,7 @@ count by (code) (count_over_time(tb_grpc_requests_total[6h]))
    OK, UNAVAILABLE          # no INTERNAL from pod cycling
 ```
 
-Any exercise or test that expects a restart to trip an `INTERNAL` alert is wrong about the taxonomy. To exercise the `for` state machine, point the rule at `UNAVAILABLE`, which the restart genuinely produces. If a restart *did* produce `INTERNAL`, the error mapping is the defect.
+Any test that expects a restart to trip an `INTERNAL` alert is wrong about the taxonomy. To drive the `for` state machine, point the rule at `UNAVAILABLE`, which a restart genuinely produces. If a restart *did* produce `INTERNAL`, the error mapping is the defect.
 
 ## Dashboards
 

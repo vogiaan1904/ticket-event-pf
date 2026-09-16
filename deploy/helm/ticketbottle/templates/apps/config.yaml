@@ -85,7 +85,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata: { name: payment-config, namespace: {{ include "tb.namespace" . }} }
 data:
-  # HOST is hardcoded 0.0.0.0 in payment main.ts; do NOT pass the ngrok HOST from .env.payment.
+  # No HOST key: payment main.ts binds 0.0.0.0 unconditionally and ignores it.
   PORT: "8085"
   GRPC_PORT: "50055"
   NAME: TicketBottle_Payment

@@ -1,4 +1,0 @@
-# local scratch from gate/smoke runs
-*.log
-response.json
-/tmp-*

@@ -5,7 +5,7 @@ description: Use when working on, explaining, or extending how TicketBottle is d
 
 # How TicketBottle is deployed
 
-One Helm chart, three targets. The **application topology never changes** — the deploy target is chosen by a values overlay plus a Terraform delta. That portability is the point: the manifests authored for free on a laptop are the ones that run on real AWS.
+One Helm chart, three targets. The **application topology never changes** — the deploy target is chosen by a values overlay plus a Terraform delta. That portability is the point: the manifests authored on a laptop are the ones that run on real AWS.
 
 ```
                     deploy/helm/ticketbottle/   (one chart, one app topology)
@@ -23,7 +23,7 @@ One Helm chart, three targets. The **application topology never changes** — th
 
 **k3s on EC2 is the everyday environment**: it runs the full purchase flow, and a stop/start cycle preserves data on EBS. **EKS is ephemeral** — created for a session and destroyed after, never left standing. The teardown path is real tooling, not a manual checklist: `eks-teardown.sh`, `eks-leak-check.sh`, `eks-sweep-orphans.sh`, and the EKS section of `deploy/Makefile`.
 
-A LocalStack target was built and then **retired** in favour of real DynamoDB — don't resurrect it. `values-localstack.yaml` and `templates/infra/localstack-bridge.yaml` are dormant and render nothing on any live target.
+A LocalStack target was built and then **removed** in favour of real DynamoDB — don't resurrect it. Local DynamoDB for single-service work comes from `services/order-svc/docker-compose.dev.yml`.
 
 > **Never assume EKS is off — check.** The cluster has no stop switch and bills $0.10/hr from `apply` to `destroy`:
 > `aws eks list-clusters --region us-east-1` — an empty list is the only proof. The off switch is `make -C deploy eks-down` (ordered teardown, then the leak check).

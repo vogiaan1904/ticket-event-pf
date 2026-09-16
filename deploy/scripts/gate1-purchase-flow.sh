@@ -4,9 +4,8 @@
 #   -> join waitroom -> (admission) read checkout token from Redis -> create order
 #   -> trigger payment webhook -> poll order until COMPLETED.
 #
-# Field names below are pinned from the gateway DTOs/mappers and the Go services
-# (see the plan's Task-4 notes). Two hops bypass missing HTTP surface, matching the
-# plan's direct-seed philosophy:
+# Field names below are pinned from the gateway DTOs/mappers and the Go services.
+# Two hops bypass missing HTTP surface and seed directly:
 #   - event publish: no gateway route exists; order-svc requires EventStatus=PUBLISHED,
 #     so we set it directly in the event DB.
 #   - checkout token: waitroom admits the session (see its logs), but a write-write race

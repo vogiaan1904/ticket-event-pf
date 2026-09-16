@@ -1,11 +1,11 @@
 ---
 name: outbox-relay
-description: Use when working on, extending, or debugging the payment outbox → Kafka event path in TicketBottle (the transactional-outbox + long-lived relay design), or to study the system-design patterns behind it — transactional outbox, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED work-claiming, idempotent compare-and-set webhooks, DLQ + alarm, and partial indexes.
+description: Use when working on, extending, or debugging the payment outbox → Kafka event path in TicketBottle (the transactional-outbox + long-lived relay design), or to understand the system-design patterns behind it — transactional outbox, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED work-claiming, idempotent compare-and-set webhooks, DLQ + alarm, and partial indexes.
 ---
 
 # The payment outbox → Kafka relay
 
-This is how a completed payment reliably becomes a `payment.completed` Kafka event that Order can confirm. It is the reference implementation of the **transactional outbox** pattern in this repo. Study it here; the same shape applies to any "change DB state *and* tell the world" problem.
+This is how a completed payment reliably becomes a `payment.completed` Kafka event that Order can confirm. It is the reference implementation of the **transactional outbox** pattern in this repo; the same shape applies to any "change DB state *and* tell the world" problem.
 
 ## File map
 
@@ -27,11 +27,11 @@ This is how a completed payment reliably becomes a `payment.completed` Kafka eve
 
 Everything below is in service of doing the relay side well.
 
-## The patterns worth learning (each with its "why")
+## The patterns behind it (each with its "why")
 
-**1 — Long-lived relay, not a scheduled Lambda.** The old design polled the outbox with a 1/min `outbox-processor` Lambda (now retired). That's a compute-model mismatch: a relay wants a *persistent* Kafka producer (the TCP + metadata handshake is expensive to redo), a reactive loop (react in ms, not up-to-60s), and a reused pg pool. Lambda gives the opposite. **Lesson:** FaaS fits *spiky, event-triggered, stateless* work (keep the webhook handler on Lambda). A *continuous, connection-heavy, low-latency* loop belongs in a long-lived worker (`outbox-relay` is a k8s Deployment).
+**1 — Long-lived relay, not a scheduled Lambda.** The old design polled the outbox with a 1/min `outbox-processor` Lambda (now retired). That's a compute-model mismatch: a relay wants a *persistent* Kafka producer (the TCP + metadata handshake is expensive to redo), a reactive loop (react in ms, not up-to-60s), and a reused pg pool. Lambda gives the opposite. **Rule:** FaaS fits *spiky, event-triggered, stateless* work (keep the webhook handler on Lambda). A *continuous, connection-heavy, low-latency* loop belongs in a long-lived worker (`outbox-relay` is a k8s Deployment).
 
-**2 — LISTEN/NOTIFY push, polling as a safety net.** The migration adds an `outbox_notify()` trigger firing `pg_notify('outbox_new', …)` on insert; `runtime.ts` holds a dedicated `LISTEN` connection and triggers a drain on each notification. This gives sub-second latency without busy-polling. A periodic safety-poll remains as a fallback so a dropped notification can't strand rows. **Lesson:** push for latency, poll for correctness — keep both.
+**2 — LISTEN/NOTIFY push, polling as a safety net.** The migration adds an `outbox_notify()` trigger firing `pg_notify('outbox_new', …)` on insert; `runtime.ts` holds a dedicated `LISTEN` connection and triggers a drain on each notification. This gives sub-second latency without busy-polling. A periodic safety-poll remains as a fallback so a dropped notification can't strand rows. **Rule:** push for latency, poll for correctness — keep both.
 
 **3 — `FOR UPDATE SKIP LOCKED` work-claiming.** `claimBatch` selects unpublished rows `ORDER BY createdAt LIMIT n FOR UPDATE SKIP LOCKED`. This turns a plain table into a concurrent queue: `FOR UPDATE` locks the claimed rows; `SKIP LOCKED` lets other relay replicas skip already-claimed rows and grab the next free ones instead of blocking. N workers claim *disjoint* batches and scale horizontally with no external queue. **This is the idiom for a job queue on Postgres.**
 
@@ -42,11 +42,11 @@ WHERE orderCode = ? AND status='PENDING' RETURNING …
 ```
 `WHERE status='PENDING'` is a compare-and-set: the first webhook flips PENDING→COMPLETED and gets a row; a duplicate matches 0 rows and returns nothing. The outbox insert is gated on "did I get a row?", so a replay is a silent no-op instead of a double completion. **Idempotency enforced by the database, not by hoping messages arrive once.**
 
-**5 — DLQ + alarm for poison messages.** Retry with backoff → a *bounded* retry count → then `routeExhaustedEvents` ships the event to an SQS DLQ and emits the `OutboxFailedEvents` CloudWatch metric (alarm in `template.yaml`). **Lesson:** "retry forever" lets one poison message stall the pipeline. Give failures an exit ramp *and* make them visible.
+**5 — DLQ + alarm for poison messages.** Retry with backoff → a *bounded* retry count → then `routeExhaustedEvents` ships the event to an SQS DLQ and emits the `OutboxFailedEvents` CloudWatch metric (alarm in `template.yaml`). **Rule:** "retry forever" lets one poison message stall the pipeline. Give failures an exit ramp *and* make them visible.
 
 **6 — Partial index on the hot set.** `idx_outbox_unpublished ON outbox("createdAt") WHERE "publishedAt" IS NULL` indexes only *unpublished* rows — the working set the relay scans. It stays tiny even as the outbox grows to millions of published rows. Pairs with dropping the old `published boolean` for `publishedAt IS NULL`: one nullable timestamp is a flag *and* an audit time *and* the index predicate.
 
-**7 — Coalesced drain + reconnect-with-backoff.** `runtime.ts`'s scheduler serializes drains and collapses triggers that arrive mid-drain into a single follow-up pass (never concurrent drains over the same rows); the LISTEN connection reconnects with exponential backoff on drop. **Lesson:** debounce bursty signals; assume every long-lived connection will drop and self-heal.
+**7 — Coalesced drain + reconnect-with-backoff.** `runtime.ts`'s scheduler serializes drains and collapses triggers that arrive mid-drain into a single follow-up pass (never concurrent drains over the same rows); the LISTEN connection reconnects with exponential backoff on drop. **Rule:** debounce bursty signals; assume every long-lived connection will drop and self-heal.
 
 ## Invariants to preserve when editing this path
 
@@ -59,5 +59,5 @@ WHERE orderCode = ? AND status='PENDING' RETURNING …
 ## Debugging
 Order stuck / not confirming? Check, in order: outbox rows with `publishedAt IS NULL` piling up (relay not draining) → `kubectl -n ticketbottle logs deploy/outbox-relay` → the order consumer (`kubectl -n ticketbottle logs deploy/order-consumer`). A single stuck event that exhausted retries lands in the SQS DLQ and trips the `OutboxFailedEvents` alarm.
 
-## Further study
+## Further reading
 Chris Richardson, [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) and Polling Publisher vs Transaction Log Tailing — the latter (CDC / Debezium reading the WAL) is the one variant this repo deliberately did *not* use.

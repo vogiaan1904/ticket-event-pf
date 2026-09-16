@@ -14,7 +14,11 @@ Thumbs.db
 *.code-workspace
 
 # --- Secrets / environment ------------------------------------------------
-# Never commit real env files (deploy/localstack/.env + service env files contain credentials).
+# Never commit real env files (service env files contain credentials).
+# Terraform working dirs: provider binaries and state never belong in git.
+.terraform/
+*.tfstate
+*.tfstate.backup
 .env
 .env.*
 *.env
@@ -76,11 +80,6 @@ mongo-data/
 **/.claude/settings.local.json
 tools/
 
-
-# --- AI ---
-
-# --- Localstack ---
-tf-lab/
 
 # Chart secrets: generated per environment by `make -C deploy secrets-init`.
 deploy/secrets.values.yaml

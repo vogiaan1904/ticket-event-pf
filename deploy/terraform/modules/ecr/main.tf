@@ -8,7 +8,7 @@ resource "aws_ecr_repository" "this" {
   tags = var.tags
 }
 
-# Keep at most 10 tagged images, and expire untagged images after 3 days.
+# Keep at most 30 tagged images, and expire untagged images after 3 days.
 resource "aws_ecr_lifecycle_policy" "this" {
   for_each   = aws_ecr_repository.this
   repository = each.value.name
@@ -32,7 +32,7 @@ resource "aws_ecr_lifecycle_policy" "this" {
           tagStatus     = "tagged"
           tagPrefixList = ["latest", "sha-"]
           # Both main and dev push sha- tags, so this budget is consumed about
-          # twice as fast as when main built alone. eks-deploy.sh resolves a
+          # twice as fast as a single-branch pipeline would. eks-deploy.sh resolves a
           # deploy by walking back 30 commits on main looking for a surviving
           # image -- too small a budget here fails that lookup, not this rule.
           countType   = "imageCountMoreThan"

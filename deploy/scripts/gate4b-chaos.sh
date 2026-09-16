@@ -127,7 +127,7 @@ UNPUB=$(psql ticketbottle_payment "SELECT count(*) FROM outbox WHERE \"published
 [ "$UNPUB" -eq 0 ] || fail "$UNPUB outbox rows older than 2 minutes are still unpublished"
 
 echo "== 7. assert the system kept selling ACROSS the node loss =="
-# The point of the exercise. If sold never moved after the kill, the load had
+# The assertion this gate exists for. If sold never moved after the kill, load had
 # already drained and the gate measured an idle cluster — the same failure the
 # §2 poll guards against, caught here from the other side.
 SOLD_FINAL=$(psql ticketbottle_inventory "SELECT sold FROM ticket_class WHERE id='$(cat "$TCID_FILE")';")

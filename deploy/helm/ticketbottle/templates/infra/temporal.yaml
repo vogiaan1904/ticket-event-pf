@@ -28,7 +28,7 @@ spec:
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
             - { name: SKIP_DB_CREATE, value: "false" }
-            # Listen on all interfaces so the Service (and 0B clients like order-svc) can
+            # Listen on all interfaces so the Service (and in-cluster clients like order-svc) can
             # reach the frontend. auto-setup defaults to 127.0.0.1, which the Service can't route to.
             - { name: BIND_ON_IP, value: "0.0.0.0" }
           ports: [{ containerPort: 7233 }]

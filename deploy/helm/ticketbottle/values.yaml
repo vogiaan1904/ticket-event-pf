@@ -78,11 +78,6 @@ temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility; Elasticsearch alone wants 1-2GB
 
-localstack:
-  expose: false
-  ip: 172.18.0.100
-  postgresNodePort: 31432
-
 gateway:
   # JSON array of allowed browser origins. "*" is right for a local cluster with
   # no browser client; a target that serves one should name its origins.
@@ -183,11 +178,12 @@ monitoring:
   scrapeInterval: 15s
   # Set this when kube-prometheus-stack keeps its default
   # serviceMonitorSelectorNilUsesHelmValues: true, which adopts only
-  # ServiceMonitors labelled `release: <helm release name>`. See §6.
+  # ServiceMonitors labelled `release: <helm release name>`.
+  # deploy/monitoring/values-kps.yaml sets it false, so this stays empty there.
   prometheusReleaseLabel: ""
-  # Keyed by WORKLOAD name, all ten of them, every one false here. Unit 05
-  # turns the rest on; note payment-webhook (rendered by payment-events.yaml)
-  # and the two order Deployments.
+  # Keyed by WORKLOAD name, all ten of them, every one false here; the k3s and
+  # eks overlays turn them on. Note payment-webhook (rendered by
+  # payment-events.yaml) and the two order Deployments.
   targets:
     order-service: false
     order-consumer: false

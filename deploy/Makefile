@@ -122,7 +122,7 @@ k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 
 
 # --- Ephemeral EKS ----------------------------------------------------
-# Weekend sprint, never an everyday environment. There is NO stop switch: the
+# Brought up on demand and torn down after use. There is NO stop switch: the
 # control plane bills $0.10/hr from `eks-up` until `eks-down`.
 EKS_ENV     := terraform/envs/eks
 EKS_VALUES  := $(CHART)/values-eks.yaml
@@ -242,9 +242,8 @@ eks-allow-ip: update-my-ip   ## ...then apply it to the EKS API endpoint AND the
 
 # --- Chart secrets ------------------------------------------------------------
 # Signing keys and the admin password are `required` by the chart and have no
-# committed defaults, so every deploy needs this file. It is gitignored: the
-# previous values were literals inside a ConfigMap template, which published
-# them to everyone who could read the repository.
+# committed defaults, so every deploy needs this file. It is gitignored:
+# a key committed to a template is published to everyone who can read the repo.
 SECRETS_FILE := secrets.values.yaml
 
 .PHONY: secrets-init secrets-check

@@ -51,7 +51,7 @@ make -C deploy cluster-down # tear it all down
 
 Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
 
-**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR. `deploy/localstack/` is a retired local AWS simulation kept only for reference — do not build on it.
+**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR.
 
 ## Proto contracts & generation
 

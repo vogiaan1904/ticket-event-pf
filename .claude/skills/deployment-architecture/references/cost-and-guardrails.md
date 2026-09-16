@@ -20,7 +20,7 @@ Cost is a **first-class design constraint** here, not an afterthought. The hard 
 
 | Line item | Est. monthly | Notes |
 |---|---|---|
-| EC2 `t3.large` on-demand, toggled (~short weekday sessions) | ~$2.75–12.50 | **scales with hours you leave it on** |
+| EC2 `t3.large` on-demand, toggled off when idle | ~$2.75–12.50 | **scales with running hours** |
 | EBS gp3 50GB | ~$4 | **billed even while the instance is stopped** — the dominant persistent cost |
 | Public IPv4 (ephemeral, while running) | ~$0.75 | see the trap below |
 | DynamoDB on-demand | ~$0.50 | on-demand pricing at this request volume |
@@ -69,7 +69,7 @@ These come up whenever someone asks "why not just…":
 | Temporal with SQL visibility, no Elasticsearch | ~1–2GB RAM | no advanced workflow search |
 | 1 Postgres with 4 databases, 1 Redis | 4 containers | a single failure domain for all four services' data |
 | `us-east-1` rather than the nearest region | ~15–20% vs `ap-southeast-1` | latency, which this access pattern (kubectl and SSH) is insensitive to |
-| Real DynamoDB instead of LocalStack | — | ~$0.50/mo, and it exercises real IAM semantics that a simulator does not — this is why the LocalStack target was retired |
+| Real DynamoDB instead of a simulator | — | ~$0.50/mo, and it exercises real IAM semantics that a simulator does not |
 | `t3.large` on-demand as default | predictability | 8GB is tight; the documented fallback is **`t3.xlarge` on spot — more RAM for less money** (~$11.5/mo) |
 
 **Why spot is acceptable on a single stateful box here** (it normally isn't): all persistent data is already on EBS (survives interruption) or in DynamoDB (off-box), and the box is already treated as ephemeral-when-off. A spot interruption is functionally a `make stop` nobody triggered. The only real downside is an occasional "capacity unavailable" on start, which an interruption-tolerant workload can absorb.
