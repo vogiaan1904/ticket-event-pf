@@ -1,4 +1,5 @@
 {
+  "uid": "tb-queue-outbox",
   "annotations": {
     "list": [
       {
