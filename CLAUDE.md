@@ -116,6 +116,28 @@ gateway, not on the saga's `CreateOrder`, so `2` must stay a real boundary
 in the gateway's array. Full contract, bucket tables and the cardinality
 conditions: `docs/METRICS.md`.
 
+**Metrics are absent, not zero, until traffic creates them.** A `*Vec` registers
+no series until a label combination is used, so after any rollout every counter
+and histogram in the contract is missing until the first request. Assert on
+metrics *after* driving load, never before, and never read an empty query result
+as a fault before checking whether traffic has happened.
+
+## Alerting policy (binding for every service)
+
+**The error taxonomy is the alerting policy.** `INTERNAL` pages on any sustained
+rate above zero; `FAILED_PRECONDITION` never pages, because a buyer losing a race
+is not a fault and paging on it turns a successful on-sale into an incident. That
+absence is asserted, not merely intended — no rule in
+`templates/apps/prometheusrule.yaml` may reference `FAILED_PRECONDITION`.
+
+The one alert that fires on that code, `OrdersNeedingRefund`, decides on the
+**ledger rather than the code**: a sold-out buyer was never charged, while a
+`REFUND_REQUIRED` order was. Same code, opposite obligations.
+
+Working on metrics, dashboards, alerts or PromQL: read the `observability` skill
+first — it carries the query failure modes, the scrape wiring, and the
+Helm-versus-Prometheus templating collision that breaks the chart render.
+
 
 ## Comment conventions (binding for every service)
 
