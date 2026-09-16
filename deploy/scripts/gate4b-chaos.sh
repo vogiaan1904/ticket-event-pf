@@ -50,6 +50,16 @@ VICTIM_PVC_PODS=$(kubectl -n $NS get pods --field-selector "spec.nodeName=$ORDER
     kubectl -n $NS delete pod -l app=order-service
   The new node is empty, so it scores as least-allocated and wins the pod."
 
+# Refuse if the victim also runs Prometheus. It is emptyDir-backed, so the PVC
+# guard above cannot see it, and killing the recorder leaves the run with no
+# witness: the alerts that should have fired go unrecorded.
+PROM_NODE=$(kubectl -n monitoring get pod -l app.kubernetes.io/name=prometheus \
+  -o jsonpath='{.items[0].spec.nodeName}' 2>/dev/null || true)
+[ "$PROM_NODE" != "$ORDER_NODE" ] || fail "order-service shares node $ORDER_NODE with Prometheus.
+  Terminating it destroys the only record of what the alerts did during the run.
+  Reschedule order-service onto the other node and retry:
+    kubectl -n $NS delete pod -l app=order-service"
+
 VICTIM_ID=$(kubectl get node "$ORDER_NODE" -o jsonpath='{.spec.providerID}' | awk -F/ '{print $NF}')
 echo "  victim: $ORDER_NODE ($VICTIM_ID)"
 
