@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"time"
 
@@ -57,58 +58,28 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 			return ErrStateConflict
 		}
 
-		// Lock all target ticket classes in ascending id order (deadlock-free).
-		var tcs []models.TicketClass
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id IN ?", ids).Order("id").Find(&tcs).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.Reserve.LockTicketClasses: %v", err)
-			return err
-		}
-		if len(tcs) != len(ids) {
-			s.l.Warnf(ctx, "service.reservation.Reserve: ticket classes not found (want=%d got=%d)", len(ids), len(tcs))
-			return ErrNotFound
-		}
-		byID := indexByID(tcs)
-
-		// Validate sale eligibility and availability against the locked rows.
+		// One guarded UPDATE per class, ascending id (deadlock-free). The
+		// predicate is the arbiter: Postgres re-checks it against the latest
+		// committed row after taking the lock, so no prior read is needed.
+		// Why no SELECT ... FOR UPDATE: it would hold every row from the read
+		// through COMMIT, and one hot class serialises the whole on-sale.
 		now := time.Now().UTC()
-		for _, id := range ids {
-			tc := byID[id]
-			if !onSale(tc, now) {
-				// onSale only decides; log which of the three reasons it was.
-				switch {
-				case tc.Status != models.TicketClassStatusActive:
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
-				case tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt):
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
-				case tc.SaleEndAt != nil && now.After(*tc.SaleEndAt):
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
-				}
-				return ErrSaleClosed
-			}
-
-			q := qtyByID[id]
-			if tc.Total-tc.Reserved-tc.Sold < q {
-				s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
-					id, tc.Total-tc.Reserved-tc.Sold, q)
-				return ErrInsufficientStock
-			}
-		}
-
-		// Increment reserved counters (guarded) and build reservation rows.
 		rs := make([]models.Reservation, 0, len(ids))
 		for _, id := range ids {
 			q := qtyByID[id]
 			res := tx.Model(&models.TicketClass{}).
-				Where("id = ? AND reserved + sold + ? <= total", id, q).
+				Where(`id = ? AND status = ?
+				       AND (sale_start_at IS NULL OR sale_start_at <= ?)
+				       AND (sale_end_at IS NULL OR sale_end_at >= ?)
+				       AND reserved + sold + ? <= total`,
+					id, models.TicketClassStatusActive, now, now, q).
 				Update("reserved", gorm.Expr("reserved + ?", q))
 			if res.Error != nil {
 				s.l.Errorf(ctx, "service.reservation.Reserve.IncrementReserved: ticket_class_id=%d: %v", id, res.Error)
 				return res.Error
 			}
 			if res.RowsAffected == 0 {
-				s.l.Warnf(ctx, "service.reservation.Reserve: availability guard failed for ticket_class_id=%d", id)
-				return ErrInsufficientStock
+				return s.explainReserveMiss(ctx, tx, id, q, now)
 			}
 			rs = append(rs, s.buildModel(in.OrderCode, in.ExpiresAt, ReserveItem{TicketClassID: id, Qty: q}))
 		}
@@ -123,10 +94,41 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 	})
 }
 
+// explainReserveMiss names why the guarded update matched no row.
+// not found  -> ErrNotFound
+// off-window -> ErrSaleClosed
+// otherwise  -> ErrInsufficientStock
+// Read without a lock: it only classifies an attempt that already failed.
+func (s implReservationService) explainReserveMiss(ctx context.Context, tx *gorm.DB, id int64, q int, now time.Time) error {
+	var tc models.TicketClass
+	if err := tx.First(&tc, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d not found", id)
+			return ErrNotFound
+		}
+		s.l.Errorf(ctx, "service.reservation.Reserve.ExplainMiss: ticket_class_id=%d: %v", id, err)
+		return err
+	}
+	if !onSale(tc, now) {
+		switch {
+		case tc.Status != models.TicketClassStatusActive:
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
+		case tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt):
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
+		case tc.SaleEndAt != nil && now.After(*tc.SaleEndAt):
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
+		}
+		return ErrSaleClosed
+	}
+	s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
+		id, tc.Total-tc.Reserved-tc.Sold, q)
+	return ErrInsufficientStock
+}
+
 // onSale reports whether tc is currently on sale.
 // ACTIVE, and now within [SaleStartAt, SaleEndAt]; a nil bound is unbounded,
-// both ends inclusive. Shared by Reserve (inside its lock) and
-// CheckAvailability (a pre-check) so the two can never disagree.
+// both ends inclusive. CheckAvailability pre-checks with it; Reserve's UPDATE
+// predicate mirrors it in SQL. Change one and the other must follow.
 func onSale(tc models.TicketClass, now time.Time) bool {
 	if tc.Status != models.TicketClassStatusActive {
 		return false
@@ -152,14 +154,6 @@ func aggregateDemand(items []ReserveItem) (ids []int64, qtyByID map[int64]int) {
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	return ids, qtyByID
-}
-
-func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
-	m := make(map[int64]models.TicketClass, len(tcs))
-	for _, tc := range tcs {
-		m[tc.ID] = tc
-	}
-	return m
 }
 
 // sortedInt64Keys returns the map keys in ascending order.
