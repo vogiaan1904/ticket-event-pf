@@ -78,7 +78,7 @@ type TicketClass struct {
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
 	// Relations
-	Reservations []Reservation `gorm:"foreignKey:TicketClassID;constraint:OnDelete:CASCADE" json:"reservations,omitempty"`
+	Reservations []Reservation `gorm:"foreignKey:TicketClassID;constraint:OnDelete:RESTRICT" json:"reservations,omitempty"`
 }
 ```
 
@@ -165,6 +165,11 @@ Delete(ctx, id) error
 ```
 
 ## Usage Examples
+
+These show the models and repositories in isolation. They are **not** the live reservation path:
+`internal/services/reservation.go` locks every target row with `SELECT … FOR UPDATE` before it
+touches a counter, and a check-then-act sequence like the one in example 2 is exactly what that
+lock exists to replace. See `POST_MIGRATE_DDL.md` and the service `CLAUDE.md` for the invariant.
 
 ### 1. Create Ticket Class
 
@@ -298,20 +303,7 @@ err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 
 ## Database Migrations
 
-To create these tables in your database:
-
-```go
-db.AutoMigrate(&models.TicketClass{}, &models.Reservation{})
-```
-
-For production, consider creating explicit migrations with proper indexes and constraints.
-
-## Complete Example
-
-See `/examples/ticket_inventory_example.go` for a complete working example that demonstrates:
-
-- Creating ticket classes
-- Reserving tickets with transactions
-- Confirming purchases
-- Handling expired reservations
-- Canceling orders
+`cmd/api/main.go` runs GORM `AutoMigrate` on boot, then applies
+`models.PostMigrateStatements()` (`internal/models/ddl.go`) for the partial index and the CHECK
+constraints `AutoMigrate` cannot express — see `POST_MIGRATE_DDL.md`. Versioned migrations are the
+target and will replace both.

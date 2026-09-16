@@ -63,9 +63,9 @@ User → gRPC → WaitroomService.JoinQueue()
 ```
 
 **Files:**
-- [internal/service/waitroom_service.go](internal/service/waitroom_service.go) - JoinQueue()
-- [internal/service/queue_service.go:40-66](internal/service/queue_service.go#L40-L66) - EnqueueSession()
-- [internal/repository/redis/queue_repository.go](internal/repository/redis/queue_repository.go) - Redis operations
+- [internal/service/waitroom_service.go](../internal/service/waitroom_service.go) - JoinQueue()
+- [internal/service/queue_service.go:40-66](../internal/service/queue_service.go#L40-L66) - EnqueueSession()
+- [internal/repository/redis/queue_repository.go](../internal/repository/redis/queue_repository.go) - Redis operations
 
 ### 2. Real-Time Position Streaming
 
@@ -81,9 +81,9 @@ User → gRPC → StreamQueuePosition(session_id)
 ```
 
 **Files:**
-- [internal/delivery/grpc/waitroom_service.go:78-170](internal/delivery/grpc/waitroom_service.go#L78-L170) - StreamQueuePosition()
-- [internal/service/waitroom_service.go:290-418](internal/service/waitroom_service.go#L290-L418) - StreamSessionPosition()
-- [internal/models/position_update.go](internal/models/position_update.go) - Position update events
+- [internal/delivery/grpc/service.go:78-170](../internal/delivery/grpc/service.go#L78-L170) - StreamQueuePosition()
+- [internal/service/waitroom_service.go:290-418](../internal/service/waitroom_service.go#L290-L418) - StreamSessionPosition()
+- [internal/models/position_update.go](../internal/models/position_update.go) - Position update events
 
 **Redis Channels:**
 - Pattern: `queue:updates:{eventID}`
@@ -109,9 +109,9 @@ Background Goroutine (Every 1 second):
 ```
 
 **Files:**
-- [internal/service/queue_processor.go](internal/service/queue_processor.go) - Complete processor implementation
-- [cmd/api/main.go:105-109](cmd/api/main.go#L105-L109) - Processor startup
-- [cmd/api/main.go:138-140](cmd/api/main.go#L138-L140) - Graceful shutdown
+- [internal/service/queue_processor.go](../internal/service/queue_processor.go) - Complete processor implementation
+- [cmd/api/main.go:105-109](../cmd/api/main.go#L105-L109) - Processor startup
+- [cmd/api/main.go:138-140](../cmd/api/main.go#L138-L140) - Graceful shutdown
 
 **Key Methods:**
 - `Start()` - Starts the background processor
@@ -154,12 +154,12 @@ Waitroom consumes checkout completion events:
 ```
 
 **Files:**
-- [internal/delivery/kafka/consumer/consumer.go](internal/delivery/kafka/consumer/consumer.go)
-- [internal/service/waitroom_service.go](internal/service/waitroom_service.go) - HandleCheckout methods
+- [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go)
+- [internal/service/waitroom_service.go](../internal/service/waitroom_service.go) - HandleCheckout methods
 
 ## Redis Data Structures
 
-Your system uses **4 Redis data structures** per event:
+The service uses **four Redis data structures** per event:
 
 ### 1. Sessions (String with JSON)
 
@@ -225,7 +225,7 @@ SUBSCRIBE queue:updates:concert-2024
 
 ## Kafka Event Flow
 
-### Events YOU Publish (Producer)
+### Events published (producer)
 
 | Event | Topic | When | Purpose |
 |-------|-------|------|---------|
@@ -233,9 +233,9 @@ SUBSCRIBE queue:updates:concert-2024
 | **QUEUE_LEFT** | `queue.left` | User leaves queue | Track abandonment rate |
 | **QUEUE_READY** | `queue.ready` | User admitted to checkout | Notify Checkout Service |
 
-**File:** [internal/delivery/kafka/producer/producer.go](internal/delivery/kafka/producer/producer.go)
+**File:** [internal/delivery/kafka/producer/producer.go](../internal/delivery/kafka/producer/producer.go)
 
-### Events YOU Consume (Consumer)
+### Events consumed (consumer)
 
 | Event | Topic | When | Handler |
 |-------|-------|------|---------|
@@ -243,7 +243,7 @@ SUBSCRIBE queue:updates:concert-2024
 | **CHECKOUT_FAILED** | `checkout.failed` | Payment failed | Free slot, mark failed |
 | **CHECKOUT_EXPIRED** | `checkout.expired` | 15-min timeout | Free slot, mark expired |
 
-**File:** [internal/delivery/kafka/consumer/consumer.go](internal/delivery/kafka/consumer/consumer.go)
+**File:** [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go)
 
 ## Redis Pub/Sub vs Kafka
 
@@ -254,7 +254,7 @@ Both are used but serve **different purposes**:
 - **Purpose:** Real-time client streaming
 - **Consumers:** Active gRPC streams
 - **Latency:** ~1ms (instant)
-- **Durability:** ❌ Ephemeral (not stored)
+- **Durability:** ephemeral — nothing is stored
 - **Use case:** Stream position updates to connected clients
 
 ### Kafka Events (External Service-to-Service)
@@ -294,22 +294,7 @@ KAFKA_CONSUMER_GROUP_ID=waitroom-service
 SERVER_GRPC_PORT=50056
 ```
 
-**File:** [config/config.go](config/config.go)
-
-## Current Status Summary
-
-| Component | Status | Description |
-| --- | --- | --- |
-| Join Queue | Complete | Users can join, get position |
-| Leave Queue | Complete | Users can leave queue |
-| Queue Storage | Complete | Redis sorted set + sessions |
-| **Queue Processor** | **Complete** | **Background job admits users** |
-| Checkout Tokens | Complete | JWT generation & validation |
-| Status Polling | Complete | Users can check position |
-| **Real-Time Streaming** | **Complete** | **gRPC streaming + Redis Pub/Sub** |
-| Kafka Producer | Complete | Publishes JOINED/LEFT/READY |
-| Kafka Consumer | Complete | Handles checkout completion |
-| Graceful Shutdown | Complete | Proper cleanup on exit |
+**File:** [config/config.go](../config/config.go)
 
 ## Testing the System
 
@@ -457,41 +442,40 @@ kafka-topics --bootstrap-server localhost:9092 --list
 ## Key Files Reference
 
 ### Core Services
-- [internal/service/waitroom_service.go](internal/service/waitroom_service.go) - Main service orchestration
-- [internal/service/queue_service.go](internal/service/queue_service.go) - Queue operations
-- [internal/service/session_service.go](internal/service/session_service.go) - Session management
-- [internal/service/queue_processor.go](internal/service/queue_processor.go) - Background processor
+- [internal/service/waitroom_service.go](../internal/service/waitroom_service.go) - Main service orchestration
+- [internal/service/queue_service.go](../internal/service/queue_service.go) - Queue operations
+- [internal/service/session_service.go](../internal/service/session_service.go) - Session management
+- [internal/service/queue_processor.go](../internal/service/queue_processor.go) - Background processor
 
 ### Delivery Layer
-- [internal/delivery/grpc/waitroom_service.go](internal/delivery/grpc/waitroom_service.go) - gRPC handlers
-- [internal/delivery/kafka/producer/producer.go](internal/delivery/kafka/producer/producer.go) - Kafka producer
-- [internal/delivery/kafka/consumer/consumer.go](internal/delivery/kafka/consumer/consumer.go) - Kafka consumer
+- [internal/delivery/grpc/service.go](../internal/delivery/grpc/service.go) - gRPC handlers
+- [internal/delivery/kafka/producer/producer.go](../internal/delivery/kafka/producer/producer.go) - Kafka producer
+- [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go) - Kafka consumer
 
 ### Repository Layer
-- [internal/repository/redis/queue_repository.go](internal/repository/redis/queue_repository.go) - Redis queue ops + Pub/Sub
-- [internal/repository/redis/session_repository.go](internal/repository/redis/session_repository.go) - Redis session ops
+- [internal/repository/redis/queue_repository.go](../internal/repository/redis/queue_repository.go) - Redis queue ops + Pub/Sub
+- [internal/repository/redis/session_repository.go](../internal/repository/redis/session_repository.go) - Redis session ops
 
 ### Models
-- [internal/models/session.go](internal/models/session.go) - Session model
-- [internal/models/position_update.go](internal/models/position_update.go) - Position update events
+- [internal/models/session.go](../internal/models/session.go) - Session model
+- [internal/models/position_update.go](../internal/models/position_update.go) - Position update events
 
 ### Main Entry Point
-- [cmd/api/main.go](cmd/api/main.go) - Server initialization
+- [cmd/api/main.go](../cmd/api/main.go) - Server initialization
 
-## System Status: Production Ready!
-
-- **All core functionality is implemented and working:**
+## What the service covers
 
 1. Queue management (join, leave, position tracking)
 2. Background queue processor (automatic admission)
 3. Real-time position streaming (gRPC + Redis Pub/Sub)
 4. Kafka event streaming (service-to-service)
-5. Checkout token generation & validation
-6. Graceful shutdown & error handling
-7. Comprehensive configuration
-8. Monitoring & metrics
+5. Checkout token generation and validation
+6. Graceful shutdown and error handling
+7. Configuration through env vars (chart ConfigMaps in a cluster)
+8. Processor metrics
 
-**The system is fully operational and ready for load testing!** 🚀
+Known limits are in `../CLAUDE.md`: the admission loop is single-replica only, and nothing
+consumes the `.dlq` topics yet.
 
 ---
 

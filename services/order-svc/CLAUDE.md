@@ -15,7 +15,7 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`.
 
 ## Datastore: DynamoDB only
-This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). The MongoDB driver was removed — `internal/infra/mongo/` no longer exists, and there is no `legacy/mongodb` branch in this monorepo.
+This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.
 
 For local DynamoDB, run `docker compose -f docker-compose.dev.yml up -d` — this brings up `amazon/dynamodb-local` (container `ticketbottle-order-dynamodb`, port 8000), the same image the Helm chart uses for the same job. The repository and activity integration tests (`internal/order/repository`, `internal/activities`) create the table on first use via `internal/testutil/dynamotest`, skip locally when the datastore is unreachable, and **fail** when `CI` is set — a suite that skips itself reports PASS having asserted nothing.
 
@@ -35,7 +35,7 @@ go build ./...
 1. **Logging:** always use the custom zap wrapper with the `f`-suffixed, ctx-first methods, e.g. `s.l.Errorf(ctx, "failed to start create order workflow: %v", err)`.
 2. **Errors:** do **not** return errors via `fmt.Errorf("...")` — declare an error `var` and return that instead. (This rule is Order-specific within the repo.)
 
-## DynamoDB (`main` branch) — single-table design
+## DynamoDB — single-table design
 
 - Table: `ticketbottle-orders`. Primary key `PK` (partition) + `SK` (sort). `GSI1` (`GSI1PK`/`GSI1SK`) queries by UserID; `GSI2` (`GSI2PK`/`GSI2SK`) queries by EventID.
 - **Order Code** is the primary business identifier (not a Mongo ObjectID).

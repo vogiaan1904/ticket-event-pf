@@ -30,7 +30,7 @@ make test         # run tests against a live Postgres (see below; go test ./inte
 go build ./...
 ```
 
-Use `make test`, not bare `go test ./...`: without a reachable Postgres on 5435, `go test ./...` silently `t.Skipf`s every DB-backed test and reports PASS having asserted nothing. `make test` runs `test-db` first (creates `ticketbottle_inventory_test` against the `ticketbottle-inventory` container) so the suite actually executes. `setup_test.go` also hard-fails instead of skipping when the `CI` env var is set, but that guard is currently unreachable in practice — this repo has no root `.github/workflows`, so nothing ever sets `CI` here. Treat it as aspirational until a CI workflow exists.
+Use `make test`, not bare `go test ./...`: without a reachable Postgres on 5435, `go test ./...` silently `t.Skipf`s every DB-backed test and reports PASS having asserted nothing. `make test` runs `test-db` first (creates `ticketbottle_inventory_test` against the `ticketbottle-inventory` container) so the suite actually executes. `setup_test.go` also hard-fails instead of skipping when the `CI` env var is set, but nothing exercises that guard today: the only workflow (`.github/workflows/build-push-ecr.yml`) builds images and never runs this suite.
 
 On boot `main.go` runs GORM `AutoMigrate` for `TicketClass` and `Reservation`, then applies `models.PostMigrateStatements()` (`internal/models/ddl.go`) — the single source of DDL that AutoMigrate cannot express. That is the partial index `idx_reservation_active_expiry` plus three `CHECK` constraints:
 
