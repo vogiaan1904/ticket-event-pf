@@ -1,0 +1,111 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ticketbottle
+  namespace: {{ .Values.namespace }}
+  labels:
+    release: kps          # the Prometheus CR's ruleSelector matches on this
+spec:
+  groups:
+    - name: ticketbottle.recording
+      interval: 30s
+      rules:
+        - record: tb:grpc_requests:rate5m
+          expr: sum by (service, code) (rate(tb_grpc_requests_total[5m]))
+
+        - record: tb:checkout_good:ratio5m
+          expr: sum(rate(tb_grpc_request_duration_seconds_bucket{service="app-gateway",method="POST /api/orders",le="2.0"}[5m]))
+              / sum(rate(tb_grpc_request_duration_seconds_count{service="app-gateway",method="POST /api/orders"}[5m]))
+
+        - record: tb:checkout_good:ratio30m
+          expr: sum(rate(tb_grpc_request_duration_seconds_bucket{service="app-gateway",method="POST /api/orders",le="2.0"}[30m]))
+              / sum(rate(tb_grpc_request_duration_seconds_count{service="app-gateway",method="POST /api/orders"}[30m]))
+
+        - record: tb:checkout_good:ratio1h
+          expr: sum(rate(tb_grpc_request_duration_seconds_bucket{service="app-gateway",method="POST /api/orders",le="2.0"}[1h]))
+              / sum(rate(tb_grpc_request_duration_seconds_count{service="app-gateway",method="POST /api/orders"}[1h]))
+
+        - record: tb:checkout_good:ratio6h
+          expr: sum(rate(tb_grpc_request_duration_seconds_bucket{service="app-gateway",method="POST /api/orders",le="2.0"}[6h]))
+              / sum(rate(tb_grpc_request_duration_seconds_count{service="app-gateway",method="POST /api/orders"}[6h]))
+
+    - name: ticketbottle.alerts
+      rules:
+        # No alert on code="FAILED_PRECONDITION". Sold out, sale closed and
+        # wrong-state are business outcomes, not faults; paging on them turns a
+        # successful on-sale into an incident. The absence is asserted, not intended.
+        - alert: TicketBottleInternalErrors
+          expr: sum(tb:grpc_requests:rate5m{code="INTERNAL"}) > 0
+          for: 5m
+          labels: { severity: page }
+          annotations:
+            summary: "A service has returned gRPC INTERNAL for 5 continuous minutes"
+            runbook: "docs/RUNBOOK.md#ticketbottleinternalerrors"
+
+        - alert: OutboxBacklogGrowing
+          expr: min_over_time(tb_outbox_pending_rows[10m]) > 50
+          for: 10m
+          labels: { severity: page }
+          annotations:
+            summary: "Outbox backlog has not drained below 50 rows in 10 minutes ({{`{{ $value }}`}} pending)"
+            runbook: "docs/RUNBOOK.md#outboxbackloggrowing"
+
+        - alert: SagaCompensationSpike
+          expr: sum(rate(tb_order_compensations_total[5m])) > 0.5
+          for: 10m
+          labels: { severity: page }
+          annotations:
+            summary: "Saga rollbacks above 0.5 steps/s — read step= on dashboard B3 for where it fails"
+            runbook: "docs/RUNBOOK.md#sagacompensationspike"
+
+        - alert: OrdersNeedingRefund
+          expr: increase(tb_order_workflow_duration_seconds_count{workflow="ConfirmOrder",outcome="refund_required"}[10m]) > 0
+          for: 10m
+          labels: { severity: page }
+          annotations:
+            summary: "A buyer was charged and holds no ticket — nothing consumes order.refund_required"
+            runbook: "docs/RUNBOOK.md#ordersneedingrefund"
+
+        - alert: TargetDown
+          expr: up{namespace="ticketbottle"} == 0
+          for: 3m
+          labels: { severity: page }
+          annotations:
+            summary: "{{`{{ $labels.job }}`}}/{{`{{ $labels.pod }}`}} has not been scraped successfully"
+            runbook: "docs/RUNBOOK.md#targetdown"
+
+        - alert: MetricsMissing
+          expr: absent(up{job="waitroom-service"})
+          for: 5m
+          labels: { severity: ticket }
+          annotations:
+            summary: "waitroom-service has no scrape target at all — it left service discovery"
+            runbook: "docs/RUNBOOK.md#metricsmissing"
+
+        - alert: CheckoutBurnRateFast
+          expr: (1 - tb:checkout_good:ratio1h) > (14.4 * 0.01)
+            and (1 - tb:checkout_good:ratio5m) > (14.4 * 0.01)
+          for: 2m
+          labels: { severity: page }
+          annotations:
+            summary: "Checkout SLO burning at 14.4x — 30-day budget gone in ~2 days"
+            runbook: "docs/RUNBOOK.md#checkoutburnratefast"
+
+        - alert: CheckoutBurnRateSlow
+          expr: (1 - tb:checkout_good:ratio6h) > (6 * 0.01)
+            and (1 - tb:checkout_good:ratio30m) > (6 * 0.01)
+          for: 15m
+          labels: { severity: ticket }
+          annotations:
+            summary: "Checkout SLO burning at 6x — 30-day budget gone in ~5 days"
+            runbook: "docs/RUNBOOK.md#checkoutburnrateslow"
+
+        - alert: ScrapeTargetsMissing
+          expr: count(up{namespace="{{ .Values.namespace }}"}) < 10
+          for: 5m
+          labels: { severity: page }
+          annotations:
+            summary: "Fewer than 10 ticketbottle targets are being scraped ({{`{{ $value }}`}} up)"
+            runbook: "docs/RUNBOOK.md#scrapetargetsmissing"
+{{- end }}
