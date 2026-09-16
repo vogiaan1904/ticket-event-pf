@@ -31,7 +31,6 @@ redpanda:
 redis:
   storage: 1Gi
 
-# Unit 04 turns on the first target only; unit 05 adds the other six.
 monitoring:
   enabled: true
   targets:

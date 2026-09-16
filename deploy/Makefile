@@ -50,6 +50,17 @@ smoke-apps:            ## Verify the app tier (pods Ready + signup)
 gate1:                 ## Run the full purchase-flow acceptance test
 	./scripts/gate1-purchase-flow.sh
 
+# --- observability ----------------------------------------------------
+# Cluster-agnostic: acts on whatever the current KUBECONFIG points at.
+.PHONY: obs-up obs-grafana
+
+obs-up:                ## Install kube-prometheus-stack and provision the dashboards
+	./scripts/obs-install.sh
+
+obs-grafana:           ## Port-forward Grafana on :3001 (admin password below)
+	@kubectl -n monitoring get secret kps-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+	kubectl -n monitoring port-forward svc/kps-grafana 3001:80
+
 
 
 # --- k3s on EC2 -------------------------------------------------------
