@@ -28,7 +28,7 @@ Ports below are the **authoritative** values (from each service's config/`main`)
 
 ## Architecture in one paragraph
 
-The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (topics like `payment-events`, `order-events`, `queue-events`). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory + creates a payment intent → payment webhook → Payment writes an outbox row → outbox is published to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
+The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (dotted topic names: `queue.ready`, `payment.completed`, `checkout.completed`, `order.refund_required`, and their failure counterparts). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory, writes the order, then creates a payment intent → payment webhook → Payment writes an outbox row → the relay publishes it to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
 
 ## Communication patterns (where to look when tracing a flow)
 
@@ -51,7 +51,7 @@ make -C deploy cluster-down # tear it all down
 
 Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
 
-**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR. `deploy/localstack/` is a retired local AWS simulation kept only for reference — do not build on it.
+**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR.
 
 ## Proto contracts & generation
 
@@ -93,6 +93,92 @@ compile; `response.GrpcError` has no fallback. TS services carry it as the third
 element of the `ErrorCode` tuple — `[message, httpStatus, grpcCode]` — so a missing
 one fails `tsc`. Neither side has a default: a silent fallback is how an error
 ends up with the wrong class.
+
+## Metric contract (binding for every service)
+
+Every workload publishes `tb_grpc_requests_total`, `tb_grpc_request_duration_seconds`
+and `tb_grpc_in_flight` on port 2112, labelled `service` / `method` / `code`.
+`service` is the workload's own name; `code` is the gRPC code from the taxonomy
+above, which the gateway records too even though it serves HTTP.
+
+**Histogram buckets are tuned per workload** — a boundary is only worth a series
+where that workload's latency lands — and that forces one rule:
+
+> **Every query over `tb_grpc_request_duration_seconds` names its workload:** a
+> `service` matcher, or `service` kept in the `by` list.
+
+`sum by (le)` across mismatched boundaries builds a curve `histogram_quantile`
+silently clamps, so the query returns a plausible wrong number rather than an
+error. Other histograms have a single publisher and need no matcher.
+
+The checkout SLO — **99% of `POST /api/orders` under 2s** — is measured at the
+gateway, not on the saga's `CreateOrder`, so `2` must stay a real boundary
+in the gateway's array. Full contract, bucket tables and the cardinality
+conditions: `docs/METRICS.md`.
+
+**Metrics are absent, not zero, until traffic creates them.** A `*Vec` registers
+no series until a label combination is used, so after any rollout every counter
+and histogram in the contract is missing until the first request. Assert on
+metrics *after* driving load, never before, and never read an empty query result
+as a fault before checking whether traffic has happened.
+
+## Alerting policy (binding for every service)
+
+**The error taxonomy is the alerting policy.** `INTERNAL` pages on any sustained
+rate above zero; `FAILED_PRECONDITION` never pages, because a buyer losing a race
+is not a fault and paging on it turns a successful on-sale into an incident. That
+absence is asserted, not merely intended — no rule in
+`templates/apps/prometheusrule.yaml` may reference `FAILED_PRECONDITION`.
+
+The one alert that fires on that code, `OrdersNeedingRefund`, decides on the
+**ledger rather than the code**: a sold-out buyer was never charged, while a
+`REFUND_REQUIRED` order was. Same code, opposite obligations.
+
+Working on metrics, dashboards, alerts or PromQL: read the `observability` skill
+first — it carries the query failure modes, the scrape wiring, and the
+Helm-versus-Prometheus templating collision that breaks the chart render.
+
+
+## Comment conventions (binding for every service)
+
+A comment earns its place only by saying what the code cannot. It is read at a
+glance or not at all, so it is budgeted like code, not written like prose.
+
+**Budget — hard limits.**
+
+| Where | Limit |
+|---|---|
+| Inline, inside a function body | **3 lines** |
+| Doc comment on a symbol | **5 lines**, first line one sentence: `// X does Y.` |
+| Package doc | 8 lines |
+
+The budget counts **prose** lines. An indented case table or step list does not
+count against it — that form is the point — but the whole block stays under 10.
+
+**No paragraphs.** A block of running prose explaining a design decision is not
+a comment — it is documentation in the wrong file. If the rationale does not fit
+the budget, put it in the service's `docs/` and leave a one-line pointer:
+
+```go
+// Sized so an in-flight create is never mistaken for an abandoned one.
+// See docs/PURCHASE_SLOT.md#settle-window.
+```
+
+**Compress with structure, not sentences.** Branching or multi-case reasoning
+goes in a form the eye can scan:
+
+```go
+// pending | completed  -> resume, return the same checkout
+// cancelled | failed   -> release the slot, let the retry take it
+// unknown              -> refuse; guessing double-sells or strands
+```
+
+Single-line prefixes carry the rest: `// Why:`, `// Invariant:`,
+`// Trade-off:`, `// Fails when:`.
+
+**Never write.** Restatements of the line below; narrative history ("this used
+to...", "changed because..."); walkthroughs of what a *different* function
+does; justification aimed at a reviewer rather than the next reader.
 
 ## Conventions that span services
 

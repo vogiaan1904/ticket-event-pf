@@ -4,13 +4,9 @@ import "time"
 
 const (
 	DateTimeFormat = "2006-01-02 15:04:05"
-	// ISO8601Format must keep the Z07:00 offset directive. A trailing bare "Z"
-	// is a literal to time.Format, so it stamps whatever wall clock the value
-	// carries and labels it UTC -- GORM fills CreatedAt/UpdatedAt with local
-	// time, which was then emitted as UTC and wrong by the host's offset.
-	//
-	// As a parse layout this is a strict superset of the old one: it still
-	// accepts "...Z" and now also accepts a real offset.
+	// ISO8601Format must keep the Z07:00 offset directive: a bare "Z" is a literal
+	// to time.Format, so a local-time value (GORM's CreatedAt/UpdatedAt) is stamped
+	// UTC and shifted by the host's offset. As a parse layout it accepts both.
 	ISO8601Format = time.RFC3339
 )
 

@@ -33,7 +33,7 @@ build ticketbottle/gateway:local         services/api-gateway        services/ap
 # Payment-events adapter: simulated webhook (completes a payment + writes an outbox row).
 build ticketbottle/payment-events:local  deploy/adapters/payment-events  deploy/adapters/payment-events/Dockerfile
 
-# Outbox relay: long-lived outbox->Kafka publisher, replaces the old outbox-publisher adapter deployment.
+# Outbox relay: long-lived outbox->Kafka publisher.
 build ticketbottle/outbox-relay:local    services/payment-svc         services/payment-svc/outbox-relay/Dockerfile
 
 # Reclaim the build cache this run generated (npm ci / go build layers).

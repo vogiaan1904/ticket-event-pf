@@ -65,18 +65,26 @@ kind: Service
 metadata:
   name: {{ .svcName }}
   namespace: {{ include "tb.namespace" $ }}
-  labels: {{- include "tb.labels" $ | nindent 4 }}
+  labels:
+    app: {{ .name }}
+    {{- include "tb.labels" $ | nindent 4 }}
 spec:
   {{- if .nodePort }}
   type: NodePort
   {{- end }}
   selector: { app: {{ .name }} }
   ports:
-    - port: {{ .port }}
+    - name: {{ .portName | default "grpc" }}
+      port: {{ .port }}
       targetPort: {{ .port }}
       {{- if .nodePort }}
       nodePort: {{ .nodePort }}
       {{- end }}
+    {{- if and $.Values.monitoring.enabled .metricsPort }}
+    - name: metrics
+      port: {{ .metricsPort }}
+      targetPort: {{ .metricsPort }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end -}}

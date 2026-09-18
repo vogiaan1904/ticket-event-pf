@@ -6,7 +6,7 @@ This is the **Waitroom** (virtual queue) service for TicketBottle V2. For the sy
 
 ## Role
 
-gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a FIFO **queue** (Redis sorted set); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `QUEUE_READY` event to Kafka. It also consumes downstream events (e.g. `CHECKOUT_COMPLETED`) to release slots and admit the next user.
+gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a FIFO **queue** (Redis sorted set); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `queue.ready` event to Kafka. It also consumes downstream events (e.g. `checkout.completed`) to release slots and admit the next user.
 
 Key behaviors (`internal/service/queue_processor.go`):
 - Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
@@ -61,9 +61,9 @@ as stale drops the user. This is why `claimSlot` deliberately does **not** roll 
 session status back on failure: the old best-effort rollback discarded its own error, and
 both calls hit Redis, so the one failure mode that mattered took out both.
 
-### QUEUE_READY publishes are buffered, not dropped
+### `queue.ready` publishes are buffered, not dropped
 
-A failed `QUEUE_READY` publish must **not** fail the admission. By that point the
+A failed `queue.ready` publish must **not** fail the admission. By that point the
 session is already admitted and holds a slot, and reporting failure sends the caller
 down the `ErrSessionNotAdmittable` path — which would drop the user out of the position
 broadcast, the channel they actually receive their checkout token on. Instead the event

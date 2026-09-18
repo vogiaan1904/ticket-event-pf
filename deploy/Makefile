@@ -50,6 +50,23 @@ smoke-apps:            ## Verify the app tier (pods Ready + signup)
 gate1:                 ## Run the full purchase-flow acceptance test
 	./scripts/gate1-purchase-flow.sh
 
+# --- observability ----------------------------------------------------
+# Cluster-agnostic: acts on whatever the current KUBECONFIG points at.
+.PHONY: obs-up obs-grafana
+
+obs-up:                ## Install kube-prometheus-stack and provision the dashboards
+	./scripts/obs-install.sh
+
+obs-grafana:           ## Port-forward Grafana on :3001 (admin password below)
+	@kubectl -n monitoring get secret kps-grafana -o jsonpath='{.data.admin-password}' | base64 -d; echo
+	kubectl -n monitoring port-forward svc/kps-grafana 3001:80
+
+.PHONY: temporal-ui
+
+temporal-ui:           ## Port-forward the Temporal web UI on :8233
+	@echo "http://localhost:8233"
+	kubectl -n $(NS) port-forward svc/temporal-ui 8233:8080
+
 
 
 # --- k3s on EC2 -------------------------------------------------------
@@ -67,7 +84,7 @@ K3S_ID := $$(cd $(K3S_ENV) && terraform output -raw instance_id)
 K3S_IP := $$(aws ec2 describe-instances --instance-ids $(K3S_ID) --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 K3S_TUNNEL := ssh $(SSH_OPTS) -L 6443:127.0.0.1:6443 -L 3000:127.0.0.1:30000 ec2-user@
 
-.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2
+.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2 k3s-load
 
 k3s-ip:            ## Print the current public IP of the k3s box (live from EC2)
 	@echo "$(K3S_IP)"
@@ -95,18 +112,34 @@ k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
 	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
+# HELM_EXTRA passes extra flags through, e.g. deploying a branch build:
+#   make k3s-deploy HELM_EXTRA="--set image.tag=my-branch"
+HELM_EXTRA ?=
+
 k3s-deploy: secrets-check  ## Deploy the chart to k3s from ECR (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
 	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
+	  $(HELM_EXTRA) \
 	  --wait --timeout 10m
 
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
 
+# Gate 4a's harness in generator mode: DURATION picks k6's sustained scenario,
+# which makes the script exit after the run instead of asserting an HPA k3s
+# has no room for. TOTAL is sized so the allotment never bounds the run.
+LOAD_DURATION ?= 3m
+LOAD_VUS      ?= 20
+LOAD_TOTAL    ?= 5000
+
+k3s-load:          ## Drive sustained purchase traffic on k3s (tunnel must be open)
+	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api \
+	  DURATION=$(LOAD_DURATION) VUS=$(LOAD_VUS) TOTAL=$(LOAD_TOTAL) ./scripts/gate4a-load.sh
+
 
 # --- Ephemeral EKS ----------------------------------------------------
-# Weekend sprint, never an everyday environment. There is NO stop switch: the
+# Brought up on demand and torn down after use. There is NO stop switch: the
 # control plane bills $0.10/hr from `eks-up` until `eks-down`.
 EKS_ENV     := terraform/envs/eks
 EKS_VALUES  := $(CHART)/values-eks.yaml
@@ -226,9 +259,8 @@ eks-allow-ip: update-my-ip   ## ...then apply it to the EKS API endpoint AND the
 
 # --- Chart secrets ------------------------------------------------------------
 # Signing keys and the admin password are `required` by the chart and have no
-# committed defaults, so every deploy needs this file. It is gitignored: the
-# previous values were literals inside a ConfigMap template, which published
-# them to everyone who could read the repository.
+# committed defaults, so every deploy needs this file. It is gitignored:
+# a key committed to a template is published to everyone who can read the repo.
 SECRETS_FILE := secrets.values.yaml
 
 .PHONY: secrets-init secrets-check

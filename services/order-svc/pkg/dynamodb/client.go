@@ -13,7 +13,7 @@ import (
 type Config struct {
 	TableName string
 	Region    string
-	Endpoint  string // For LocalStack or local development
+	Endpoint  string // Custom endpoint for a local DynamoDB; empty targets AWS.
 }
 
 // Client wraps the DynamoDB client
@@ -28,7 +28,7 @@ func NewClient(ctx context.Context, cfg Config) (*Client, error) {
 
 	opts = append(opts, config.WithRegion(cfg.Region))
 
-	// For LocalStack or local development
+	// A custom endpoint points at a local DynamoDB; empty resolves to AWS.
 	if cfg.Endpoint != "" {
 		customResolver := aws.EndpointResolverWithOptionsFunc(
 			func(service, region string, options ...interface{}) (aws.Endpoint, error) {

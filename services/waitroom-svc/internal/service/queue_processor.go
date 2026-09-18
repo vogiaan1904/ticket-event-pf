@@ -225,11 +225,9 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 
 	batchSize := min(availableSlots, int64(qp.cfg.BatchSize))
 
-	// Claim/ack rather than pop. An entry leaves the queue only once admission
-	// has reached a terminal outcome, so a transient failure retries the same
-	// user at the same position on the next tick instead of dropping them.
-	// There is deliberately no window in which a session sits in neither the
-	// queue nor the processing set.
+	// Claim/ack, not pop: an entry leaves the queue only on a terminal outcome,
+	// so a transient failure retries the same user at the same position.
+	// Invariant: a session is never in neither the queue nor the processing set.
 	ssIDs, err := qp.qSvc.PeekQueue(processingCtx, eventID, int(batchSize))
 	if err != nil {
 		return fmt.Errorf("failed to peek queue: %w", err)
@@ -258,8 +256,7 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 			staleSsIDs = append(staleSsIDs, sessionID)
 
 		default:
-			// Transient. Leave the entry in the queue; the next tick retries it
-			// from the same position.
+			// Transient: leave it queued; the next tick retries the same position.
 			qp.l.Errorf(processingCtx, "Failed to admit user, leaving queued for retry - event_id: %s, session_id: %s, error: %v",
 				eventID, sessionID, err)
 		}
@@ -268,9 +265,8 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	// Only now is it safe to let go of these entries.
 	if leaving := slices.Concat(admittedSsIDs, staleSsIDs); len(leaving) > 0 {
 		if err := qp.qSvc.RemoveFromQueue(processingCtx, eventID, leaving...); err != nil {
-			// The sessions are already admitted and hold their slots. Leaving
-			// them queued is self-correcting: the next tick sees them as
-			// not-admittable and drops them then.
+			// Self-correcting: they already hold slots, so the next tick sees
+			// them as not-admittable and drops them.
 			qp.l.Errorf(processingCtx, "Failed to remove settled sessions from queue - event_id: %s, count: %d, error: %v",
 				eventID, len(leaving), err)
 		}
@@ -334,15 +330,11 @@ func (qp *queueProcessor) doAdmitUserToCheckout(ctx context.Context, eventID, se
 	return qp.claimSlot(ctx, eventID, ss, token, expAt)
 }
 
-// resumeOrReject handles a session the queue still lists but that cannot be
-// admitted the normal way.
+// resumeOrReject settles a queued session that cannot be admitted the normal way.
 //
-// The case that matters is a *half-finished* admission: UpdateCheckoutToken
-// committed -- so the session already reads as admitted -- but the slot write
-// did not. The session then holds a token and no slot, which is neither state
-// the queue understands. Calling that terminal would drop the user, which is
-// the exact silent loss this processor exists to prevent, so it is finished
-// instead, reusing the token already persisted.
+// half-finished (token committed, slot write did not) -> resume on the stored token
+// anything else                                       -> not admittable, drop it
+// Why: calling a half-finished admission terminal silently drops the user.
 func (qp *queueProcessor) resumeOrReject(ctx context.Context, eventID string, ss *models.Session) error {
 	// Left the queue, expired, or never got far enough to have a usable token.
 	notAdmittable := fmt.Errorf("%w: status=%s, expired=%v",
@@ -372,15 +364,12 @@ func (qp *queueProcessor) resumeOrReject(ctx context.Context, eventID string, ss
 	return qp.claimSlot(ctx, eventID, ss, ss.CheckoutToken, *ss.CheckoutExpiresAt)
 }
 
-// claimSlot takes the checkout slot and announces it. The slot is taken before
-// the queue entry is released (see ProcessEventQueue), so any failure here
-// leaves the user queued for another attempt.
+// claimSlot takes the checkout slot and announces it.
+// Ordering: slot before queue release, so a failure here leaves the user queued.
 func (qp *queueProcessor) claimSlot(ctx context.Context, eventID string, ss *models.Session, token string, expAt time.Time) error {
-	// Deliberately no status rollback on failure. The session is left admitted
-	// without a slot, which resumeOrReject recognises and finishes on a later
-	// tick. The previous best-effort rollback discarded its own error, and a
-	// rollback that silently failed left the session admitted, un-slotted, and
-	// classified as stale -- which dropped the user.
+	// No status rollback on failure: the session stays admitted without a slot,
+	// which resumeOrReject finishes on a later tick.
+	// Why: a rollback that silently fails marks it stale and drops the user.
 	if err := qp.qSvc.AddToProcessing(ctx, eventID, ss.ID, time.Until(expAt)); err != nil {
 		return fmt.Errorf("failed to add to processing: %w", err)
 	}
@@ -396,12 +385,9 @@ func (qp *queueProcessor) claimSlot(ctx context.Context, eventID string, ss *mod
 	}
 
 	if err := qp.prod.PublishQueueReady(ctx, evt); err != nil {
-		// The admission itself is already durable -- the session is admitted
-		// and holds a slot -- so this must not fail the operation. Reporting
-		// failure here would send the caller down the not-admittable path and
-		// drop the user out of the position broadcast, which is the channel
-		// they actually learn about their token on. Buffer the event for the
-		// next tick instead of losing it.
+		// The admission is already durable, so a publish failure must not fail
+		// the call: that path marks the session not-admittable and drops the
+		// user out of the position broadcast. Buffer for the next tick instead.
 		qp.l.Errorf(ctx, "Failed to publish QUEUE_READY, buffering for retry - session_id: %s, error: %v",
 			ss.ID, err)
 		qp.bufferQueueReady(ctx, evt)
@@ -413,9 +399,8 @@ func (qp *queueProcessor) claimSlot(ctx context.Context, eventID string, ss *mod
 	return nil
 }
 
-// bufferQueueReady parks an unpublished QUEUE_READY event for a later tick. It
-// is the last line of defence, so a failure here is the one case where the event
-// is genuinely lost -- say so loudly.
+// bufferQueueReady parks an unpublished QUEUE_READY event for a later tick.
+// Last line of defence: a failure here is the one case where the event is lost.
 func (qp *queueProcessor) bufferQueueReady(ctx context.Context, evt kafka.QueueReadyEvent) {
 	payload, err := json.Marshal(evt)
 	if err != nil {
@@ -432,10 +417,8 @@ func (qp *queueProcessor) bufferQueueReady(ctx context.Context, evt kafka.QueueR
 	}
 }
 
-// drainBufferedQueueReady republishes events parked by a previous tick. Entries
-// are peeked and only trimmed once actually published, so a still-broken broker
-// costs a retry rather than the event. It stops at the first failure to keep the
-// buffer in order.
+// drainBufferedQueueReady republishes events parked by a previous tick.
+// Peek, then trim only what published; stop at the first failure to keep order.
 func (qp *queueProcessor) drainBufferedQueueReady(ctx context.Context) {
 	payloads, err := qp.qSvc.PeekBufferedQueueReady(ctx, qp.cfg.BatchSize)
 	if err != nil {
@@ -451,16 +434,14 @@ func (qp *queueProcessor) drainBufferedQueueReady(ctx context.Context) {
 	for _, payload := range payloads {
 		var evt kafka.QueueReadyEvent
 		if err := json.Unmarshal([]byte(payload), &evt); err != nil {
-			// Nothing will ever make this publishable; drop it rather than
-			// wedge the buffer behind it.
+			// Never publishable; drop it rather than wedge the buffer behind it.
 			qp.incrementErrorCount()
 			qp.l.Errorf(ctx, "Discarding unparseable buffered QUEUE_READY event: %v", err)
 			settled++
 			continue
 		}
 
-		// After a long outage the token in here may already have expired;
-		// republishing it would announce a checkout nobody can complete.
+		// An expired token would announce a checkout nobody can complete.
 		if !evt.ExpiresAt.IsZero() && time.Now().After(evt.ExpiresAt) {
 			qp.l.Warnf(ctx, "Discarding expired buffered QUEUE_READY event - session_id: %s, expires_at: %v",
 				evt.SessionID, evt.ExpiresAt)
@@ -482,8 +463,7 @@ func (qp *queueProcessor) drainBufferedQueueReady(ctx context.Context) {
 	}
 
 	if err := qp.qSvc.TrimBufferedQueueReady(ctx, settled); err != nil {
-		// The events were published; failing to trim means they republish next
-		// tick. Duplicates are the safe direction here.
+		// Already published; a failed trim republishes next tick. Duplicates are safe.
 		qp.l.Errorf(ctx, "Failed to trim buffered QUEUE_READY events - settled: %d, error: %v",
 			settled, err)
 		return
@@ -515,7 +495,7 @@ func (qp *queueProcessor) withRetry(ctx context.Context, operation func() error)
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-time.After(qp.cfg.RetryDelay * time.Duration(attempt)):
-				// Exponential backoff
+				// Linear backoff: RetryDelay * attempt.
 			}
 		}
 
@@ -533,7 +513,7 @@ func (qp *queueProcessor) withRetry(ctx context.Context, operation func() error)
 			continue
 		}
 
-		return nil // Success
+		return nil
 	}
 
 	return fmt.Errorf("operation failed after %d attempts: %w", qp.cfg.RetryAttempts, lastErr)

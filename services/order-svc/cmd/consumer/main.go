@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/dynamodb"
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/kafka"
 	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	oCons "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/consumer"
 	oProd "github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	oRepo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -41,7 +43,6 @@ func main() {
 		Encoding: cfg.Log.Encoding,
 	})
 
-	// Connect to DynamoDB
 	ddbClient, err := dynamodb.Connect(cfg.DynamoDB)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to connect to DynamoDB: %v", err)
@@ -49,7 +50,6 @@ func main() {
 	}
 	defer dynamodb.Disconnect(ddbClient)
 
-	// Initialize gRpc service clients
 	iSvc, iClose, err := iSvc.NewInventoryClient(cfg.Microservice.Inventory)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create inventory service client: %v", err)
@@ -71,30 +71,24 @@ func main() {
 	}
 	defer pClose()
 
-	// Initialize Kafka producer
 	kProd, err := kafka.NewProducer(cfg.Kafka)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Kafka producer: %v", err)
 		os.Exit(1)
 	}
 
-	// Initialize Kafka consumer group
 	kConsGr, err := kafka.NewConsumerGroup(cfg.Kafka)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Kafka consumer group: %v", err)
 		os.Exit(1)
 	}
 
-	// Initialize producers
 	oProd := oProd.NewProducer(kProd, l)
 
-	// Initialize repositories
 	oRepo := oRepo.New(l, ddbClient.DB(), ddbClient.TableName())
 
-	// Initialize JWT manager
 	jwtMgr := pkgJwt.NewManager(cfg.JWT.Secret, l)
 
-	// Initialize Temporal client
 	tCli, err := pkgTemporal.NewClient(cfg.Temporal)
 	if err != nil {
 		l.Fatalf(ctx, "Failed to create Temporal client: %v", err)
@@ -102,7 +96,6 @@ func main() {
 	}
 	defer tCli.Close()
 
-	// Initialize activities
 	oActs := acts.NewOrderActivities(oRepo)
 	pActs := acts.NewPaymentActivities(pSvc)
 	iActs := acts.NewInventoryActivities(iSvc)
@@ -116,7 +109,6 @@ func main() {
 	w.RegisterActivity(iActs)
 	w.RegisterActivity(epActs)
 
-	// Start worker
 	go func() {
 		l.Infof(ctx, "Starting Temporal worker on task queue: %s", temporal.ConfirmOrderTaskQueue)
 		if err := w.Run(nil); err != nil {
@@ -124,13 +116,18 @@ func main() {
 		}
 	}()
 
-	// Initialize services
+	metricsSrv := metrics.NewServer(cfg.Server.MetricsPort)
+	go func() {
+		l.Infof(ctx, "metrics server is listening on port: %d", cfg.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			l.Fatalf(ctx, "Failed to serve metrics: %v", err)
+		}
+	}()
+
 	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
-	// Create consumer
 	cons := oCons.NewConsumer(kConsGr, oSvc, l)
 
-	// Start message processors
 	if err := cons.Start(ctx); err != nil {
 		l.Fatalf(ctx, "Failed to start consumer: %v", err)
 		os.Exit(1)
@@ -145,6 +142,10 @@ func main() {
 	w.Stop()
 
 	cancel()
+
+	if err := metricsSrv.Shutdown(context.Background()); err != nil {
+		l.Errorf(ctx, "Error shutting down metrics server: %v", err)
+	}
 
 	if err := cons.Close(); err != nil {
 		l.Errorf(ctx, "Error closing consumer: %v", err)

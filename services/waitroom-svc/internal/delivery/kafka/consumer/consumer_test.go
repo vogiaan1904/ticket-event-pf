@@ -70,8 +70,8 @@ func TestSuccessCommitsImmediately(t *testing.T) {
 	}
 }
 
-// The bug this fixes: a failed message used to be skipped, and the next
-// success committed straight past it.
+// A transient failure must be retried in place, never skipped: the next
+// success commits past a skipped offset and the message is gone.
 func TestTransientFailureIsRetriedThenSucceeds(t *testing.T) {
 	dlq := &fakeDLQ{}
 	c := newTestConsumer(t, dlq, fastPolicy(), func(attempt int) error {
@@ -113,8 +113,8 @@ func TestExhaustedTransientFailureGoesToDLQAndCommits(t *testing.T) {
 	}
 }
 
-// A payload that cannot be decoded fails identically forever; burning the retry
-// budget on it just delays every checkout release behind it.
+// An undecodable payload fails identically forever; retrying it just delays
+// every checkout release behind it.
 func TestPermanentFailureSkipsRetriesAndGoesToDLQ(t *testing.T) {
 	dlq := &fakeDLQ{}
 	var calls atomic.Int32

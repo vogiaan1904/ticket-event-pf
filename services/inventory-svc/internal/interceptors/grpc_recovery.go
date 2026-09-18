@@ -10,13 +10,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// GrpcRecoveryInterceptor turns a panic inside a handler into an Internal
-// status error instead of letting it unwind into the runtime.
-//
-// grpc-go does not recover handler panics on its own: without this, a single
-// nil dereference in one RPC kills the process and takes every in-flight
-// reservation transaction with it. This must be the outermost interceptor so
-// it also covers panics raised by the ones inside it.
+// GrpcRecoveryInterceptor converts a handler panic into an Internal status.
+// Why: grpc-go does not recover handler panics, so one nil dereference kills
+// the process and every in-flight reservation transaction with it.
+// Must be outermost, so it also covers panics from the interceptors inside it.
 func GrpcRecoveryInterceptor(l logger.Logger) grpc.UnaryServerInterceptor {
 	return func(
 		ctx context.Context,

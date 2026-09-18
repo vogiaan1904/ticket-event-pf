@@ -6,4 +6,6 @@ const (
 
 	TopicCheckoutCompleted = "checkout.completed"
 	TopicCheckoutFailed    = "checkout.failed"
+
+	TopicRefundRequired = "order.refund_required"
 )

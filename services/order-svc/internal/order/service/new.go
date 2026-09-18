@@ -25,6 +25,7 @@ type implService struct {
 	temporal temporalCli.Client
 
 	createTimeout time.Duration
+	clock         func() time.Time
 }
 
 func New(l logger.Logger, repo repo.Repository, jwt pkgJwt.Manager, invSvc inventory.InventoryServiceClient, evSvc event.EventServiceClient, pmtSvc payment.PaymentServiceClient, prod producer.Producer, tprCli temporalCli.Client, createTimeout time.Duration) order.Service {
@@ -39,5 +40,6 @@ func New(l logger.Logger, repo repo.Repository, jwt pkgJwt.Manager, invSvc inven
 		temporal: tprCli,
 
 		createTimeout: createTimeout,
+		clock:         time.Now,
 	}
 }

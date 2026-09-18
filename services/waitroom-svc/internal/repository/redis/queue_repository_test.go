@@ -36,10 +36,8 @@ func newTestRepo(t *testing.T) (QueueRepository, *redis.Client) {
 }
 
 // The central invariant: each checkout slot expires on its own schedule.
-//
-// The previous implementation was a SET with Expire() on the whole key, so
-// every new admission pushed back the expiry of every slot already in flight.
-// Under sustained traffic no slot ever expired and the queue starved.
+// A whole-key TTL would let every new admission push back every in-flight slot,
+// so under sustained traffic nothing expires and the queue starves.
 func TestProcessingSlotsExpireIndependently(t *testing.T) {
 	repo, cli := newTestRepo(t)
 	ctx := context.Background()

@@ -31,7 +31,7 @@ Order matters: this is the real sequence a ticket purchase follows across the se
 
 ## The design decisions
 
-Each decision below lists **why** it exists, its **trade-off**, and the **concepts to learn** to understand it.
+Each decision below lists **why** it exists and its **trade-off**.
 
 ### 1 · System shape — many small services, not one big app
 
@@ -62,7 +62,7 @@ Each decision below lists **why** it exists, its **trade-off**, and the **concep
 This is the hardest part: a purchase spans services **and** databases, so a single ACID transaction is impossible.
 
 **Saga orchestrated by Temporal — a workflow that undoes itself on failure.** A purchase touches inventory, payment, and order in *separate databases*. A *saga* runs the steps and *compensates* (releases tickets, deletes the order) if a later step fails. Temporal makes that workflow durable, auto-retried, and crash-safe.
-- **Trade-off:** a whole workflow engine to run and learn; every step must be idempotent; the result is eventual, not instantaneous.
+- **Trade-off:** a workflow engine to operate; every step must be idempotent; the result is eventual, not instantaneous.
 
 **Transactional outbox — never lose an event mid-crash.** Payment must update its database *and* emit an event — but a crash between those two loses the event (the "dual-write problem"). The fix: write the event into an *outbox table in the same transaction*, then a relay publishes it to Kafka afterwards.
 - **Trade-off:** delivery is at-least-once, so consumers must be idempotent, and you run a relay process to drain the outbox.
@@ -75,15 +75,15 @@ This is the hardest part: a purchase spans services **and** databases, so a sing
 **CQRS in the Event service.** The event service separates its *write model* from its *read model* so the two can be optimized and scaled independently — reading an event catalog behaves very differently from writing during setup.
 - **Trade-off:** more moving parts and eventual consistency between the two sides; only worth it where read/write shapes truly diverge.
 
-### 6 · Running it — containers, Kubernetes, and a cost-aware cloud ladder
+### 6 · Running it — containers, Kubernetes, and cost-aware cloud targets
 
 *(The chart, the values overlays, and the Terraform behind this live in [`deploy/`](../deploy/README.md).)*
 
 **Every service is a container Kubernetes runs.** Each service ships as an *image*; Kubernetes runs, heals, and scales them the same way regardless of language. Stateful stores use *StatefulSets* with persistent volumes; stateless services use *Deployments*; *Services* handle discovery; config comes from ConfigMaps/Secrets.
-- **Trade-off:** Kubernetes is a large surface to learn and operate — but it's the industry lingua franca for exactly this.
+- **Trade-off:** Kubernetes is a large surface to operate — but it's the industry lingua franca for exactly this.
 
 **One chart, several targets, all of it in code.** The same Helm chart deploys to a local *kind* cluster, to *k3s* on a single EC2 instance, and to *Amazon EKS* — the target is chosen by a values overlay plus a Terraform delta, never by forking a manifest. Terraform makes every environment reproducible and destroyable, and no workload ever holds a long-lived AWS key: CI authenticates by GitHub OIDC, nodes by instance profile, pods by IRSA.
-- **Trade-off:** several targets to keep working, and each identity mechanism is its own thing to understand.
+- **Trade-off:** several targets to keep working, and three distinct identity mechanisms to keep correct.
 
 ---
 

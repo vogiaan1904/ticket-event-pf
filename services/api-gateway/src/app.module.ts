@@ -2,6 +2,7 @@ import { GlobalExceptionFilter } from '@filters/global-exception.filter';
 import { ResponseInterceptor } from '@interceptors/response.interceptor';
 import { TransformInterceptor } from '@interceptors/transfrom.interceptor';
 import { LoggerMiddleware } from '@middlewares/logging.middleware';
+import { MetricsMiddleware } from '@middlewares/metrics.middleware';
 import { MiddlewareConsumer, Module, RequestMethod } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
@@ -43,6 +44,9 @@ import { SharedModule } from './shared.module';
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes({ path: '*path', method: RequestMethod.ALL });
+    // Metrics first: its timer must start before anything that can reject.
+    consumer
+      .apply(MetricsMiddleware, LoggerMiddleware)
+      .forRoutes({ path: '*path', method: RequestMethod.ALL });
   }
 }

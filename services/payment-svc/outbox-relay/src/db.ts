@@ -6,19 +6,16 @@ import { getDb } from '../../lambdas/common/db/kysely';
 import { claimBatch, markPublished, markFailed, OutboxRow } from '../../lambdas/common/db/outbox.repo';
 import { drainOnce } from './relay';
 import { publishRow, topicFor } from './kafka';
+import { observePublishLag } from './metrics';
 
 const BATCH = Number(process.env.OUTBOX_BATCH_SIZE ?? 100);
 const MAX_RETRIES = Number(process.env.OUTBOX_MAX_RETRIES ?? 5);
 
-// One cycle = keep draining batches until an empty batch. Each batch is one
-// transaction: claim (FOR UPDATE SKIP LOCKED) -> publish -> mark, then commit.
-// Looping inside composeDrain (rather than relying solely on LISTEN/safety-poll
-// retriggers) means a single wakeup fully drains a large backlog immediately.
-// A batch with any publish failures stops the loop instead of re-claiming
-// instantly: the failed rows are still SKIP LOCKED-eligible, so an instant
-// re-claim would just re-fail them back-to-back with no delay, burning through
-// maxRetries in milliseconds. Stopping here defers the retry to the next
-// NOTIFY/safety-poll trigger, which spreads retries out over time.
+// One cycle drains batches until one comes back empty, so a single wakeup clears
+// a whole backlog. Each batch is one transaction: claim (FOR UPDATE SKIP LOCKED)
+// -> publish -> mark -> commit.
+// Stop on any publish failure: those rows stay claimable, so re-claiming at once
+// would burn maxRetries in milliseconds. The next NOTIFY/poll spreads the retry.
 export const composeDrain = () => async (): Promise<void> => {
   for (;;) {
     const result = await getDb()
@@ -26,7 +23,10 @@ export const composeDrain = () => async (): Promise<void> => {
       .execute((trx) =>
         drainOnce({
           claim: (limit, mr) => claimBatch(trx, limit, mr),
-          publish: (row: OutboxRow, topic: string) => publishRow(topic, row),
+          publish: async (row: OutboxRow, topic: string) => {
+            await publishRow(topic, row);
+            observePublishLag(row.createdAt);
+          },
           markPublished: (ids) => markPublished(trx, ids),
           markFailed: (id, err) => markFailed(trx, id, err),
           topicFor,

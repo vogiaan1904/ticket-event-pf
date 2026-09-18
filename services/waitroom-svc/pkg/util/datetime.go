@@ -4,9 +4,8 @@ import "time"
 
 const (
 	DateTimeFormat = "2006-01-02 15:04:05"
-	// ISO8601Format must keep the Z07:00 offset directive. A trailing bare "Z"
-	// is a literal to time.Format, so it stamps the local wall clock and labels
-	// it UTC -- every emitted timestamp is then wrong by the host's offset.
+	// Must keep the Z07:00 offset directive: a bare "Z" is a literal to
+	// time.Format, so it stamps the local wall clock and labels it UTC.
 	ISO8601Format = time.RFC3339
 )
 

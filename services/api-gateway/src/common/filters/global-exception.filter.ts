@@ -5,6 +5,7 @@ import { LoggerService } from '@services/logger.service';
 import { status as GrpcStatus } from '@grpc/grpc-js';
 import { Response } from 'express';
 import { BusinessException } from '../exceptions/business.exception';
+import { TB_CODE, grpcCodeOf } from '@/shared/metrics/code';
 
 // Downstream services speak gRPC, and a gRPC error is not an HttpException, so
 // without this table every business rejection falls through to the 500 branch
@@ -48,6 +49,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     const responseBody = this.handleException(exception, ctx.getRequest());
     const statusCode = this.resolveStatus(exception);
+
+    // Left for MetricsMiddleware, which records after the response finishes:
+    // a guard rejection never reaches an interceptor, so this is the only
+    // place the gateway learns what code a failed request ended with.
+    ctx.getRequest()[TB_CODE] = grpcCodeOf(exception);
 
     this.logger.error(
       responseBody.message,

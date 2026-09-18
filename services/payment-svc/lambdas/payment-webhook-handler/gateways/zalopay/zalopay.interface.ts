@@ -1,7 +1,4 @@
-/**
- * ZaloPay interfaces based on official documentation
- */
-
+/** ZaloPay wire shapes, from the official API docs. */
 export interface ZaloCreatePaymentUrlRequestBody {
   app_id: number;
   app_user: string;

@@ -49,9 +49,8 @@ func (s implTicketClassService) Update(ctx context.Context, id int64, in UpdateT
 
 	var tc models.TicketClass
 	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Lock the row so the capacity check below sees a stable
-		// reserved/sold, and so a concurrent Reserve on this ticket class
-		// serialises behind us instead of racing the write.
+		// Lock so the capacity check sees a stable reserved/sold and a concurrent
+		// Reserve serialises behind us instead of racing the write.
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			First(&tc, id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -110,20 +109,16 @@ func (s implTicketClassService) GetByID(ctx context.Context, id int64) (models.T
 func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketClassInput) ([]models.TicketClass, error) {
 	var tcs []models.TicketClass
 
-	// Build dynamic query
 	query := s.repo.GetDB().WithContext(ctx).Model(&models.TicketClass{})
 
-	// Add event_id filter if provided
 	if in.EventID != "" {
 		query = query.Where("event_id = ?", in.EventID)
 	}
 
-	// Add ids filter if provided
 	if len(in.IDs) > 0 {
 		query = query.Where("id IN ?", in.IDs)
 	}
 
-	// Execute the query
 	if err := query.Find(&tcs).Error; err != nil {
 		s.l.Errorf(ctx, "service.ticketclass.GetMany: %v", err)
 		return nil, err
@@ -134,11 +129,8 @@ func (s implTicketClassService) GetMany(ctx context.Context, in GetManyTicketCla
 
 func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Lock the row: this both makes the not-found check and the
-		// reservation guard below consistent with a concurrent Reserve (which
-		// locks the same ticket_class row FOR UPDATE before creating a new
-		// hold), so nothing can slip a live reservation in between our guard
-		// check and the delete.
+		// Lock the row: Reserve takes this same lock before creating a hold, so
+		// none can slip in between the guard below and the delete.
 		var tc models.TicketClass
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&tc, id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -162,11 +154,8 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 			return ErrStateConflict
 		}
 
-		// Every remaining reservation, if any, is terminal (EXPIRED/CANCELLED).
-		// The FK is RESTRICT precisely so this is an explicit, deliberate
-		// decision here rather than an automatic CASCADE that could just as
-		// easily take a live reservation with it -- clear them before the
-		// parent row.
+		// Anything left is terminal. The FK is RESTRICT so clearing children is an
+		// explicit choice here, not a CASCADE that could take a live row with it.
 		if err := deleteTerminalReservations(tx, id); err != nil {
 			s.l.Errorf(ctx, "service.ticketclass.Delete.DeleteTerminalReservations: %v", err)
 			return err
@@ -182,14 +171,10 @@ func (s *implTicketClassService) Delete(ctx context.Context, id int64) error {
 	})
 }
 
-// deleteTerminalReservations removes only the terminal (EXPIRED/CANCELLED)
-// reservation rows for a ticket class inside tx. The caller's liveCount guard
-// already refuses Delete whenever an ACTIVE/CONFIRMED row exists, but scoping
-// this statement to terminal statuses too keeps the FK RESTRICT backstop
-// load-bearing: if a future code path ever creates a reservation without
-// taking the ticket_class lock first, this statement leaves it in place and
-// the parent delete below hits a genuine FK violation instead of silently
-// removing it alongside the terminal rows.
+// deleteTerminalReservations deletes a ticket class's EXPIRED/CANCELLED rows.
+// Why scoped, when the caller's liveCount guard already refuses live rows:
+// it keeps FK RESTRICT load-bearing -- a hold created without the class lock
+// survives this statement and trips a real FK violation on the parent delete.
 func deleteTerminalReservations(tx *gorm.DB, id int64) error {
 	return tx.Where("ticket_class_id = ? AND status IN ?", id,
 		[]models.ReservationStatus{models.ReservationStatusExpired, models.ReservationStatusCancelled}).

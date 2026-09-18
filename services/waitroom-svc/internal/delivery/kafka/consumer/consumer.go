@@ -77,20 +77,11 @@ func (c *Consumer) processMessage(ctx context.Context, msg *sarama.ConsumerMessa
 	}
 }
 
-// deliver runs a message to a terminal outcome and reports whether its offset
-// may be committed.
-//
-// A committed offset must mean "this message will never need to be seen again".
-// Marking an offset the handler failed on loses the message for good: sarama's
-// offset manager keeps the highest mark, so the next success commits straight
-// past the failure and nothing ever redelivers it.
-//
-// Returning is a poor retry channel. Sarama cancels the whole session as soon
-// as any ConsumeClaim returns (`defer sess.cancel()`, consumer_group.go:871),
-// so every transient blip would cost a full consumer-group rebalance across all
-// partitions, and Start's re-Consume loop would spin on it. So a message is
-// retried here, in place, and parked in the dead-letter topic if it cannot be
-// made to succeed.
+// deliver runs a message to a terminal outcome and reports whether its offset may
+// be committed. Retries happen in place; what cannot succeed is parked in the DLQ.
+// Invariant: never mark a failed offset -- sarama keeps the highest mark, so the
+// next success commits past it and nothing redelivers. Returning instead cancels
+// the session, costing a rebalance. See CLAUDE.md#kafka-consumer-delivery-semantics.
 func (c *Consumer) deliver(ctx context.Context, msg *sarama.ConsumerMessage) (commit bool, err error) {
 	maxAttempts := max(c.policy.MaxAttempts, 1)
 
@@ -132,8 +123,7 @@ func (c *Consumer) deliver(ctx context.Context, msg *sarama.ConsumerMessage) (co
 
 	if dlqErr := c.dlq.PublishDeadLetter(ctx, msg, lastErr.Error(), attempts); dlqErr != nil {
 		// Nowhere safe to put it. Returning ends the session, so the message is
-		// redelivered after the rejoin (which backs off) and we try again --
-		// committing would drop it outright.
+		// redelivered after a backed-off rejoin; committing would drop it.
 		return false, dlqErr
 	}
 
@@ -143,9 +133,8 @@ func (c *Consumer) deliver(ctx context.Context, msg *sarama.ConsumerMessage) (co
 func (c *Consumer) Start(ctx context.Context) {
 	topics := []string{kafka.TopicCheckoutCompleted, kafka.TopicCheckoutFailed, kafka.TopicCheckoutExpired}
 	c.wg.Go(func() {
-		// Consume returns on every rebalance, and on any ConsumeClaim exit.
-		// Rejoining immediately turns a persistent failure (broker down, DLQ
-		// unwritable) into a rebalance storm, so back off between attempts.
+		// Consume returns on every rebalance and on any ConsumeClaim exit.
+		// Back off: rejoining at once turns a persistent failure into a storm.
 		backoff := c.policy.BaseDelay
 
 		for {
@@ -211,9 +200,8 @@ func (c *Consumer) ConsumeClaim(ss sarama.ConsumerGroupSession, claim sarama.Con
 			}
 
 			if !commit {
-				// The offset was deliberately left uncommitted. Stop consuming
-				// this claim so no later message can commit past it -- sarama
-				// keeps the highest mark, so continuing here would lose it.
+				// Offset deliberately uncommitted. Stop the claim so no later
+				// message commits past it -- sarama keeps the highest mark.
 				return nil
 			}
 

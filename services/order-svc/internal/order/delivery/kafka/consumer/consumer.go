@@ -2,7 +2,9 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"sync"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
@@ -10,11 +12,18 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 )
 
+// redeliveryBackoff paces a message that keeps failing. Ending the session puts
+// it back and the next session re-reads the same offset immediately, so without
+// the pause a permanently failing message spins its partition through rebalances.
+const redeliveryBackoff = 5 * time.Second
+
 type Consumer struct {
 	consGr sarama.ConsumerGroup
 	svc    order.Service
 	l      logger.Logger
 	wg     sync.WaitGroup
+
+	backoff time.Duration
 }
 
 func NewConsumer(
@@ -23,9 +32,10 @@ func NewConsumer(
 	l logger.Logger,
 ) *Consumer {
 	return &Consumer{
-		consGr: consGr,
-		svc:    svc,
-		l:      l,
+		consGr:  consGr,
+		svc:     svc,
+		l:       l,
+		backoff: redeliveryBackoff,
 	}
 }
 
@@ -88,6 +98,19 @@ func (c *Consumer) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
+// isSettled reports whether a failed message already has its final answer, so
+// another delivery could only reach the same one: the order's state accounts for
+// this payment, or there is no order to account for it. Everything else -- an
+// unreachable dependency, a deadline, a bug -- may succeed later.
+func isSettled(err error) bool {
+	return errors.Is(err, order.ErrOrderAlreadyProcessed) || errors.Is(err, order.ErrOrderNotFound)
+}
+
+// ConsumeClaim processes a partition's messages in order, marking each only once
+// handled. A failure is left unmarked and ends the session -- sarama commits the
+// highest marked offset, so moving on would drop the event for good. A settled
+// failure is marked instead; redelivering it re-derives the same answer forever
+// and holds every later event on the partition behind it.
 func (c *Consumer) ConsumeClaim(ss sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for {
 		select {
@@ -96,15 +119,26 @@ func (c *Consumer) ConsumeClaim(ss sarama.ConsumerGroupSession, claim sarama.Con
 				return nil
 			}
 
-			if err := c.processMessage(ss.Context(), message); err != nil {
-				c.l.Error(ss.Context(), "delivery.kafka.consumer.consumer.ConsumeClaim: %v", err,
-					"topic", message.Topic,
-					"offset", message.Offset,
-				)
+			err := c.processMessage(ss.Context(), message)
+			if err == nil {
+				ss.MarkMessage(message, "")
 				continue
 			}
 
-			ss.MarkMessage(message, "")
+			if isSettled(err) {
+				c.l.Warnf(ss.Context(), "delivery.kafka.consumer.consumer.ConsumeClaim: %s offset %d has been answered and will not be redelivered: %v", message.Topic, message.Offset, err)
+				ss.MarkMessage(message, "")
+				continue
+			}
+
+			c.l.Errorf(ss.Context(), "delivery.kafka.consumer.consumer.ConsumeClaim: %s offset %d failed and will be redelivered: %v", message.Topic, message.Offset, err)
+
+			select {
+			case <-time.After(c.backoff):
+			case <-ss.Context().Done():
+			}
+
+			return err
 
 		case <-ss.Context().Done():
 			return nil

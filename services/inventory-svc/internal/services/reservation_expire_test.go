@@ -39,9 +39,8 @@ func TestBatchExpire_ReleasesExpiredHolds(t *testing.T) {
 	}
 }
 
-// A reservation whose ticket class cannot absorb the decrement is corruption.
-// Marking it EXPIRED anyway (the old behaviour) destroys the only evidence,
-// so leave it ACTIVE and let the error log repeat every tick.
+// A hold its class cannot absorb is corruption: marking it EXPIRED destroys
+// the only evidence, so it stays ACTIVE and the error log repeats every tick.
 func TestBatchExpire_Drift_LeavesReservationActive(t *testing.T) {
 	svc, repo := reserveSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0) // reserved = 0
@@ -113,14 +112,9 @@ func TestBatchExpire_Drift_DoesNotBlockHealthyRows(t *testing.T) {
 	}
 }
 
-// If a drifted ticket class accumulates enough ACTIVE, past-expiry
-// reservations to fill an entire batch by itself, Order("expires_at") always
-// picks those rows first (their expiry never moves and they never leave
-// ACTIVE). Without a second pass that excludes the poisoned class, every
-// batch from here on is 100% drift, expired is always 0, and no reservation
-// anywhere -- healthy or not -- is ever expired again. A small batchSize
-// (2) reproduces the "batch full of drift" condition with only two poison
-// rows instead of needing hundreds.
+// A drifted class can fill a whole oldest-first page by itself and stall expiry
+// service-wide, so the second pass must exclude it. batchSize 2 reproduces the
+// all-drift batch with two rows instead of hundreds.
 func TestBatchExpire_Drift_FillingBatch_StillExpiresHealthyRow(t *testing.T) {
 	svc, repo := reserveSvc(t)
 	bad := seedTicketClass(t, repo, 100, 0, 0)  // reserved = 0: any decrement drifts

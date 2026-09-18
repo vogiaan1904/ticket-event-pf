@@ -10,7 +10,6 @@ import (
 	"github.com/vogiaan/ticketbottle-inventory/pkg/util"
 )
 
-// newTicketClassResponse converts a domain model TicketClass to protobuf TicketClass
 func (s *grpcService) newTicketClassResponse(tc models.TicketClass) *invpb.TicketClass {
 	pbTC := &invpb.TicketClass{
 		Id:         strconv.FormatInt(tc.ID, 10),
@@ -33,28 +32,24 @@ func (s *grpcService) newTicketClassResponse(tc models.TicketClass) *invpb.Ticke
 	return pbTC
 }
 
-// newCreateTicketClassResponse builds the CreateTicketClassResponse
 func (s *grpcService) newCreateTicketClassResponse(tc models.TicketClass) *invpb.CreateTicketClassResponse {
 	return &invpb.CreateTicketClassResponse{
 		TicketClass: s.newTicketClassResponse(tc),
 	}
 }
 
-// newUpdateTicketClassResponse builds the UpdateTicketClassResponse
 func (s *grpcService) newUpdateTicketClassResponse(tc models.TicketClass) *invpb.UpdateTicketClassResponse {
 	return &invpb.UpdateTicketClassResponse{
 		TicketClass: s.newTicketClassResponse(tc),
 	}
 }
 
-// newFindOneTicketClassResponse builds the FindOneTicketClassResponse
 func (s *grpcService) newFindOneTicketClassResponse(tc models.TicketClass) *invpb.FindOneTicketClassResponse {
 	return &invpb.FindOneTicketClassResponse{
 		TicketClass: s.newTicketClassResponse(tc),
 	}
 }
 
-// newFindManyTicketClassResponse builds the FindManyTicketClassResponse
 func (s *grpcService) newFindManyTicketClassResponse(tcs []models.TicketClass) *invpb.FindManyTicketClassResponse {
 	pbTCs := make([]*invpb.TicketClass, len(tcs))
 	for i, tc := range tcs {
@@ -78,7 +73,6 @@ func parseTime(s string) (*time.Time, error) {
 	return &t, nil
 }
 
-// newCreateTicketClassInput converts protobuf request to service input
 func (s *grpcService) newCreateTicketClassInput(req *invpb.CreateTicketClassRequest) (svc.CreateTicketClassInput, error) {
 	startSaleAt, err := parseTime(req.GetStartSaleAt())
 	if err != nil {
@@ -101,12 +95,10 @@ func (s *grpcService) newCreateTicketClassInput(req *invpb.CreateTicketClassRequ
 	}, nil
 }
 
-// newUpdateTicketClassInput converts protobuf request to service input.
-//
-// The proto uses plain (non-optional) scalars, so the zero value is the only
-// available "absent" signal: an empty string or a 0 means "leave unchanged".
-// That makes it impossible to set a price of 0 or an empty name through this
-// RPC -- an accepted limitation until the contract gains `optional` fields.
+// newUpdateTicketClassInput converts the proto request to a service input.
+// The fields are non-optional scalars, so "" / 0 is the only absent signal:
+// this RPC cannot set a price of 0 or an empty name until the contract gains
+// `optional` fields.
 func (s *grpcService) newUpdateTicketClassInput(req *invpb.UpdateTicketClassRequest) (svc.UpdateTicketClassInput, error) {
 	startSaleAt, err := parseTime(req.GetStartSaleAt())
 	if err != nil {
@@ -159,7 +151,6 @@ func (s *grpcService) newGetManyTicketClassInput(req *invpb.FindManyTicketClassR
 	return in, nil
 }
 
-// newReserveInput converts protobuf Reserve request to service input
 func (s *grpcService) newReserveInput(req *invpb.ReserveRequest) (svc.ReserveInput, error) {
 	expiresAt, err := util.ParseISO8601(req.GetExpiresAt())
 	if err != nil {
@@ -185,7 +176,6 @@ func (s *grpcService) newReserveInput(req *invpb.ReserveRequest) (svc.ReserveInp
 	}, nil
 }
 
-// newCheckAvailabilityInput converts protobuf CheckAvailability request to service input
 func (s *grpcService) newCheckAvailabilityInput(req *invpb.CheckAvailabilityRequest) ([]svc.CheckAvailabilityInput, error) {
 	inputs := make([]svc.CheckAvailabilityInput, len(req.GetItems()))
 	for i, pbItem := range req.GetItems() {

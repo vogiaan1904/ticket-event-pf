@@ -24,6 +24,7 @@ type Config struct {
 
 type ServerConfig struct {
 	GRpcPort     int
+	MetricsPort  int
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
@@ -48,7 +49,7 @@ type RedisConfig struct {
 type DynamoDBConfig struct {
 	TableName string
 	Region    string
-	Endpoint  string // For LocalStack or local development
+	Endpoint  string // Custom endpoint for a local DynamoDB; empty targets AWS.
 }
 
 type KafkaConfig struct {
@@ -90,6 +91,7 @@ func Load() (*Config, error) {
 		Env: getEnv("ENV", "development"),
 		Server: ServerConfig{
 			GRpcPort:     getEnvAsInt("SERVER_GRPC_PORT", 50054),
+			MetricsPort:  getEnvAsInt("SERVER_METRICS_PORT", 2112),
 			ReadTimeout:  getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout: getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
@@ -100,7 +102,7 @@ func Load() (*Config, error) {
 		DynamoDB: DynamoDBConfig{
 			TableName: getEnv("DYNAMODB_TABLE_NAME", "ticketbottle-orders"),
 			Region:    getEnv("AWS_REGION", "us-east-1"),
-			Endpoint:  getEnv("DYNAMODB_ENDPOINT", ""), // Empty for AWS, set for LocalStack
+			Endpoint:  getEnv("DYNAMODB_ENDPOINT", ""),
 		},
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),

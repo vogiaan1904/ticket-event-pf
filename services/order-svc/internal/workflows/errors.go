@@ -28,3 +28,14 @@ func NewInsufficientInventoryError(cause error) error {
 		cause,
 	)
 }
+
+// NewOrderAlreadyProcessedError says the payment event landed on an order whose
+// state already accounts for it. Non-retryable -- a recorded outcome does not
+// change on another attempt -- and tagged so the consumer stops redelivering.
+func NewOrderAlreadyProcessedError() error {
+	return temporal.NewNonRetryableApplicationError(
+		ErrOrderAlreadyProcessed.Error(),
+		order.ErrTypeOrderAlreadyProcessed,
+		ErrOrderAlreadyProcessed,
+	)
+}

@@ -14,7 +14,6 @@ import {
   EventRoleEntity,
 } from '../entities';
 
-// Type for Prisma query result with includes
 export type PrismaEventWithRelations = Event & {
   categories?: (EventCategory & {
     category: {
@@ -28,13 +27,9 @@ export type PrismaEventWithRelations = Event & {
   roles?: EventRole[] | null;
 };
 
-/**
- * Maps a Prisma Event with included relations to EventEntity
- */
 export function mapToEventEntity(prismaEvent: PrismaEventWithRelations): EventEntity {
   const entity = new EventEntity();
 
-  // Map basic Event fields
   entity.id = prismaEvent.id;
   entity.name = prismaEvent.name;
   entity.description = prismaEvent.description;
@@ -45,29 +40,25 @@ export function mapToEventEntity(prismaEvent: PrismaEventWithRelations): EventEn
   entity.createdAt = prismaEvent.createdAt;
   entity.updatedAt = prismaEvent.updatedAt;
 
-  // Map categories - flatten the junction table structure
+  // Flattens the EventCategory junction rows to {id, name}.
   entity.categories =
     prismaEvent.categories?.map((ec) => ({
       id: ec.category.id,
       name: ec.category.name,
     })) || [];
 
-  // Map optional location
   if (prismaEvent.location) {
     entity.location = mapToEventLocationEntity(prismaEvent.location);
   }
 
-  // Map optional config
   if (prismaEvent.config) {
     entity.config = mapToEventConfigEntity(prismaEvent.config);
   }
 
-  // Map optional organizer
   if (prismaEvent.organizer) {
     entity.organizer = mapToEventOrganizerEntity(prismaEvent.organizer);
   }
 
-  // Map optional roles
   if (prismaEvent.roles) {
     entity.roles = prismaEvent.roles.map((role) => mapToEventRoleEntity(role));
   }
@@ -75,9 +66,6 @@ export function mapToEventEntity(prismaEvent: PrismaEventWithRelations): EventEn
   return entity;
 }
 
-/**
- * Helper mapper for EventLocation
- */
 function mapToEventLocationEntity(location: EventLocation): EventLocationEntity {
   const entity = new EventLocationEntity();
   entity.id = location.id;
@@ -90,9 +78,6 @@ function mapToEventLocationEntity(location: EventLocation): EventLocationEntity 
   return entity;
 }
 
-/**
- * Helper mapper for EventRole
- */
 function mapToEventRoleEntity(role: EventRole): EventRoleEntity {
   const entity = new EventRoleEntity();
   entity.id = role.id;
@@ -102,9 +87,6 @@ function mapToEventRoleEntity(role: EventRole): EventRoleEntity {
   return entity;
 }
 
-/**
- * Helper mapper for EventConfig
- */
 function mapToEventConfigEntity(config: EventConfig): EventConfigEntity {
   const entity = new EventConfigEntity();
   entity.id = config.id;
@@ -119,9 +101,6 @@ function mapToEventConfigEntity(config: EventConfig): EventConfigEntity {
   return entity;
 }
 
-/**
- * Helper mapper for EventOrganizer
- */
 function mapToEventOrganizerEntity(organizer: Organizer): EventOrganizerEntity {
   const entity = new EventOrganizerEntity();
   entity.id = organizer.id;
@@ -131,9 +110,6 @@ function mapToEventOrganizerEntity(organizer: Organizer): EventOrganizerEntity {
   return entity;
 }
 
-/**
- * Maps an array of Prisma Events to EventEntity array
- */
 export function mapToEventEntities(prismaEvents: PrismaEventWithRelations[]): EventEntity[] {
   return prismaEvents.map(mapToEventEntity);
 }

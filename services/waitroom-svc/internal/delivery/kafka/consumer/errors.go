@@ -2,13 +2,11 @@ package consumer
 
 import "errors"
 
-// PermanentError marks a message that will never succeed however many times it
-// is retried -- a payload the handler cannot interpret. Retrying one would stall
-// the partition and every checkout release queued behind it, so these go
-// straight to the dead-letter topic.
+// PermanentError marks a message no retry can fix -- a payload the handler
+// cannot interpret.
 //
-// Anything not wrapped this way is treated as transient (Redis unreachable, a
-// downstream blip) and is retried before it is parked.
+// wrapped   -> DLQ now; retrying stalls the partition and every release behind it
+// unwrapped -> transient (Redis down, a blip); retried before it is parked
 type PermanentError struct {
 	Err error
 }

@@ -42,7 +42,7 @@ spec:
           ports:
             - { containerPort: 9093 }   # Kafka API
             {{- if .Values.redpanda.external.enabled }}
-            - { containerPort: 9094 }   # Kafka external listener (LocalStack Lambdas)
+            - { containerPort: 9094 }   # Kafka external listener, off unless redpanda.external.enabled
             {{- end }}
             - { containerPort: 9644 }   # Admin API (health)
           volumeMounts: [{ name: data, mountPath: /var/lib/redpanda/data }]
