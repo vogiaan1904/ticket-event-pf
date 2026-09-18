@@ -83,7 +83,7 @@ This guide documents the implementation of real-time queue position streaming us
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Components Implemented
+## Components
 
 ### 1. Position Update Event Model
 **File:** `internal/models/position_update.go`
@@ -140,7 +140,7 @@ StreamSessionPosition(ctx, sessionID, updates chan<- *PositionStreamUpdate) erro
 - Graceful disconnect on context cancellation
 
 ### 5. gRPC Streaming Handler
-**File:** `internal/delivery/grpc/waitroom_service.go`
+**File:** `internal/delivery/grpc/service.go`
 
 ```go
 StreamQueuePosition(req, stream) error
@@ -487,23 +487,22 @@ redis-cli INFO stats | grep pubsub
 
 ## Summary
 
-- Real-time position streaming, end to end:
+Real-time position streaming, end to end:
 
-**Key Features:**
-- gRPC Server Streaming for real-time updates
-- Redis Pub/Sub for efficient broadcasting
-- Event-driven updates (instant notification)
-- Graceful handling of admission, expiry, and disconnection
-- Scalable to thousands of concurrent streams
+- gRPC server streaming carries the client connection
+- Redis Pub/Sub broadcasts each change once per event
+- Updates are event-driven, not polled
+- Admission, expiry and disconnection all close the stream cleanly
+- Scales to thousands of concurrent streams per event
 
-**Files Modified:**
-- `internal/models/position_update.go` (NEW)
-- `internal/repository/redis/queue_repository.go` (+pub/sub methods)
-- `internal/service/queue_service.go` (+broadcast triggers)
-- `internal/service/queue_processor.go` (+broadcast trigger)
-- `internal/service/waitroom_service.go` (+StreamSessionPosition)
-- `internal/service/types.go` (+PositionStreamUpdate)
-- `internal/delivery/grpc/waitroom_service.go` (+StreamQueuePosition)
-- `.env` (documented config)
+**Where it lives**
 
-**Ready for production!** 🚀
+| Piece | File |
+|---|---|
+| Position update event | `internal/models/position_update.go` |
+| Publish / subscribe | `internal/repository/redis/queue_repository.go` |
+| Broadcast on join and leave | `internal/service/queue_service.go` |
+| Broadcast on admission | `internal/service/queue_processor.go` |
+| `StreamSessionPosition` | `internal/service/waitroom_service.go` |
+| `PositionStreamUpdate` | `internal/service/types.go` |
+| `StreamQueuePosition` handler | `internal/delivery/grpc/service.go` |

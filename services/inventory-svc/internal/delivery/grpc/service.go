@@ -4,6 +4,7 @@ import (
 	"context"
 	"strconv"
 
+	"github.com/vogiaan/ticketbottle-inventory/internal/metrics"
 	svc "github.com/vogiaan/ticketbottle-inventory/internal/services"
 	invpb "github.com/vogiaan/ticketbottle-inventory/pkg/grpc/inventory"
 	"github.com/vogiaan/ticketbottle-inventory/pkg/logger"
@@ -204,11 +205,13 @@ func (s *grpcService) Reserve(ctx context.Context, req *invpb.ReserveRequest) (*
 
 	err = s.rSvc.Reserve(ctx, in)
 	if err != nil {
+		metrics.Reserves.WithLabelValues(reserveResult(err)).Inc()
 		err = s.mapError(err)
 		s.l.Errorf(ctx, "internal.delivery.grpc.Reserve.Reserve: %v", err)
 		return nil, response.GrpcError(err)
 	}
 
+	metrics.Reserves.WithLabelValues(metrics.ReserveReserved).Inc()
 	return &emptypb.Empty{}, nil
 }
 

@@ -94,7 +94,7 @@ Seven services plus two workloads that carry the payment event path.
 | 7 | Confirm | The relay publishes the outbox row to Kafka; `ConfirmOrder` confirms inventory and completes the order | Kafka, Temporal |
 | 8 | Free the slot | Order signals the waiting room to release the checkout slot | `checkout.completed` |
 
-**On failure.** A payment failure or timeout drives Temporal compensation: reserved tickets are released, the order is marked failed, and the checkout slot is freed. Insufficient inventory fails fast, before any reservation is taken.
+**On failure.** A payment failure or timeout drives Temporal compensation: reserved tickets are released, the order is marked failed, and the checkout slot is freed. A buyer who loses the race for the last tickets is rejected by `Reserve` itself, under the row lock, before any order record is written.
 
 ---
 

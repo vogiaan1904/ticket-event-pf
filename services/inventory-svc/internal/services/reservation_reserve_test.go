@@ -125,8 +125,8 @@ func TestReserve_Concurrent_NoOversell(t *testing.T) {
 }
 
 // Reserve -> Release -> Reserve must not report success while holding
-// nothing. The old count-any-status short-circuit saw the CANCELLED rows and
-// no-oped, handing back an order with zero inventory behind it.
+// nothing. A short-circuit counting rows of any status sees the CANCELLED ones
+// and no-ops, handing back an order with zero inventory behind it.
 func TestReserve_AfterRelease_ReturnsConflict(t *testing.T) {
 	svc, repo := reserveSvc(t)
 	tc := seedTicketClass(t, repo, 100, 0, 0)

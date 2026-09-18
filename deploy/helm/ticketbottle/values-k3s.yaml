@@ -2,7 +2,9 @@ target: k3s
 
 image:
   # registry is injected at deploy time via --set (keeps the account id out of git)
-  tag: latest
+  # The box is the everyday development environment, so it tracks dev, not main.
+  # Deploy another branch's build with --set image.tag=<branch, slashes as dashes>.
+  tag: dev
   pullPolicy: Always
 
 # Use REAL AWS DynamoDB (no in-cluster dynamodb-local pod).
@@ -28,3 +30,21 @@ redpanda:
   storage: 5Gi
 redis:
   storage: 1Gi
+
+monitoring:
+  enabled: true
+  targets:
+    order-service: true
+    order-consumer: true
+    inventory-service: true
+    waitroom-service: true
+    app-gateway: true
+    user-service: true
+    event-service: true
+    payment-service: true
+    payment-webhook: true
+    outbox-relay: true
+
+temporal:
+  ui:
+    enabled: true

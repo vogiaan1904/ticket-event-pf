@@ -126,8 +126,6 @@ export class EventsRepository {
         roles: {
           some: {
             userId: dto.userId.trim(),
-            // Optionally filter by specific role types
-            // role: EventRoleType.ADMIN,
           },
         },
       });

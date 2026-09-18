@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +13,7 @@ import (
 	"github.com/vogiaan/ticketbottle-inventory/config"
 	grpcSvc "github.com/vogiaan/ticketbottle-inventory/internal/delivery/grpc"
 	"github.com/vogiaan/ticketbottle-inventory/internal/interceptors"
+	"github.com/vogiaan/ticketbottle-inventory/internal/metrics"
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	svc "github.com/vogiaan/ticketbottle-inventory/internal/services"
 	"github.com/vogiaan/ticketbottle-inventory/internal/workers"
@@ -81,6 +83,7 @@ func main() {
 		grpc.ChainUnaryInterceptor(
 			interceptors.GrpcRecoveryInterceptor(l),
 			interceptors.GrpcLoggingInterceptor(l),
+			interceptors.GrpcMetricsInterceptor(),
 		),
 	)
 	invpb.RegisterInventoryServiceServer(grpcSvr, grpcSvc)
@@ -89,6 +92,14 @@ func main() {
 		l.Infof(ctx, "gRPC server is listening on port: %d", cfg.Server.GRpcPort)
 		if err := grpcSvr.Serve(lnr); err != nil {
 			l.Fatalf(ctx, "Failed to serve gRPC: %v", err)
+		}
+	}()
+
+	metricsSrv := metrics.NewServer(cfg.Server.MetricsPort)
+	go func() {
+		l.Infof(ctx, "metrics server is listening on port: %d", cfg.Server.MetricsPort)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			l.Fatalf(ctx, "Failed to serve metrics: %v", err)
 		}
 	}()
 
@@ -102,6 +113,10 @@ func main() {
 	time.Sleep(1 * time.Second)
 	grpcSvr.GracefulStop()
 	wkrMng.StopAll(ctx)
+
+	if err := metricsSrv.Shutdown(context.Background()); err != nil {
+		l.Errorf(ctx, "Error shutting down metrics server: %v", err)
+	}
 
 	l.Info(ctx, "Server exited")
 }

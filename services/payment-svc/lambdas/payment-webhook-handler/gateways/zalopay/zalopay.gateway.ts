@@ -58,7 +58,6 @@ export class ZalopayGateway implements PaymentGatewayInterface {
     const now = dayjs();
     const appTransId = this.buildZaloPayAppTransId(data.orderCode);
 
-    // Append orderCode to redirect URL
     let redirectUrl = data.redirectUrl;
     if (redirectUrl.includes('?')) {
       redirectUrl += `&bookingCode=${data.orderCode}`;
@@ -66,8 +65,7 @@ export class ZalopayGateway implements PaymentGatewayInterface {
       redirectUrl += `?bookingCode=${data.orderCode}`;
     }
 
-    // In Lambda, we'll use the API Gateway URL for callbacks
-    // This will be set via environment variable
+    // WEBHOOK_BASE_URL is the deployed API Gateway stage URL; the literal is the fallback.
     const callbackUrl = process.env.WEBHOOK_BASE_URL
       ? `${process.env.WEBHOOK_BASE_URL}/webhook/zalopay`
       : 'https://api.ticketbottle.com/webhook/zalopay';
@@ -89,7 +87,6 @@ export class ZalopayGateway implements PaymentGatewayInterface {
       mac: '',
     };
 
-    // Generate MAC signature
     const macInput =
       body.app_id +
       '|' +
@@ -165,7 +162,6 @@ export class ZalopayGateway implements PaymentGatewayInterface {
 
   async handleCallback(callbackBody: ZalopayCallbackBody): Promise<HandleCallbackOutput> {
     try {
-      // Verify MAC signature
       const requestMac = crypto
         .createHmac('sha256', this.key2)
         .update(callbackBody.data)
@@ -183,10 +179,8 @@ export class ZalopayGateway implements PaymentGatewayInterface {
         };
       }
 
-      // Parse callback data
       const transData: ZalopayCallbackData = JSON.parse(callbackBody.data);
 
-      // Only support Order type (type 1)
       if (callbackBody.type !== 1) {
         logger.warn(`Unsupported ZaloPay callback type: ${callbackBody.type}`);
         return {

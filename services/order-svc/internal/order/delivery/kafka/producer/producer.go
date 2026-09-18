@@ -14,6 +14,7 @@ import (
 type Producer interface {
 	PublishCheckoutCompleted(ctx context.Context, event kafka.CheckoutCompletedEvent) error
 	PublishCheckoutFailed(ctx context.Context, event kafka.CheckoutFailedEvent) error
+	PublishRefundRequired(ctx context.Context, event kafka.RefundRequiredEvent) error
 
 	Close() error
 }
@@ -72,6 +73,30 @@ func (p *implProducer) PublishCheckoutFailed(ctx context.Context, event kafka.Ch
 
 	msg := &sarama.ProducerMessage{
 		Topic: kafka.TopicCheckoutFailed,
+		Key:   sarama.StringEncoder(event.EventID),
+		Value: sarama.ByteEncoder(val),
+		Headers: []sarama.RecordHeader{
+			{
+				Key:   []byte("timestamp"),
+				Value: []byte(util.TimeToISO8601Str(time.Now())),
+			},
+		},
+	}
+
+	_, _, err = p.prod.SendMessage(msg)
+	return err
+}
+
+func (p implProducer) PublishRefundRequired(ctx context.Context, event kafka.RefundRequiredEvent) error {
+	event.Timestamp = util.TimeToISO8601Str(time.Now())
+	val, err := json.Marshal(event)
+	if err != nil {
+		p.l.Errorf(ctx, "order.delivery.kafka.producer.PublishRefundRequired: %v", err)
+		return err
+	}
+
+	msg := &sarama.ProducerMessage{
+		Topic: kafka.TopicRefundRequired,
 		Key:   sarama.StringEncoder(event.EventID),
 		Value: sarama.ByteEncoder(val),
 		Headers: []sarama.RecordHeader{

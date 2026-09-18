@@ -17,15 +17,13 @@ export function IsISODateString(validationOptions?: ValidationOptions) {
             return false;
           }
 
-          // ISO 8601 regex pattern
-          // Matches: YYYY-MM-DD or YYYY-MM-DDThh:mm:ss.sssZ
           const isoDatePattern = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z?)?$/;
 
           if (!isoDatePattern.test(value)) {
             return false;
           }
 
-          // Additional validation: check if it's a valid date
+          // The pattern admits impossible dates (2025-02-31); Date does not.
           const date = new Date(value);
           return !isNaN(date.getTime());
         },

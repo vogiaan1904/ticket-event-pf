@@ -231,8 +231,7 @@ func TestAdmittedSessionsLeaveTheQueue(t *testing.T) {
 	}
 }
 
-// The bug: a transient failure used to drop the user from the queue for good.
-// They must stay queued, at their original position, for the next tick.
+// A transient failure must leave the user queued at their original position.
 func TestTransientFailureLeavesUserQueuedAtSamePosition(t *testing.T) {
 	q := newFakeQueue("ss-1", "ss-2", "ss-3")
 	q.addToProcessingErr = errors.New("redis unavailable")
@@ -351,9 +350,8 @@ func (s *selectiveFailQueue) AddToProcessing(ctx context.Context, eID, ssID stri
 	return s.fakeQueue.AddToProcessing(ctx, eID, ssID, ttl)
 }
 
-// If the queue removal itself fails, the admitted sessions stay queued. That is
-// safe -- they hold their slots and the next tick sees them as not-admittable
-// and drops them then. What must never happen is losing them.
+// A failed queue removal leaves admitted sessions queued, which is safe: they
+// hold their slots and the next tick drops them as not-admittable.
 func TestRemovalFailureIsSelfCorrecting(t *testing.T) {
 	q := newFakeQueue("ss-1")
 	q.removeErr = errors.New("redis unavailable")
@@ -412,10 +410,9 @@ func (f *failingPublishProducer) PublishQueueReady(ctx context.Context, e kafka.
 	return f.fakeProducer.PublishQueueReady(ctx, e)
 }
 
-// A failed publish must not un-report an admission that actually happened. The
-// naive fix -- returning the error -- sends the caller down the not-admittable
-// path, which would drop the user out of the position broadcast: the channel
-// they actually learn about their checkout token on.
+// A failed publish must not un-report an admission that happened: returning the
+// error sends the caller down the not-admittable path, dropping the user out of
+// the position broadcast that carries their checkout token.
 func TestPublishFailureStillCountsAsAdmitted(t *testing.T) {
 	q := newFakeQueue("ss-1")
 	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
@@ -437,9 +434,8 @@ func TestPublishFailureStillCountsAsAdmitted(t *testing.T) {
 	if slices.Contains(q.queued, "ss-1") {
 		t.Error("an admitted session must leave the queue even if its publish failed")
 	}
-	// The decisive assertion. Returning the publish error instead would send
-	// this session down the not-admittable path, excluding it here -- and the
-	// position broadcast is how the user actually receives their token.
+	// The decisive assertion: the position broadcast is how the user receives
+	// their token, so a publish error must not exclude them from it.
 	if !slices.Contains(q.broadcast, "ss-1") {
 		t.Error("an admitted user must still be announced on the position broadcast")
 	}
@@ -530,10 +526,8 @@ func TestUnbufferableEventIsCounted(t *testing.T) {
 
 // --- half-finished admission recovery ----------------------------------------
 
-// UpdateCheckoutToken commits (session reads as admitted) but the slot write
-// fails. The session then holds a token and no slot. Treating that as terminal
-// drops the user -- the very loss this processor exists to prevent -- so it must
-// be finished on a later tick.
+// UpdateCheckoutToken commits but the slot write fails, leaving a token and no
+// slot. Treating that as terminal drops the user, so it resumes on a later tick.
 func TestHalfFinishedAdmissionIsResumedNotDropped(t *testing.T) {
 	q := newFakeQueue("ss-1")
 	q.addToProcessingErr = errors.New("redis unavailable")
@@ -578,8 +572,8 @@ func TestHalfFinishedAdmissionIsResumedNotDropped(t *testing.T) {
 	}
 }
 
-// The resumed admission must reuse the token already handed out, not mint a new
-// one -- the old token may already be in the user's hands.
+// A resumed admission reuses the token already handed out; a new one may race
+// against the token already in the user's hands.
 func TestResumedAdmissionReusesTheExistingToken(t *testing.T) {
 	expAt := time.Now().Add(10 * time.Minute)
 	ss := queuedSession("ss-1")

@@ -6,7 +6,6 @@ export const handler = async (
   event: APIGatewayProxyEvent,
   context: Context,
 ): Promise<APIGatewayProxyResult> => {
-  // Set request ID from Lambda context
   logger.defaultMeta = {
     ...logger.defaultMeta,
     requestId: context.awsRequestId,
@@ -20,7 +19,6 @@ export const handler = async (
   });
 
   try {
-    // Process webhook
     const result = await handleWebhook(event);
 
     return result;
@@ -30,7 +28,6 @@ export const handler = async (
       stack: error instanceof Error ? error.stack : undefined,
     });
 
-    // Return generic error response
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },

@@ -6,11 +6,13 @@ import { AppModule } from './app.module';
 import { RpcValidationException } from './common/exceptions/rpc-validation.exception';
 import { GlobalGrpcExceptionFilter } from './common/filters/global-grpc-exception.filter';
 import { USER_PACKAGE_NAME } from './protogen/user.pb';
+import { startMetricsServer } from './shared/metrics/server';
 import { LoggerService } from './shared/services/logger.service';
 
 async function bootstrap() {
   const HOST = process.env.HOST || '0.0.0.0';
   const PORT = process.env.PORT || 50052;
+  const METRICS_PORT = Number(process.env.SERVER_METRICS_PORT || 2112);
   const app: INestMicroservice = await NestFactory.createMicroservice(AppModule, {
     transport: Transport.GRPC,
     options: {
@@ -34,5 +36,12 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new GlobalGrpcExceptionFilter(logger));
   await app.listen();
+
+  const metricsServer = startMetricsServer(METRICS_PORT);
+  logger.log(`metrics server running on: ${HOST}:${METRICS_PORT}/metrics`);
+
+  for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+    process.on(sig, () => metricsServer.close());
+  }
 }
 bootstrap();

@@ -26,12 +26,12 @@ func (c *captureProducer) SendMessages(msgs []*sarama.ProducerMessage) error {
 	return nil
 }
 
-func (c *captureProducer) Close() error                              { return nil }
-func (c *captureProducer) TxnStatus() sarama.ProducerTxnStatusFlag   { return 0 }
-func (c *captureProducer) IsTransactional() bool                     { return false }
-func (c *captureProducer) BeginTxn() error                           { return nil }
-func (c *captureProducer) CommitTxn() error                          { return nil }
-func (c *captureProducer) AbortTxn() error                           { return nil }
+func (c *captureProducer) Close() error                            { return nil }
+func (c *captureProducer) TxnStatus() sarama.ProducerTxnStatusFlag { return 0 }
+func (c *captureProducer) IsTransactional() bool                   { return false }
+func (c *captureProducer) BeginTxn() error                         { return nil }
+func (c *captureProducer) CommitTxn() error                        { return nil }
+func (c *captureProducer) AbortTxn() error                         { return nil }
 func (c *captureProducer) AddOffsetsToTxn(map[string][]*sarama.PartitionOffsetMetadata, string) error {
 	return nil
 }
@@ -81,6 +81,14 @@ func TestPublishedCheckoutTimestampsAreRFC3339(t *testing.T) {
 			publish: func(p Producer, ctx context.Context) error {
 				return p.PublishCheckoutFailed(ctx, kafka.CheckoutFailedEvent{
 					SessionID: "ss-1", UserID: "u-1", EventID: "e-1",
+				})
+			},
+		},
+		{
+			name: "refund required",
+			publish: func(p Producer, ctx context.Context) error {
+				return p.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
+					OrderCode: "TB-1", UserID: "u-1", EventID: "e-1", Reason: "stock is gone",
 				})
 			},
 		},

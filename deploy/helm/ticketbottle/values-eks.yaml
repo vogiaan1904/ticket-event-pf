@@ -83,3 +83,21 @@ pdb:
 
 topologySpread:
   enabled: true
+
+monitoring:
+  enabled: true
+  targets:
+    order-service: true
+    order-consumer: true
+    inventory-service: true
+    waitroom-service: true
+    app-gateway: true
+    user-service: true
+    event-service: true
+    payment-service: true
+    payment-webhook: true
+    outbox-relay: true
+
+temporal:
+  ui:
+    enabled: true

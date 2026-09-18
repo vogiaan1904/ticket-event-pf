@@ -16,10 +16,9 @@ export interface DrainResult {
   failed: number;
 }
 
-// Deps are injected so this orchestration is unit-testable without a DB/Kafka;
-// runtime.ts composes the real claim/publish/mark implementations,
-// running claim+mark inside one transaction so SKIP LOCKED rows stay locked
-// until the batch is marked.
+// Deps are injected so this is unit-testable without a DB or Kafka. runtime.ts
+// wires the real ones, keeping claim+mark in one transaction so SKIP LOCKED rows
+// stay locked until the batch is marked.
 export const drainOnce = async (deps: DrainDeps): Promise<DrainResult> => {
   const rows = await deps.claim(deps.batchSize, deps.maxRetries);
   if (rows.length === 0) return { processed: 0, succeeded: 0, failed: 0 };

@@ -77,11 +77,11 @@ order:
 temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility; Elasticsearch alone wants 1-2GB
-
-localstack:
-  expose: false
-  ip: 172.18.0.100
-  postgresNodePort: 31432
+  # auto-setup is the server only; the web UI is a separate image.
+  ui:
+    enabled: false
+    image: temporalio/ui:2.34.0
+    localPort: 8233   # the port `make temporal-ui` forwards to, and the only CORS origin
 
 gateway:
   # JSON array of allowed browser origins. "*" is right for a local cluster with
@@ -141,6 +141,7 @@ resources:
   # idle. The request must clear it or the pod lands on a node too small for it.
   redpanda:           { requests: { cpu: 100m, memory: 1280Mi }, limits: { cpu: "1",  memory: 2Gi } }    #  16m / 1070Mi
   temporal:           { requests: { cpu: 100m, memory: 192Mi },  limits: { cpu: "1",  memory: 768Mi } }  #  59m / 103Mi
+  temporal-ui:        { requests: { cpu: 25m,  memory: 32Mi },   limits: { cpu: 250m, memory: 128Mi } }  # read-only console
   redis:              { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 250m, memory: 256Mi } }  #  13m /   7Mi
   # kind/k3s only — `dynamodb.enabled: false` on EKS, where the real service
   # replaces it. The limit is 768Mi rather than 512Mi because the JVM sizes its
@@ -173,3 +174,30 @@ pdb: {}
 # two-node cluster a hard constraint turns a scale-out into a Pending pod.
 topologySpread:
   enabled: false
+
+# --- Observability ------------------------------------------------------------
+# Off everywhere by default. With `enabled: false` the chart renders no
+# ServiceMonitor and no metrics port, so a cluster without the Prometheus
+# Operator installed is unaffected by this block.
+monitoring:
+  enabled: false
+  scrapeInterval: 15s
+  # Set this when kube-prometheus-stack keeps its default
+  # serviceMonitorSelectorNilUsesHelmValues: true, which adopts only
+  # ServiceMonitors labelled `release: <helm release name>`.
+  # deploy/monitoring/values-kps.yaml sets it false, so this stays empty there.
+  prometheusReleaseLabel: ""
+  # Keyed by WORKLOAD name, all ten of them, every one false here; the k3s and
+  # eks overlays turn them on. Note payment-webhook (rendered by
+  # payment-events.yaml) and the two order Deployments.
+  targets:
+    order-service: false
+    order-consumer: false
+    inventory-service: false
+    waitroom-service: false
+    app-gateway: false
+    user-service: false
+    event-service: false
+    payment-service: false
+    payment-webhook: false
+    outbox-relay: false

@@ -123,14 +123,12 @@ func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, 
 	return mems, nil
 }
 
-// processingKeyGrace keeps the processing key alive past its last slot expiry so
-// an event that goes quiet still gets garbage collected. Correctness comes from
-// the per-member scores, never from this TTL.
+// processingKeyGrace outlives the last slot so a quiet event is still collected.
+// Correctness comes from the per-member scores, never from this TTL.
 const processingKeyGrace = time.Hour
 
-// reapAndCountScript drops every slot whose expiry has passed, then counts what
-// is left. Reaping and counting must be one round trip: a count taken against
-// un-reaped data over-reports occupancy and starves admission.
+// reapAndCountScript drops expired slots, then counts what is left.
+// One round trip: counting un-reaped data over-reports and starves admission.
 var reapAndCountScript = redis.NewScript(`
 	local key = KEYS[1]
 	local now = tonumber(ARGV[1])
@@ -230,14 +228,10 @@ func (r *redisQueueRepository) queueKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:queue", eID)
 }
 
-// processingKey holds the sessions currently occupying a checkout slot, as a
-// sorted set scored by absolute expiry (unix ms). Slots expire individually, so
-// an abandoned checkout frees its own slot without waiting on a downstream event
-// and without disturbing any other slot.
-//
-// Named ":checkouts" rather than ":processing" on purpose: the old key was a
-// plain SET, and Redis is persistent here, so reusing the name would hit
-// WRONGTYPE against a surviving key. The old key carries a TTL and expires out.
+// processingKey names the sorted set of sessions holding a checkout slot, scored
+// by absolute expiry (unix ms) so each slot expires on its own.
+// Named ":checkouts", not ":processing": Redis is persistent here, so a surviving
+// SET under the old name would answer WRONGTYPE. See CLAUDE.md#deploy-note-the-checkouts-key-rename.
 func (r *redisQueueRepository) processingKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:checkouts", eID)
 }
@@ -248,9 +242,8 @@ func (r *redisQueueRepository) positionUpdateChannel(eID string) string {
 
 // ============= Buffered QUEUE_READY Publishes =============
 
-// maxBufferedQueueReady caps the retry buffer. It only grows while Kafka is
-// unreachable, but an unbounded Redis list is its own outage, so the oldest
-// entries are shed past this point.
+// maxBufferedQueueReady caps the retry buffer; the oldest entries are shed past it.
+// Why: it only grows while Kafka is down, but an unbounded list is its own outage.
 const maxBufferedQueueReady = 10000
 
 // BufferQueueReady parks a QUEUE_READY payload whose publish failed. The list is

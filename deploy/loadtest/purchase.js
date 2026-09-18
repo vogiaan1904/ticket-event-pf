@@ -2,9 +2,8 @@
 //   authenticate -> waitroom join -> wait for admission -> create order
 //   -> fire the payment webhook -> poll until COMPLETED
 //
-// The event, its config and the ticket class are seeded once by gate4a-load.sh
-// before this Job starts and arrive as env vars; seeding per-VU would measure
-// event creation rather than the purchase path.
+// The event and ticket class are seeded once by gate4a-load.sh and arrive as
+// env vars; seeding per-VU would measure event creation, not the purchase path.
 import http from 'k6/http';
 import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
@@ -24,19 +23,17 @@ const completed  = new Counter('tb_orders_completed');
 const rejected   = new Counter('tb_orders_rejected_409');
 const unexpected = new Counter('tb_unexpected_errors');
 
-// Two load shapes, one script. Gate 4a wants a burst: every buyer arrives at
-// once, contends for a fixed allotment and leaves. Gate 4b needs a sustained
-// stream instead, because it terminates a node mid-saga and a burst drains in
-// ~10s — long before the kill lands.
+// Two load shapes, one script.
+// 4a: burst     -- every buyer arrives at once, contends, leaves.
+// 4b: sustained -- it kills a node mid-saga; a burst drains before that lands.
 const DURATION = __ENV.DURATION;   // set => sustained run
 
 export const options = {
   scenarios: {
     rush: DURATION
       ? {
-          // Each VU loops for the whole window. Safe to repeat as the same
-          // buyer: waitroom JoinQueue calls CreateSession unconditionally, so a
-          // rejoin yields a fresh session and a fresh checkout token.
+          // Each VU loops for the window. Safe as the same buyer: JoinQueue
+          // always calls CreateSession, so a rejoin gets a fresh token.
           executor: 'constant-vus',
           vus: Number(__ENV.VUS || 20),
           duration: DURATION,
@@ -49,10 +46,8 @@ export const options = {
         },
   },
   // A sold-out rejection is a pass; a 5xx or a hang is not.
-  //
-  // Dropped in a sustained run: Gate 4b terminates a node under this load, so
-  // in-flight requests to the dying pod are expected to fail. That gate's own
-  // assertions on reservations and the outbox are the verdict there.
+  // Dropped in a sustained run: 4b kills a node, so in-flight failures are
+  // expected there and its own reservation/outbox asserts are the verdict.
   thresholds: DURATION ? {} : {
     tb_unexpected_errors: ['count==0'],
   },
@@ -74,9 +69,8 @@ function sign(payload, secret) {
 export default function () {
   const json = { headers: { 'Content-Type': 'application/json' } };
 
-  // 1. authenticate. With USER_PREFIX the buyer already exists and the token is
-  //    minted here: signing up in-band costs a bcrypt hash per VU and saturates
-  //    the gateway before inventory is ever contended.
+  // 1. authenticate. USER_PREFIX => mint the token here: an in-band signup
+  //    costs a bcrypt hash per VU and saturates the gateway before inventory.
   let userId, email, accessToken;
   if (USER_PREFIX) {
     const now = Math.floor(Date.now() / 1000);
@@ -99,9 +93,8 @@ export default function () {
   const auth = { headers: { 'Content-Type': 'application/json',
                             Authorization: `Bearer ${accessToken}` } };
 
-  // 2. join the waitroom and wait to be admitted. Forging the checkout token
-  //    here would bypass admission control and put every VU into checkout at
-  //    once — the exact concurrency the queue exists to prevent.
+  // 2. join the waitroom and wait for admission. Forging a checkout token here
+  //    would put every VU into checkout at once -- what the queue prevents.
   const jr = http.post(`${GW}/waitroom/join`,
     JSON.stringify({ eventId: EVENT_ID }), auth);
   const sessionId = jr.json('data.sessionId');
@@ -131,10 +124,9 @@ export default function () {
     redirectUrl: 'https://example.com/done',
   }), auth);
 
-  // 409 is the only correct rejection: sold out, sale closed and wrong-state
-  // all arrive as FAILED_PRECONDITION. Any other 4xx is the harness at fault --
-  // a stale token, a malformed body -- and counting it as a buyer who lost the
-  // race is how a broken run passes as a green one.
+  // 409 is the only correct rejection: sold out / sale closed / wrong-state all
+  // arrive as FAILED_PRECONDITION. Any other 4xx is the harness (stale token,
+  // bad body) and must not be counted as a buyer losing the race.
   if (or.status === 409) { rejected.add(1); return; }
   if (or.status >= 400) { unexpected.add(1, { step: 'order', status: or.status }); return; }
 
@@ -145,9 +137,8 @@ export default function () {
   const wh = http.post(`${WEBHOOK}/complete/${code}`);
   if (wh.status >= 400) { unexpected.add(1, { step: 'webhook', status: wh.status }); return; }
 
-  // 5. poll to COMPLETED. The confirm leg is asynchronous (webhook -> outbox ->
-  //    Kafka -> ConfirmOrder) and lags under load, so the poll budget has to
-  //    cover it or a working saga reads as a failure.
+  // 5. poll to COMPLETED. The confirm leg (webhook -> outbox -> Kafka ->
+  //    ConfirmOrder) lags under load; too small a budget fails a working saga.
   for (let i = 0; i < CONFIRM_POLLS; i++) {
     const o = http.get(`${GW}/orders/code/${code}`, auth);
     if (o.json('data.status') === 'COMPLETED') { completed.add(1); return; }

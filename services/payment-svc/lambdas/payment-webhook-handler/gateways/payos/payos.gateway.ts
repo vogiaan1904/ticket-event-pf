@@ -30,8 +30,7 @@ export class PayOSGateway implements PaymentGatewayInterface {
 
   async createPaymentLink(input: CreatePaymentLinkInput): Promise<CreatePaymentLinkOutput> {
     try {
-      // Convert order code to numeric format
-      // Format: current date (YYMMDD) * 100000000 + alphanumeric conversion of orderCode
+      // Format: date (YYMMDD) * 1e8 + an alphanumeric conversion of orderCode.
       const numericOrderCode = this.convertOrderCodeToNumber(input.orderCode);
 
       const requestBody: PayOSCreatePaymentLinkRequestBody = {
@@ -60,12 +59,10 @@ export class PayOSGateway implements PaymentGatewayInterface {
 
   async handleCallback(body: PayOSWebhookBody): Promise<HandleCallbackOutput> {
     try {
-      // Verify webhook signature using PayOS SDK
-      // The SDK automatically verifies the signature when we call verifyPaymentWebhookData
+      // verifyPaymentWebhookData checks the signature as a side effect.
       const webhookData: PayOSWebhookData = await this.payOS.verifyPaymentWebhookData(body);
 
-      // Check if payment was successful
-      // PayOS uses code '00' for successful payments
+      // PayOS signals success with code '00'.
       const isSuccess = webhookData.code === '00';
 
       if (!isSuccess) {
@@ -106,16 +103,13 @@ export class PayOSGateway implements PaymentGatewayInterface {
     const day = now.getDate().toString().padStart(2, '0');
     const datePrefix = parseInt(`${year}${month}${day}`);
 
-    // Convert order code to number by taking last 8 digits or converting alphanumeric
     let numericSuffix = 0;
 
-    // Try to extract numeric part from order code
     const numericPart = orderCode.replace(/\D/g, '');
     if (numericPart.length > 0) {
-      // Take last 8 digits to ensure it fits within the range
+      // Last 8 digits only, so it fits the numeric range.
       numericSuffix = parseInt(numericPart.slice(-8)) % 100000000;
     } else {
-      // If no numeric part, convert characters to numbers
       for (let i = 0; i < orderCode.length && i < 8; i++) {
         numericSuffix = (numericSuffix * 10 + orderCode.charCodeAt(i)) % 100000000;
       }

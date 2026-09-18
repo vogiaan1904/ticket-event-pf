@@ -72,9 +72,8 @@ resource "aws_iam_openid_connect_provider" "oidc" {
 
 # ------------------------------------------------------------------ node group
 # NOTE: this role has NO DynamoDB permission, on purpose. On the k3s target the node's
-# instance profile granted DynamoDB to every pod on the box. Here only the
-# order-service ServiceAccount gets it — and the purchase flow passing is
-# the proof that IRSA, not the node, is what authenticated.
+# instance profile granted DynamoDB to every pod on the box; here only the
+# order-service ServiceAccount gets it, through IRSA.
 resource "aws_iam_role" "node" {
   name = "${var.cluster_name}-node"
   assume_role_policy = jsonencode({
@@ -131,8 +130,7 @@ resource "aws_eks_node_group" "spot" {
 # ------------------------------------------------------------------ EBS CSI addon
 # vpc-cni, kube-proxy and coredns are pre-installed by EKS. The EBS CSI driver is
 # NOT — and without it every PVC in the chart sits Pending forever, because the
-# in-tree AWS EBS provisioner was removed from Kubernetes. This addon is the single
-# most commonly missed EKS prerequisite for stateful workloads.
+# in-tree AWS EBS provisioner was removed from Kubernetes.
 module "ebs_csi_irsa" {
   source            = "../irsa-role"
   role_name         = "${var.cluster_name}-ebs-csi"

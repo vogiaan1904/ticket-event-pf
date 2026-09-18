@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"time"
 
@@ -35,13 +36,9 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 	ids, qtyByID := aggregateDemand(in.Items)
 
 	return s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		// Idempotency, scoped by status. A live hold (ACTIVE or CONFIRMED)
-		// means this is a retry of a call that already succeeded -- no-op. But
-		// rows that are all terminal mean the hold was released or expired,
-		// and silently returning success there would hand the caller an order
-		// with zero inventory behind it. A concurrent duplicate that races
-		// past this unlocked read is still caught by the
-		// (order_code, ticket_class_id) unique index on insert.
+		// live (ACTIVE|CONFIRMED) -> retry of a call that won; no-op
+		// all terminal            -> refuse; success would mean zero inventory
+		// Racing duplicates are still caught by the unique index on insert.
 		var statuses []models.ReservationStatus
 		if err := tx.Model(&models.Reservation{}).
 			Where("order_code = ?", in.OrderCode).
@@ -61,59 +58,28 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 			return ErrStateConflict
 		}
 
-		// Lock all target ticket classes in ascending id order (deadlock-free).
-		var tcs []models.TicketClass
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id IN ?", ids).Order("id").Find(&tcs).Error; err != nil {
-			s.l.Errorf(ctx, "service.reservation.Reserve.LockTicketClasses: %v", err)
-			return err
-		}
-		if len(tcs) != len(ids) {
-			s.l.Warnf(ctx, "service.reservation.Reserve: ticket classes not found (want=%d got=%d)", len(ids), len(tcs))
-			return ErrNotFound
-		}
-		byID := indexByID(tcs)
-
-		// Validate sale eligibility and availability against the locked rows.
+		// One guarded UPDATE per class, ascending id (deadlock-free). The
+		// predicate is the arbiter: Postgres re-checks it against the latest
+		// committed row after taking the lock, so no prior read is needed.
+		// Why no SELECT ... FOR UPDATE: it would hold every row from the read
+		// through COMMIT, and one hot class serialises the whole on-sale.
 		now := time.Now().UTC()
-		for _, id := range ids {
-			tc := byID[id]
-			if !onSale(tc, now) {
-				// onSale only decides; log here so the reason (INACTIVE vs.
-				// before-start vs. after-end) survives for diagnostics.
-				switch {
-				case tc.Status != models.TicketClassStatusActive:
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
-				case tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt):
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
-				case tc.SaleEndAt != nil && now.After(*tc.SaleEndAt):
-					s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
-				}
-				return ErrSaleClosed
-			}
-
-			q := qtyByID[id]
-			if tc.Total-tc.Reserved-tc.Sold < q {
-				s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
-					id, tc.Total-tc.Reserved-tc.Sold, q)
-				return ErrInsufficientStock
-			}
-		}
-
-		// Increment reserved counters (guarded) and build reservation rows.
 		rs := make([]models.Reservation, 0, len(ids))
 		for _, id := range ids {
 			q := qtyByID[id]
 			res := tx.Model(&models.TicketClass{}).
-				Where("id = ? AND reserved + sold + ? <= total", id, q).
+				Where(`id = ? AND status = ?
+				       AND (sale_start_at IS NULL OR sale_start_at <= ?)
+				       AND (sale_end_at IS NULL OR sale_end_at >= ?)
+				       AND reserved + sold + ? <= total`,
+					id, models.TicketClassStatusActive, now, now, q).
 				Update("reserved", gorm.Expr("reserved + ?", q))
 			if res.Error != nil {
 				s.l.Errorf(ctx, "service.reservation.Reserve.IncrementReserved: ticket_class_id=%d: %v", id, res.Error)
 				return res.Error
 			}
 			if res.RowsAffected == 0 {
-				s.l.Warnf(ctx, "service.reservation.Reserve: availability guard failed for ticket_class_id=%d", id)
-				return ErrInsufficientStock
+				return s.explainReserveMiss(ctx, tx, id, q, now)
 			}
 			rs = append(rs, s.buildModel(in.OrderCode, in.ExpiresAt, ReserveItem{TicketClassID: id, Qty: q}))
 		}
@@ -128,11 +94,41 @@ func (s implReservationService) Reserve(ctx context.Context, in ReserveInput) er
 	})
 }
 
-// onSale reports whether tc is currently eligible for sale: Status must be
-// ACTIVE and now must fall within [SaleStartAt, SaleEndAt], where either
-// bound may be nil (nil = unbounded on that side). Both ends are inclusive.
-// Shared by Reserve (inside its locked transaction) and CheckAvailability (a
-// pre-check) so the two can never silently disagree.
+// explainReserveMiss names why the guarded update matched no row.
+// not found  -> ErrNotFound
+// off-window -> ErrSaleClosed
+// otherwise  -> ErrInsufficientStock
+// Read without a lock: it only classifies an attempt that already failed.
+func (s implReservationService) explainReserveMiss(ctx context.Context, tx *gorm.DB, id int64, q int, now time.Time) error {
+	var tc models.TicketClass
+	if err := tx.First(&tc, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d not found", id)
+			return ErrNotFound
+		}
+		s.l.Errorf(ctx, "service.reservation.Reserve.ExplainMiss: ticket_class_id=%d: %v", id, err)
+		return err
+	}
+	if !onSale(tc, now) {
+		switch {
+		case tc.Status != models.TicketClassStatusActive:
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d is %s, not on sale", id, tc.Status)
+		case tc.SaleStartAt != nil && now.Before(*tc.SaleStartAt):
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale opens at %s", id, tc.SaleStartAt.Format(time.RFC3339))
+		case tc.SaleEndAt != nil && now.After(*tc.SaleEndAt):
+			s.l.Warnf(ctx, "service.reservation.Reserve: ticket_class_id=%d sale closed at %s", id, tc.SaleEndAt.Format(time.RFC3339))
+		}
+		return ErrSaleClosed
+	}
+	s.l.Warnf(ctx, "service.reservation.Reserve: insufficient stock for ticket_class_id=%d (available=%d, requested=%d)",
+		id, tc.Total-tc.Reserved-tc.Sold, q)
+	return ErrInsufficientStock
+}
+
+// onSale reports whether tc is currently on sale.
+// ACTIVE, and now within [SaleStartAt, SaleEndAt]; a nil bound is unbounded,
+// both ends inclusive. CheckAvailability pre-checks with it; Reserve's UPDATE
+// predicate mirrors it in SQL. Change one and the other must follow.
 func onSale(tc models.TicketClass, now time.Time) bool {
 	if tc.Status != models.TicketClassStatusActive {
 		return false
@@ -160,17 +156,8 @@ func aggregateDemand(items []ReserveItem) (ids []int64, qtyByID map[int64]int) {
 	return ids, qtyByID
 }
 
-func indexByID(tcs []models.TicketClass) map[int64]models.TicketClass {
-	m := make(map[int64]models.TicketClass, len(tcs))
-	for _, tc := range tcs {
-		m[tc.ID] = tc
-	}
-	return m
-}
-
-// sortedInt64Keys returns the map keys in ascending order, so every operation
-// that updates multiple ticket_class rows locks them in the same (ascending
-// id) order -- preserving the deadlock-freedom invariant.
+// sortedInt64Keys returns the map keys in ascending order.
+// Invariant: every multi-row ticket_class update locks in ascending id order.
 func sortedInt64Keys[V any](m map[int64]V) []int64 {
 	keys := make([]int64, 0, len(m))
 	for k := range m {
@@ -187,9 +174,8 @@ func (s implReservationService) Confirm(ctx context.Context, oCode string) error
 	return err
 }
 
-// confirmDelta is how much of a ticket class's confirm comes from the hold
-// this order still owns, versus how much has to be taken back out of free
-// stock because the expiry worker already released it.
+// confirmDelta splits a confirm between the hold this order still owns and
+// free stock it has to re-take because the expiry worker released the hold.
 type confirmDelta struct {
 	fromReserved int
 	fromFree     int
@@ -231,9 +217,8 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 
 		switch r.Status {
 		case models.ReservationStatusActive:
-			// Still holding its quantity in `reserved`, even if past
-			// expires_at -- the worker just has not swept it yet. Confirming
-			// is a pure reserved -> sold move and is always safe.
+			// Still holds its qty in `reserved` even past expires_at (unswept);
+			// confirming is a pure reserved -> sold move, always safe.
 			d.fromReserved += r.Qty
 
 		case models.ReservationStatusExpired:
@@ -386,14 +371,9 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 			return err
 		}
 
-		// A drifted ticket class's reservations never leave ACTIVE and their
-		// expires_at never moves, so Order("expires_at") keeps surfacing them
-		// as the oldest rows forever. Once enough of them accumulate to fill
-		// a whole batch by themselves, every subsequent selection on this
-		// same predicate is 100% drift -- expired would stay 0 forever and no
-		// reservation anywhere, healthy or not, would ever expire again.
-		// Retry once, excluding the poisoned classes, so the worker still
-		// makes forward progress on everything behind them.
+		// Drifted rows never leave ACTIVE and their expires_at never moves, so they
+		// head every oldest-first page forever. A batch that is all drift stalls
+		// expiry service-wide; retry once without them to keep making progress.
 		if len(expiredIDs) == 0 && len(drifted) > 0 {
 			excludeTCIDs := sortedInt64Keys(drifted)
 			expiredIDs, _, err = s.selectAndExpireBatch(ctx, tx, now, batchSize, excludeTCIDs)
@@ -409,12 +389,11 @@ func (s implReservationService) BatchExpireReservations(ctx context.Context, bat
 	return expired, err
 }
 
-// selectAndExpireBatch locks up to batchSize ACTIVE, past-expiry reservations
-// (oldest first, skipping rows locked elsewhere), decrements the reserved
-// counter of every ticket class they touch, and flips the non-drifted ones to
-// EXPIRED. Ticket classes in excludeTCIDs are left out of the selection
-// entirely, so a caller can retry past a page that turned out to be
-// poisoned. It must run inside the same transaction as its caller.
+// selectAndExpireBatch expires up to batchSize overdue holds.
+// Locks ACTIVE past-expiry rows oldest-first (SKIP LOCKED), decrements each
+// ticket class's reserved counter, flips the non-drifted rows to EXPIRED.
+// excludeTCIDs drops those classes from the selection, so a caller can retry
+// past a poisoned page. Must run inside the caller's transaction.
 func (s implReservationService) selectAndExpireBatch(ctx context.Context, tx *gorm.DB, now time.Time, batchSize int, excludeTCIDs []int64) (expiredIDs []int64, drifted map[int64]bool, err error) {
 	q := tx.Clauses(clause.Locking{
 		Strength: "UPDATE",
@@ -441,9 +420,8 @@ func (s implReservationService) selectAndExpireBatch(ctx context.Context, tx *go
 		qtyByTC[r.TicketClassID] += r.Qty
 	}
 
-	// Ticket classes whose counter could not absorb the decrement. Their
-	// reservations stay ACTIVE so the drift stays visible instead of
-	// being erased, and so one bad row cannot stall the whole batch.
+	// Classes whose counter could not absorb the decrement. Their rows stay
+	// ACTIVE so the drift stays visible and one bad row cannot stall the batch.
 	drifted = make(map[int64]bool)
 
 	for _, tcID := range sortedInt64Keys(qtyByTC) {

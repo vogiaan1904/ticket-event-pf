@@ -14,7 +14,7 @@ permission at all, so nothing but the `order-service` ServiceAccount could have 
 
 > ⚠️ **There is no stop switch.** The control plane bills $0.10/hr from `apply` to `destroy` whether
 > or not a pod is running. The scripted off switch is `make -C deploy eks-down`, which runs the
-> ordered teardown and then the leak check — end every session with it, not by closing the laptop.
+> ordered teardown and then the leak check — end every session with it; nothing else stops the billing.
 >
 > Check whether it's up before assuming anything: `aws eks list-clusters --region us-east-1`. An
 > empty list is the only proof.
@@ -71,7 +71,7 @@ Two decisions in the shared infrastructure exist *only* to make EKS a delta rath
    to *discover* where it may place public load balancers. Without it the controller fails with a
    confusing "no subnets found".
 
-Also reused as-is: ECR (both rungs pull the same images), the DynamoDB table, the budget module,
+Also reused as-is: ECR (both targets pull the same images), the DynamoDB table, the budget module,
 the S3 state bucket, and the entire Helm chart. `envs/eks` **reads** `envs/foundation` via
 `terraform_remote_state` — it never recreates the VPC.
 
@@ -104,10 +104,10 @@ rather than blank them — an empty-string env var still wins over IMDS.
 
 ## Deliberate deviations — do not "restore" an earlier design
 
-Two things were changed during execution and are correct as shipped. Don't "restore" an earlier
-design that says otherwise:
+Two things diverge from the original design and are correct as shipped. Don't "restore" the
+earlier shape:
 
-| Plan says | Shipped | Why |
+| Earlier design | Shipped | Why |
 |---|---|---|
 | `irsa-role` `policy_arns` is a `list(string)` used with `toset()` | a **map keyed by a static label** (`{ alb_controller = ... }`) | `for_each` keys must be known at plan time; an ARN that comes from a resource isn't |
 | redpanda StatefulSet unchanged | gained an **`fsGroup`** | CSI-provisioned EBS volumes mount root-owned; redpanda runs non-root |
@@ -162,9 +162,9 @@ asynchronously.
 A green Gate 3 proves the chart runs on managed Kubernetes. What remains is proving it **behaves**,
 which is what the cluster exists to make possible:
 
-- **Node-loss recovery** — terminate a node mid-purchase and watch the Temporal saga resume and the
-  outbox redeliver. This is the first test a simpler architecture would fail, and so the best
-  available evidence that the complexity bought something.
+- **Node-loss recovery** — terminate a node mid-purchase; the Temporal saga resumes and the outbox
+  redelivers. This is the first test a simpler architecture would fail, and so the best available
+  evidence that the complexity bought something.
 - **HPA + load test** the virtual queue and inventory under real concurrency. Two ceilings are known
   in advance and neither is fixed by adding replicas — see § scaling limits below.
 - **Observability** — metrics first (metrics-server is not installed by EKS); distributed tracing is
@@ -229,7 +229,7 @@ Be honest about the trade, don't sell EKS:
 | Ingress | NodePort + SSH tunnel | real ALB with a public hostname |
 | Credentials | node-wide instance profile | per-ServiceAccount IRSA |
 | K8s API | identical (k3s is CNCF-conformant) | identical |
-| Best for | daily development on a budget | proving managed-Kubernetes and cloud-native ops |
+| Best for | cost-constrained daily development | proving managed-Kubernetes and cloud-native ops |
 
-The API surface being *identical* is exactly why the ladder works: everything learned about
-Deployments, StatefulSets, PVCs, Services and Helm on the $8/mo box transfers unchanged.
+The API surface being *identical* is what makes the targets interchangeable: Deployments,
+StatefulSets, PVCs, Services and Helm behave the same on the $8/mo box as on EKS.

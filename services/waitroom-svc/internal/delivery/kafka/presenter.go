@@ -7,11 +7,9 @@ import (
 )
 
 // EventTime is a wire timestamp that never fails to decode.
-//
-// These events carry the release of a checkout slot; the timestamp itself is
-// only bookkeeping. Decoding the whole message strictly would let a cosmetic
-// field stall the queue, so anything unparseable decodes to the zero time and
-// the handler substitutes the broker timestamp instead.
+// Anything unparseable becomes the zero time and the handler substitutes the
+// broker timestamp.
+// Why: the field is bookkeeping, and strict decoding would stall slot releases.
 type EventTime struct {
 	time.Time
 }

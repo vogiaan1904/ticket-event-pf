@@ -3,6 +3,7 @@ package workflows
 import (
 	"time"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -11,25 +12,12 @@ const (
 	// 5 minutes for payment + 1 minute buffer for callback processing
 	PaymentTimeout = 6 * time.Minute
 
-	// ReservationHoldGrace extends the inventory hold beyond PaymentTimeout.
-	// A payment completing at the very edge of the window still has to travel
-	// webhook -> outbox -> Kafka -> ConfirmOrder, and inventory's expiry
-	// worker sweeps every 60s. Without this slack the worker wins that race
-	// and the order ends up paid with no seat behind it.
-	//
-	// It is sized for the happy path, NOT for a retry storm: a ConfirmOrder
-	// that exhausts getConfirmOrderActivityOptions' policy burns ~8 minutes of
-	// backoff alone, well past this grace. That case is covered on the other
-	// side -- inventory's Confirm re-acquires a hold the worker already swept,
-	// as long as the stock has not been resold. This grace removes the common
-	// race; that re-acquire is the backstop for the tail.
+	// ReservationHoldGrace covers webhook -> outbox -> Kafka -> ConfirmOrder for
+	// a payment landing at the edge of PaymentTimeout, against inventory's 60s
+	// expiry sweep. Happy path only; the retry-storm tail is backstopped by
+	// inventory's Confirm re-acquiring a swept hold.
+	// See docs/RESERVATION_HOLD.md.
 	ReservationHoldGrace = 3 * time.Minute
-
-	// SignalNamePaymentCompleted is the signal name for payment completion
-	SignalNamePaymentCompleted = "payment-completed"
-
-	// SignalNamePaymentFailed is the signal name for payment failure
-	SignalNamePaymentFailed = "payment-failed"
 )
 
 // reservationExpiry returns the instant the inventory hold for an order must
@@ -40,29 +28,46 @@ func reservationExpiry(now time.Time) time.Time {
 }
 
 type Compensations struct {
+	names         []string
 	compensations []any
 	arguments     [][]any
 }
 
-func (s *Compensations) AddCompensation(activity any, parameters ...any) {
+// AddCompensation registers an undo step. name labels it for
+// tb_order_compensations_total -- kept explicit here rather than derived by
+// reflecting the activity function's name, which is fragile across renames
+// and refactors.
+func (s *Compensations) AddCompensation(name string, activity any, parameters ...any) {
+	s.names = append(s.names, name)
 	s.compensations = append(s.compensations, activity)
 	s.arguments = append(s.arguments, parameters)
 }
 
-func (s Compensations) Compensate(ctx workflow.Context, inParallel bool) {
+// Compensate runs the registered compensations newest-first, never concurrently:
+// a later step's undo may need an earlier step's state still in place. Errors are
+// logged and the loop continues, so one failed undo cannot block the rest.
+func (s Compensations) Compensate(ctx workflow.Context) {
 	logger := workflow.GetLogger(ctx)
 
-	if !inParallel {
-		for i := len(s.compensations) - 1; i >= 0; i-- {
-			errCompensation := workflow.ExecuteActivity(
-				workflow.WithActivityOptions(ctx, getCompensationActivityOptions()),
-				s.compensations[i],
-				s.arguments[i]...,
-			).Get(ctx, nil)
+	for i := len(s.compensations) - 1; i >= 0; i-- {
+		errCompensation := workflow.ExecuteActivity(
+			workflow.WithActivityOptions(ctx, getCompensationActivityOptions()),
+			s.compensations[i],
+			s.arguments[i]...,
+		).Get(ctx, nil)
 
-			if errCompensation != nil {
-				logger.Error("Executing compensation failed", "Error", errCompensation)
-			}
+		if errCompensation != nil {
+			logger.Error("Executing compensation failed", "Error", errCompensation)
 		}
+
+		// This is workflow code, replayed on every history reload -- a bare
+		// Inc() here would double-count exactly the way a metric inside the
+		// workflow function itself would. SideEffect records the result once;
+		// replay reads it back instead of re-running the increment.
+		step := s.names[i]
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any {
+			metrics.Compensations.WithLabelValues(step).Inc()
+			return nil
+		})
 	}
 }

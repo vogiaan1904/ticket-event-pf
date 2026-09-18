@@ -1,7 +1,3 @@
-/**
- * Tests for webhook handler
- */
-
 import { handleWebhook } from '../handlers/webhook.handler';
 import { getDb, closeDb } from '@/common/db/kysely';
 import { EventType } from '@/common/types/event.types';

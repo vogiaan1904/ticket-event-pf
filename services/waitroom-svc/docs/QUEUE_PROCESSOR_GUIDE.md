@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Queue Processor automatically admits users from the queue to checkout when slots become available. It uses **Redis-based event discovery** - no manual configuration required!
+The Queue Processor automatically admits users from the queue to checkout when slots become available. It uses **Redis-based event discovery**: events are found from Redis, never from a registration step.
 
 ## Quick Start
 
@@ -11,7 +11,7 @@ The Queue Processor automatically admits users from the queue to checkout when s
 2. User joins queue → Event added to `waitroom:active_events`
 3. Processor detects event → Admits users every 1s
 4. Queue becomes empty → Event auto-removed
-5. Repeat for all events!
+5. Repeat for every event
 
 ## Architecture
 
@@ -26,7 +26,7 @@ graph TB
     E --> F[Check Available Slots]
     F --> G{Slots Available?}
     G -->|No| D
-    G -->|Yes| H[Pop Users from Queue]
+    G -->|Yes| H[Peek Head of Queue]
     H --> I[Generate Checkout Token]
     I --> J[Update Session Status]
     J --> K[Add to Processing Set]
@@ -68,7 +68,7 @@ T1    User joins event-A             {event-A}          event-A: 1
 T2    5 more users join              {event-A}          event-A: 6
 T3    Processor admits 3             {event-A}          event-A: 3
 T4    User joins event-B             {event-A, B}       event-A: 3, B: 1
-T5    Event-A queue empty            {event-B}          event-A: 0 (removed!)
+T5    Event-A queue empty            {event-B}          event-A: 0 (removed)
 T6    Processor checks event-B only  {event-B}          event-B: 1
 ```
 
@@ -82,7 +82,7 @@ T6    Processor checks event-B only  {event-B}          event-B: 1
 2. For each active event:
    ├─ Get processing count (users in checkout)
    ├─ Calculate available slots (max 100 - current)
-   ├─ Pop users from queue (batch of 10)
+   ├─ Peek the head of the queue (batch of 10)
    └─ For each user:
       ├─ Generate JWT checkout token
       ├─ Update session status to "admitted"
@@ -211,8 +211,5 @@ The Queue Processor uses Redis Sets to track active events automatically:
 3. **Admits users** → Up to 10 per event per cycle
 4. **Queue empties** → Event removed from active set
 
-**Result**: Fully automatic, self-managing queue processing with zero configuration required!
-
----
-
-**Just start the service** - events are automatically discovered as users join queues!
+**Result:** queue processing is self-managing — events are discovered as users join, and no event
+is ever registered by hand.
