@@ -53,6 +53,17 @@ Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbott
 
 **Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR.
 
+## Branches
+
+Two branches: **`main`** and **`dev`**. Start platform work from `dev`; integrate
+`dev` → `main`. `main` is the branch a reader lands on and is kept presentable.
+
+CI (`.github/workflows/build-push-ecr.yml`) builds and pushes to ECR on a push to
+either one.
+
+Do **not** reintroduce a `staging` branch. Nothing builds or deploys from one, so
+it is a promotion step that only ever goes stale.
+
 ## Proto contracts & generation
 
 There is **one source of truth: the root `proto/` directory.** Edit contracts there, then regenerate in every consumer. Generated code is committed (TS under `src/protogen/`, Go under `pkg/grpc/` or `protogen/`), so a fresh checkout builds without regenerating.
@@ -179,6 +190,10 @@ Single-line prefixes carry the rest: `// Why:`, `// Invariant:`,
 **Never write.** Restatements of the line below; narrative history ("this used
 to...", "changed because..."); walkthroughs of what a *different* function
 does; justification aimed at a reviewer rather than the next reader.
+
+A comment that only makes sense to someone who saw the bug is the worst case:
+it reads as noise once the bug is forgotten. State the invariant instead.
+`.claude/hooks/check-comment-budget.py` flags both on every write.
 
 ## Conventions that span services
 
