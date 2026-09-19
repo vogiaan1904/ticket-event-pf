@@ -54,7 +54,7 @@ A LocalStack target was built and then **removed** in favour of real DynamoDB �
 | Image build → ECR | `.github/workflows/build-push-ecr.yml` |
 | Day-to-day operations (stop/start/kubeconfig/gate/teardown) | `deploy/Makefile` — the k3s and EKS sections |
 | IP allowlists after a network change | `make -C deploy my-ip`, `update-my-ip`, `k3s-allow-ip`, `eks-allow-ip` |
-| Architecture diagram | `assets/eks-arc.png` — the EKS topology; faded elements are designed, not built. Source `docs/diagrams/eks-to-be.xml` is local-only (gitignored); hand-edit it and re-export |
+| Architecture diagram | `assets/eks-arc.png` — the EKS **target** architecture, drawn as one coherent end state. Source `docs/diagrams/eks-to-be.xml` is local-only (gitignored); hand-edit it and re-export |
 
 ## The three invariants
 

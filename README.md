@@ -49,11 +49,6 @@ A single HTTP gateway is the only public entry point; every service behind it sp
 
 ![TicketBottle architecture on Amazon EKS](assets/eks-arc.png)
 
-Elements drawn faded are designed and not yet built: the three RDS instances that split
-Postgres by failure domain, their Multi-AZ standbys, Secrets Manager behind the Secrets
-Store CSI driver, and the per-service IAM roles those two need. Everything drawn solid
-has run on a real cluster.
-
 The node group sits in private subnets and reaches the internet through a NAT gateway,
 which is the layout AWS recommends. Both are created by the ephemeral `envs/eks` stack,
 so `terraform destroy` takes the NAT's meter with it — see `private_nodes` under
