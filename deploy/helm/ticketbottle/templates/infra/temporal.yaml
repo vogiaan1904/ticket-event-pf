@@ -66,6 +66,9 @@ spec:
     metadata:
       labels: { app: temporal-ui }
     spec:
+      # The Service's name would inject TEMPORAL_UI_PORT=tcp://<ip>:8080, which the
+      # UI reads as its own listen port. It finds the frontend by DNS, not links.
+      enableServiceLinks: false
       containers:
         - name: temporal-ui
           image: {{ .Values.temporal.ui.image }}
