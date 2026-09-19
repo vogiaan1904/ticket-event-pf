@@ -139,8 +139,7 @@ k3s-load:          ## Drive sustained purchase traffic on k3s (tunnel must be op
 
 
 # --- Ephemeral EKS ----------------------------------------------------
-# Brought up on demand and torn down after use. There is NO stop switch: the
-# control plane bills $0.10/hr from `eks-up` until `eks-down`.
+# Brought up on demand and torn down after use. 
 EKS_ENV     := terraform/envs/eks
 EKS_VALUES  := $(CHART)/values-eks.yaml
 EKS_CLUSTER := ticketbottle-eks

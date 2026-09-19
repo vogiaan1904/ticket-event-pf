@@ -11,6 +11,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 EKS_ENV="$HERE/../terraform/envs/eks"
 NS=ticketbottle
 REGION=us-east-1
+. "$HERE/eks-context.sh"
 
 VPC=$(cd "$EKS_ENV" && terraform output -raw vpc_id)
 

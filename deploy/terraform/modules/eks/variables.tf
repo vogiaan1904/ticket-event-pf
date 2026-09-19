@@ -52,3 +52,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "node_subnet_ids" {
+  type        = list(string)
+  default     = null
+  description = "Where the node group runs. null falls back to subnet_ids. Private subnets require NAT egress."
+}

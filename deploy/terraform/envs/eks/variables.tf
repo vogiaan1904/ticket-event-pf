@@ -49,3 +49,12 @@ variable "lbc_iam_policy_url" {
   default     = "https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/main/docs/install/iam_policy.json"
   description = "Upstream IAM policy for the AWS Load Balancer Controller."
 }
+
+variable "private_nodes" {
+  type        = bool
+  default     = false
+  description = <<-EOT
+    false: nodes public, no NAT. AWS documents this layout given SG-only exposure.
+    true:  nodes private, ALB public, NAT egress created here. AWS's recommendation.
+  EOT
+}

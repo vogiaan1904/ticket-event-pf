@@ -37,7 +37,7 @@ A LocalStack target was built and then **removed** in favour of real DynamoDB �
 | You are… | Read |
 |---|---|
 | Explaining or changing what runs day to day, debugging the box, touching `deploy/terraform` or `values-k3s.yaml` | [references/k3s-ec2.md](references/k3s-ec2.md) |
-| Running or tearing down EKS, touching `deploy/terraform/envs/eks` or `values-eks.yaml`, or asked "what changes on managed Kubernetes?" | [references/eks.md](references/eks.md) |
+| Running or tearing down EKS, touching `deploy/terraform/envs/eks` or `values-eks.yaml`, asked "what changes on managed Kubernetes?", or asked where the nodes sit and whether that is production-shaped | [references/eks.md](references/eks.md) |
 | Touching anything that costs money, or asked "why is this cheap / what could blow the budget?" | [references/cost-and-guardrails.md](references/cost-and-guardrails.md) |
 
 ## File map
@@ -54,7 +54,7 @@ A LocalStack target was built and then **removed** in favour of real DynamoDB �
 | Image build → ECR | `.github/workflows/build-push-ecr.yml` |
 | Day-to-day operations (stop/start/kubeconfig/gate/teardown) | `deploy/Makefile` — the k3s and EKS sections |
 | IP allowlists after a network change | `make -C deploy my-ip`, `update-my-ip`, `k3s-allow-ip`, `eks-allow-ip` |
-| Architecture diagram | `assets/architecture-aws.png` (drawio source is local-only, gitignored) |
+| Architecture diagram | `assets/eks-arc.png` — the EKS topology; faded elements are designed, not built. Source `docs/diagrams/eks-to-be.xml` is local-only (gitignored); hand-edit it and re-export |
 
 ## The three invariants
 
@@ -65,6 +65,8 @@ Break these and the targets stop being interchangeable.
 **2 — No long-lived AWS keys anywhere.** CI authenticates by **GitHub OIDC** (`AssumeRoleWithWebIdentity`); the box authenticates by **EC2 instance profile** via IMDSv2; EKS authenticates by **IRSA**, per-ServiceAccount via the cluster's OIDC provider (`modules/irsa-role`). All three are the same idea — a workload proving its identity rather than holding a secret. The trap that makes this concrete is in the k3s reference (§ credential chain).
 
 **3 — Everything is toggle-off-able.** The k3s box is one `stop-instances` away from ~$0 compute; EKS is one `terraform destroy` away from $0. Any component that cannot be switched off, or that bills while stopped (Elastic IPs, NAT gateways, idle load balancers), needs an explicit justification — see the cost reference.
+
+> The corollary people get backwards: a resource billed **hourly** is judged by how long it stands up, not by its monthly rate. A NAT gateway is ~$32/mo standing but ~$0.09 on a two-hour ephemeral cluster — which is why `envs/eks` may create one (`private_nodes`) while `envs/foundation` never does. Put the meter in the env that dies, and `terraform destroy` is its off switch.
 
 ## Where the app architecture lives (not here)
 

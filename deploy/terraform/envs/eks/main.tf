@@ -33,11 +33,31 @@ data "terraform_remote_state" "foundation" {
   }
 }
 
+locals {
+  public_subnet_ids  = data.terraform_remote_state.foundation.outputs.public_subnet_ids
+  private_subnet_ids = data.terraform_remote_state.foundation.outputs.private_subnet_ids
+
+  node_subnet_ids = var.private_nodes ? local.private_subnet_ids : local.public_subnet_ids
+
+  # x-ENI placement follows the nodes.
+  cluster_subnet_ids = var.private_nodes ? concat(local.public_subnet_ids, local.private_subnet_ids) : local.public_subnet_ids
+}
+
+module "nat_egress" {
+  count                  = var.private_nodes ? 1 : 0
+  source                 = "../../modules/nat-egress"
+  name                   = var.cluster_name
+  public_subnet_id       = local.public_subnet_ids[0]
+  private_route_table_id = data.terraform_remote_state.foundation.outputs.private_route_table_id
+  tags                   = local.tags
+}
+
 module "eks" {
   source              = "../../modules/eks"
   cluster_name        = var.cluster_name
   kubernetes_version  = var.kubernetes_version
-  subnet_ids          = data.terraform_remote_state.foundation.outputs.public_subnet_ids
+  subnet_ids          = local.cluster_subnet_ids
+  node_subnet_ids     = local.node_subnet_ids
   my_ip_cidr          = var.my_ip_cidr
   node_instance_types = var.node_instance_types
   node_desired_size   = var.node_desired_size
@@ -49,9 +69,7 @@ module "eks" {
 
 # ------------------------------- AWS Load Balancer Controller identity ---------
 # The controller's IAM policy is long and AWS revises it; fetch the upstream one
-# rather than pasting a copy that silently goes stale. An ephemeral cluster tracking
-# `main` is the right trade — production would pin the tag matching its chart
-# version and review the diff.
+# rather than pasting a copy that silently goes stale.
 data "http" "lbc_policy" {
   url = var.lbc_iam_policy_url
 }
@@ -75,9 +93,6 @@ module "lbc_irsa" {
 }
 
 # ------------------------------------------------ order-service identity (IRSA) -
-# Exactly one workload may touch the orders table, and it proves who it is with a
-# ServiceAccount token — not with a key, and not by inheriting the node's role
-# (which has no DynamoDB permission at all).
 data "aws_iam_policy_document" "order_dynamodb" {
   statement {
     sid    = "Dynamo"
