@@ -34,6 +34,15 @@ postgres:
   storage: 2Gi
   user: root
   password: root
+  # false where the database is external; the StatefulSet, its Service and the
+  # init ConfigMap stop rendering and `hosts` below points at the real one.
+  enabled: true
+  # Which host each service's database lives on. All three are the in-cluster
+  # Service by default; a target with an external database overrides them.
+  hosts:
+    payment: postgres
+    inventory: postgres
+    shared: postgres      # user, event, and Temporal's two databases
   # app databases created by the init ConfigMap (Temporal DBs are created by Temporal itself)
   databases:
     - ticketbottle_user
