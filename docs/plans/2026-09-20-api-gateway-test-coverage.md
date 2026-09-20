@@ -1,6 +1,6 @@
 # api-gateway Test Coverage Implementation Plan
 
-**Status:** not started.
+**Status:** Tasks 1-2 done. Tasks 3-4 open.
 
 **Goal:** Put the gateway's error contract and its refresh-token storage under test, and fix the two defects the tests expose.
 
@@ -59,7 +59,7 @@ The first thing under test is the mapping itself. It is currently **correct** �
 - Consumes: nothing.
 - Produces: `buildFilter()` in the spec, returning `{ filter, host, response, json, request }`. `host` is the `ArgumentsHost` every case passes to `filter.catch`; `response` has a chainable `status()` and a `json()` spy; `request` is the plain object the filter writes `TB_CODE` onto. Task 2 does **not** reuse it — it tests `grpcCodeOf` directly.
 
-- [ ] **Step 1: Teach jest the path aliases**
+- [x] **Step 1: Teach jest the path aliases**
 
 In `package.json`, inside the `jest` object, after `"rootDir": "src",`:
 
@@ -85,7 +85,7 @@ In `package.json`, inside the `jest` object, after `"rootDir": "src",`:
 
 `rootDir` is `src`, so targets are relative to `src/`. All 15 mirror `tsconfig.json`'s `paths`; a mapper that drifts from tsconfig fails only at test time.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `src/common/filters/global-exception.filter.spec.ts`:
 
@@ -142,7 +142,7 @@ describe('GlobalExceptionFilter', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it runs at all**
+- [x] **Step 3: Run the test to verify it runs at all**
 
 ```bash
 npm test
@@ -152,7 +152,7 @@ Expected: **9 passing.** This task pins behaviour that is already correct, so un
 
 A resolution error naming `@services/...` means Step 1's mapper is wrong.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add package.json src/common/filters/global-exception.filter.spec.ts
@@ -188,7 +188,7 @@ The two maps must live in one module for this to stay true. `code.ts` already ow
 - Consumes: nothing from Task 1.
 - Produces: `GRPC_TO_HTTP` exported from `@/shared/metrics/code`, typed `Partial<Record<GrpcStatus, HttpStatus>>`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/shared/metrics/code.spec.ts`:
 
@@ -209,6 +209,7 @@ describe('grpcCodeOf', () => {
     GrpcStatus.CANCELLED,
     GrpcStatus.UNKNOWN,
     GrpcStatus.DATA_LOSS,
+    GrpcStatus.OK,
   ])('labels an unmapped downstream code %i as INTERNAL', (code) => {
     expect(grpcCodeOf({ code })).toBe('INTERNAL');
   });
@@ -227,7 +228,7 @@ describe('grpcCodeOf', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -235,7 +236,7 @@ npm test
 
 Expected: the four `it.each` cases fail — `Expected: "INTERNAL", Received: "RESOURCE_EXHAUSTED"` and its siblings. The other three pass.
 
-- [ ] **Step 3: Move the map into `code.ts`**
+- [x] **Step 3: Move the map into `code.ts`**
 
 In `src/shared/metrics/code.ts`, add `HttpStatus` to the `@nestjs/common` import and insert above `HTTP_TO_GRPC`:
 
@@ -259,7 +260,7 @@ export const GRPC_TO_HTTP: Partial<Record<GrpcStatus, HttpStatus>> = {
 
 Copy the entries from the filter verbatim — the point is that one list now serves both directions, not that the list changes.
 
-- [ ] **Step 4: Make the label follow the status**
+- [x] **Step 4: Make the label follow the status**
 
 In the same file, change the numeric branch of `grpcCodeOf`:
 
@@ -272,19 +273,21 @@ In the same file, change the numeric branch of `grpcCodeOf`:
   }
 ```
 
-- [ ] **Step 5: Have the filter import the map**
+- [x] **Step 5: Have the filter import the map**
 
-In `src/common/filters/global-exception.filter.ts`, delete the local `GRPC_TO_HTTP` declaration (lines 13-25, including its comment, which now lives with the map) and add `GRPC_TO_HTTP` to the existing import from `@/shared/metrics/code`.
+In `src/common/filters/global-exception.filter.ts`, delete **lines 10-25** — the three-line rationale comment *and* the `GRPC_TO_HTTP` declaration it introduces — and add `GRPC_TO_HTTP` to the existing import from `@/shared/metrics/code`. Deleting only 13-25 orphans the comment above `interface GrpcError`. Step 3's snippet gives the map a fresh, shorter comment in its new home, so this is a rewrite rather than a move.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+Also repoint `HTTP_TO_GRPC`'s own comment: it reads "the inverse of `GRPC_TO_HTTP` in `filters/global-exception.filter.ts`", a file that no longer holds the map. It becomes "above", in the same commit.
+
+- [x] **Step 6: Run the tests to verify they pass**
 
 ```bash
 npm test
 ```
 
-Expected: **17 passing** across 2 suites — Task 1's 9 plus this task's 8. Task 1's cases must still pass: the filter's behaviour is unchanged, only where the table lives.
+Expected: **18 passing** across 2 suites — Task 1's 9 plus this task's 9. Task 1's cases must still pass: the filter's behaviour is unchanged, only where the table lives.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/shared/metrics/code.ts src/shared/metrics/code.spec.ts src/common/filters/global-exception.filter.ts
@@ -448,7 +451,7 @@ Add a second case to the spec proving it, before you change the code:
 npm test
 ```
 
-Expected: **19 passing** across 3 suites.
+Expected: **20 passing** across 3 suites.
 
 - [ ] **Step 6: Commit**
 
@@ -511,7 +514,7 @@ cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projec
   && cd r/services/api-gateway && npm ci && npm test
 ```
 
-Expected: **19 passed**. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`.
+Expected: **20 passed**. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`.
 
 - [ ] **Step 3: Commit**
 
@@ -527,7 +530,7 @@ store in the platform, and neither was covered by anything that runs on a push."
 
 ## Done when
 
-- [ ] `npm test` in `services/api-gateway` reports 19 passing tests across 3 suites.
+- [ ] `npm test` in `services/api-gateway` reports 20 passing tests across 3 suites.
 - [ ] The same passes from a clean `npm ci` in a fresh clone.
 - [ ] `ts-tests` is green on `dev` for both jobs.
 - [ ] No test requires Redis, a database or the network.
