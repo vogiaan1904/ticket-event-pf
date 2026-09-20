@@ -28,7 +28,7 @@ spec:
           env:
             - { name: DB, value: postgres12 }
             - { name: DB_PORT, value: "5432" }
-            - { name: POSTGRES_SEEDS, value: postgres }
+            - { name: POSTGRES_SEEDS, value: {{ .Values.postgres.hosts.shared }} }
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }
             - name: POSTGRES_PWD
               valueFrom:
