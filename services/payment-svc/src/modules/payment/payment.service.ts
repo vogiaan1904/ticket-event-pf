@@ -144,7 +144,16 @@ export class PaymentService {
     dto.transactionId = transactionId;
     dto.paymentUrl = url;
 
-    await this.repo.create(dto);
+    try {
+      await this.repo.create(dto);
+    } catch (error) {
+      // P2002 = the unique idempotencyKey is taken, so a concurrent request won.
+      // Its URL is the one the buyer must be sent to; ours is now orphaned.
+      if ((error as { code?: string }).code !== 'P2002') throw error;
+      const winner = await this.repo.findByIdempotencyKey(dto.idempotencyKey);
+      if (winner) return winner.paymentUrl;
+      throw error;
+    }
 
     return url;
   }

@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { PrismaService } from '@/infra/database/prisma/prisma.service';
 import { OutboxService } from '@/modules/outbox/outbox.service';
 import { LoggerService } from '@/shared/services/logger.service';
+import { PaymentProvider } from './enums/provider.enum';
 import { PaymentGatewayFactory } from './gateways/gateway.factory';
 import { PaymentService } from './payment.service';
 import { PaymentRepository } from './repository/payment.repository';
@@ -84,6 +85,35 @@ describe('PaymentService', () => {
       await service.handleCallback('zalopay' as any, {});
 
       expect(outbox.savePaymentCompletedEvent).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('createPaymentIntent', () => {
+    it("returns the winner's url when the idempotency key is already taken", async () => {
+      const { service, repo, gateway } = await buildService();
+      repo.findByIdempotencyKey
+        .mockResolvedValueOnce(null) // the pre-check misses
+        .mockResolvedValueOnce({ paymentUrl: 'https://pay/winner' }); // the re-read after P2002
+      gateway.createPaymentLink.mockResolvedValue({
+        url: 'https://pay/loser',
+        transactionId: 'tx-loser',
+      });
+      // Prisma's unique-constraint violation.
+      repo.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
+
+      const url = await service.createPaymentIntent({
+        idempotencyKey: 'idem-1',
+        provider: PaymentProvider.ZALOPAY,
+        amountCents: 1000,
+        orderCode: 'ORD-1',
+        currency: 'VND',
+        redirectUrl: 'r',
+        timeoutSeconds: 60,
+        transactionId: '',
+        paymentUrl: '',
+      });
+
+      expect(url).toBe('https://pay/winner');
     });
   });
 });
