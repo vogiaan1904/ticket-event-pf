@@ -57,7 +57,7 @@ The first thing under test is the mapping itself. It is currently **correct** �
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: `buildFilter()` in the spec, returning `{ filter, response, request }` where `response` is a mock with chainable `status()` and a `json()` spy, and `request` is a plain object the filter writes `TB_CODE` onto. Task 2 does **not** reuse it — it tests `grpcCodeOf` directly.
+- Produces: `buildFilter()` in the spec, returning `{ filter, host, response, json, request }`. `host` is the `ArgumentsHost` every case passes to `filter.catch`; `response` has a chainable `status()` and a `json()` spy; `request` is the plain object the filter writes `TB_CODE` onto. Task 2 does **not** reuse it — it tests `grpcCodeOf` directly.
 
 - [ ] **Step 1: Teach jest the path aliases**
 
@@ -174,6 +174,8 @@ src/ can resolve an import."
 `grpcCodeOf` labels every failed request for `tb_grpc_requests_total`, and its own comment calls it "the inverse of `GRPC_TO_HTTP`". It is not. For a downstream numeric code it returns `GrpcStatus[code]` unconditionally, while the filter answers **500** for any code absent from `GRPC_TO_HTTP`.
 
 So a downstream `RESOURCE_EXHAUSTED`, `CANCELLED`, `UNKNOWN`, `DATA_LOSS` or `OK` produces an HTTP 500 — which by the taxonomy means *we have a bug* — labelled with a code that is not `INTERNAL`. The alert is `sum(tb:grpc_requests:rate5m{code="INTERNAL"}) > 0` (`deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml:39`), so **the page never fires for a 500 we served.**
+
+**The map is the right test, not the taxonomy.** `GRPC_TO_HTTP` carries 11 entries while the taxonomy names 9 codes — `OUT_OF_RANGE`, `ABORTED` and `UNIMPLEMENTED` are mapped without appearing in the binding table. Those three keep their own label, and correctly so: the filter gives each a non-500 status, so none of them is a fault we must answer for. The rule is "did the filter map it", never "is it in the taxonomy".
 
 The two maps must live in one module for this to stay true. `code.ts` already owns `HTTP_TO_GRPC` and the filter already imports from it, so `GRPC_TO_HTTP` moves there and the filter imports it — the dependency direction is unchanged and no cycle appears.
 
