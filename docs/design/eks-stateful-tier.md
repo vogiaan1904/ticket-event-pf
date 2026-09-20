@@ -166,7 +166,7 @@ the rest slips.
 
 | # | Phase | Done when |
 |---|---|---|
-| a | Chart toggles + values | `values-local` and `values-k3s` render byte-identical; the purchase-flow gate green on the k3s box (kind is retired here) |
+| a | Chart toggles + values | **DONE 2026-09-20** — overlays render byte-identical, every DSN served from a Secret, purchase-flow gate green on k3s revision 27 |
 | a2 | Private subnets + `private_nodes` toggle | **DONE 2026-09-19** — Gate 3a green with `private_nodes = true`, nodes on `10.0.11.44` / `10.0.12.233` |
 | b | `modules/rds` ×3 in the private subnets **— DEFERRED** | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
 | c | Secrets Manager + CSI + per-service IRSA **— DEFERRED** | No password in any ConfigMap or values file, on every target |
