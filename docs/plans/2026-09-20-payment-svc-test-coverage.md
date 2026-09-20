@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** not started.
+**Status: COMPLETE 2026-09-20.** All seven tasks done; the checkboxes are a record, not open work.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -25,6 +25,8 @@ Out of scope, deliberately:
 - **Comment budget** (root `CLAUDE.md`): 3 lines inline, 5 on a symbol, 8 for a file header. No paragraphs.
 - **Commit messages describe the platform.** No mention of plans, phases or task numbers.
 - **Tests must run with no infrastructure.** No database, no Kafka, no network. If a test needs any of those, it belongs in `lambdas/`, not here.
+- **Prettier is an eslint error here** (`plugin:prettier/recommended`, `printWidth: 100`). The snippets below are not pre-formatted; reflow as you paste and verify with `npx prettier --check <files>`.
+- **ts-jest type-checks.** A type error fails the entire suite, not one test.
 - Run every command from `services/payment-svc/`.
 
 ## File Structure
@@ -58,7 +60,7 @@ The first behaviour under test is a taxonomy violation. `findByIdempotencyKey` t
 - Produces: `src/modules/payment/payment.service.spec.ts` exporting nothing, but defining the `buildService()` helper that Tasks 2–4 reuse. Its shape:
   `buildService(): Promise<{ service: PaymentService; repo; outbox; prisma; tx; gateway }>` where `repo`, `outbox`, `gateway` are objects of `jest.fn()`, `prisma.$transaction` invokes its callback with `tx`, and `tx.payment` carries `update`, `updateMany` and `findUnique`.
 
-- [ ] **Step 1: Teach jest the path aliases**
+- [x] **Step 1: Teach jest the path aliases**
 
 In `package.json`, inside the `jest` object, after `"rootDir": "src",` add:
 
@@ -76,7 +78,7 @@ In `package.json`, inside the `jest` object, after `"rootDir": "src",` add:
 
 `rootDir` is `src`, so every target is relative to `src/` — that is why `@/` maps to `<rootDir>/` and not `<rootDir>/src/`. The seven aliases mirror `tsconfig.json`'s `paths` exactly; a mapping that drifts from tsconfig fails only at test time, which is the confusing way to find out.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `src/modules/payment/payment.service.spec.ts`:
 
@@ -143,7 +145,7 @@ describe('PaymentService', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -151,7 +153,7 @@ npm test
 
 Expected: one failing test, `Received: {"code": 7, ...}` against `"code": 5`. gRPC 7 is `PERMISSION_DENIED`, 5 is `NOT_FOUND`. A resolution error naming `@/infra/...` instead means Step 1's mapper is wrong.
 
-- [ ] **Step 4: Fix the code**
+- [x] **Step 4: Fix the code**
 
 In `src/modules/payment/payment.service.ts:149`, change:
 
@@ -165,7 +167,7 @@ to:
     if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PaymentNotFound);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -173,7 +175,7 @@ npm test
 
 Expected: `Tests: 1 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add package.json src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
@@ -203,7 +205,7 @@ The lambda path already gets this right: `lambdas/payment-webhook-handler/__test
 - Consumes: `buildService()` from Task 1.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe('PaymentService', ...)` in `payment.service.spec.ts`:
 
@@ -229,7 +231,7 @@ Append inside the top-level `describe('PaymentService', ...)` in `payment.servic
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -237,7 +239,7 @@ npm test
 
 Expected: `Expected number of calls: 1, Received number of calls: 2`. The current code never calls `updateMany`, so both passes reach the outbox.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.service.ts:26-48` with:
 
@@ -260,7 +262,7 @@ Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.servi
       });
       if (claimed.count === 0) return;
 
-      const payment = await tx.payment.findUnique({
+      const payment = await tx.payment.findUniqueOrThrow({
         where: { orderCode: existingPayment.orderCode },
       });
       await this.outboxService.savePaymentCompletedEvent(payment, tx);
@@ -274,7 +276,11 @@ Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.servi
 
 `updateMany` is what makes this atomic: it applies the `status` predicate inside the same statement that writes, so two concurrent callbacks cannot both see `PENDING`. `update` takes a unique `where` and cannot carry a status guard.
 
-- [ ] **Step 4: Run the test to verify it passes**
+`findUniqueOrThrow`, not `findUnique`: the latter returns `Payment | null` and `savePaymentCompletedEvent` takes a non-nullable `PaymentEntity`, so ts-jest fails the whole suite on a type error. The row is guaranteed to exist — the `updateMany` just matched it in this transaction — and a throw rolls the transaction back, keeping the status write and the outbox write atomic. The re-read is not redundant: the event's `completed_at` comes from `payment.completedAt`, which only the post-update row carries.
+
+Add `findUniqueOrThrow: jest.fn()` to the `tx.payment` mock in `buildService()`.
+
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -282,7 +288,7 @@ npm test
 
 Expected: `Tests: 2 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
@@ -298,7 +304,7 @@ same compare-and-set the webhook lambda already uses."
 
 ### Task 3: The mapper silently drops `paymentUrl`
 
-`toPaymentEntity` assigns 13 of `PaymentEntity`'s 17 fields. `paymentUrl`, `redirectUrl` and `cancelledAt` are never assigned, so they are `undefined` on every entity the repository returns — and `PaymentEntity implements Payment` makes TypeScript believe otherwise.
+`toPaymentEntity` assigns 13 of `PaymentEntity`'s 16 fields. `paymentUrl`, `redirectUrl` and `cancelledAt` are never assigned, so they are `undefined` on every entity the repository returns — and `PaymentEntity implements Payment` makes TypeScript believe otherwise.
 
 This is live, not latent. `createPaymentIntent:126` returns `existing.paymentUrl` on an idempotency-key hit, so **every repeat request for a key already in the database answers `undefined` instead of a payment url.** Task 4 depends on this being fixed: its whole fix is returning the winner's `paymentUrl`.
 
@@ -310,7 +316,7 @@ This is live, not latent. `createPaymentIntent:126` returns `existing.paymentUrl
 - Consumes: nothing.
 - Produces: `toPaymentEntity` populating `paymentUrl`, `redirectUrl` and `cancelledAt`. Task 4 relies on `paymentUrl`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/modules/payment/repository/payment.repository.spec.ts`:
 
@@ -348,7 +354,7 @@ describe('PaymentRepository', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -356,7 +362,7 @@ npm test
 
 Expected: `Expected: "https://pay/1", Received: undefined`.
 
-- [ ] **Step 3: Fix the mapper**
+- [x] **Step 3: Fix the mapper**
 
 In `src/modules/payment/repository/payment.mapper.ts`, add the three missing assignments after `entity.status`:
 
@@ -371,7 +377,7 @@ and after `entity.failedAt`:
   entity.cancelledAt = prismaPayment.cancelledAt;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -379,13 +385,13 @@ npm test
 
 Expected: `Tests: 3 passed`, across 2 suites.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/repository/payment.repository.spec.ts src/modules/payment/repository/payment.mapper.ts
 git commit -m "fix(payment): carry the payment url out of the mapper
 
-toPaymentEntity assigned 13 of the entity's 17 fields and left paymentUrl,
+toPaymentEntity assigned 13 of the entity's 16 fields and left paymentUrl,
 redirectUrl and cancelledAt undefined, while 'implements Payment' told the
 compiler they were populated. A repeat request for an idempotency key already
 in the database therefore answered undefined instead of the url to pay at."
@@ -407,7 +413,7 @@ The insert is the only real arbiter, because the database holds the unique const
 - Consumes: `buildService()` from Task 1.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe`:
 
@@ -425,16 +431,25 @@ Append inside the top-level `describe`:
       repo.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
 
       const url = await service.createPaymentIntent({
-        idempotencyKey: 'idem-1', provider: 'zalopay', amountCents: 1000,
-        orderCode: 'ORD-1', currency: 'VND', redirectUrl: 'r', timeoutSeconds: 60,
-      } as any);
+        idempotencyKey: 'idem-1',
+        provider: PaymentProvider.ZALOPAY,
+        amountCents: 1000,
+        orderCode: 'ORD-1',
+        currency: 'VND',
+        redirectUrl: 'r',
+        timeoutSeconds: 60,
+        transactionId: '',
+        paymentUrl: '',
+      });
 
       expect(url).toBe('https://pay/winner');
     });
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+Import `PaymentProvider` from `./enums/provider.enum` at the top of the spec. **Do not cast the DTO `as any`:** the cast hides that `'zalopay'` is not a `PaymentProvider` member (`ZALOPAY | PAYOS | VNPAY`) and that `transactionId` and `paymentUrl` are required. A real caller passes both empty — `createPaymentIntent` assigns them itself at lines 144-145. An `as any` on a DTO is the same hole as the `implements Payment` that let the Task 3 mapper bug survive.
+
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -442,7 +457,7 @@ npm test
 
 Expected: the test rejects with `unique` — the P2002 propagates, because nothing catches it.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 In `src/modules/payment/payment.service.ts`, replace `await this.repo.create(dto);` and the `return url;` that follows it with:
 
@@ -461,9 +476,11 @@ In `src/modules/payment/payment.service.ts`, replace `await this.repo.create(dto
     return url;
 ```
 
+`(error as { code?: string }).code` is the right access: `PrismaClientKnownRequestError` declares `code: string` as a plain own property (verified against `@prisma/client` 6.17.0), `PaymentRepository.create` does not wrap, and `PrismaService` adds no `$extends`, `$use` or `errorFormat`. It is duck-typed rather than an `instanceof` narrow, which keeps the test free of Prisma's runtime error class.
+
 **Known residual, deliberately not fixed here:** both requests still call the provider, so a second payment link exists at the gateway even though only one is persisted. Closing that needs the row reserved before the gateway call, which changes the schema (`paymentUrl` must become nullable) and belongs in its own change.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -471,7 +488,7 @@ npm test
 
 Expected: `Tests: 4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
@@ -487,7 +504,9 @@ is the one the buyer must be sent to."
 
 ### Task 5: A callback with no transaction id must fail loudly
 
-`handleCallback` logs an error when the gateway returns no `providerTransactionId`, then falls through and returns `output.response` — the provider is told the callback succeeded while nothing was recorded. A malformed callback is a malformed request: `INVALID_ARGUMENT`, per the taxonomy.
+`handleCallback` logs an error when the gateway returns no `providerTransactionId`, then falls through and returns `output.response` — answering as if the callback succeeded while nothing was recorded. A malformed callback is a malformed request: `INVALID_ARGUMENT`, per the taxonomy.
+
+**This path is latent, like Task 6's.** `PaymentService.handleCallback` has no caller: the HTTP controller at `controllers/http/payment.controller.ts` is an empty shell and the live provider callback is served by `lambdas/payment-webhook-handler`. Worth fixing because the method stays reachable by anything that wires it up again — but it is not costing money today.
 
 **Files:**
 - Modify: `src/shared/constants/error-code.constant.ts`
@@ -496,9 +515,9 @@ is the one the buyer must be sent to."
 
 **Interfaces:**
 - Consumes: `buildService()` from Task 1.
-- Produces: `ErrorCodeEnum.InvalidCallback`, mapped to `['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT]`.
+- Produces: `ErrorCodeEnum.InvalidCallback = 20001`, mapped to `['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe`:
 
@@ -518,7 +537,7 @@ Append inside the top-level `describe`:
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -526,13 +545,15 @@ npm test
 
 Expected: `err.getError is not a function` — nothing is thrown, so `err` is the returned response object.
 
-- [ ] **Step 3: Add the error code**
+- [x] **Step 3: Add the error code**
 
 In `src/shared/constants/error-code.constant.ts`, add to the enum:
 
 ```ts
-  InvalidCallback = 20400,
+  InvalidCallback = 20001,
 ```
+
+Not `20400`. The house scheme is per-entity blocks numbered sequentially from `…000` — `event-svc` has `EventNotFound = 20000`, `EventConfigNotFound = 20001`, `OrganizerNotFound = 21000`. `PermissionDenied = 20403` is a one-off inherited from the auth prefix, not a "base + HTTP status" rule, which `PaymentNotFound = 20000` (HTTP 404) already contradicts. The number is caller-visible: `RpcBusinessException` formats the message as `` `${code} - ${message}` ``.
 
 and to the `ErrorCode` map:
 
@@ -540,7 +561,7 @@ and to the `ErrorCode` map:
   [ErrorCodeEnum.InvalidCallback]: ['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT],
 ```
 
-- [ ] **Step 4: Fix the code**
+- [x] **Step 4: Fix the code**
 
 In `src/modules/payment/payment.service.ts`, replace the `if (!output.providerTransactionId)` branch with:
 
@@ -553,7 +574,7 @@ In `src/modules/payment/payment.service.ts`, replace the `if (!output.providerTr
 
 and drop the now-dead `else` on the following branch, leaving `if (output.success) { … } else { … }`.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -561,7 +582,7 @@ npm test
 
 Expected: `Tests: 5 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/shared/constants/error-code.constant.ts src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
@@ -583,10 +604,10 @@ It is a malformed request and now answers INVALID_ARGUMENT."
 - Modify: `src/modules/payment/repository/payment.repository.ts:12-27`
 
 **Interfaces:**
-- Consumes: nothing.
+- Consumes: the `row` fixture and `buildRepo()` helper from Task 3, in the spec file Task 3 created. Append a second `it(...)` to its existing `describe`; do not create a second spec file and do not redefine either helper.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append a second case inside the existing `describe('PaymentRepository', ...)` in `src/modules/payment/repository/payment.repository.spec.ts`. It reuses the `row` fixture and `buildRepo` helper Task 3 created:
 
@@ -595,14 +616,22 @@ Append a second case inside the existing `describe('PaymentRepository', ...)` in
     const repo = await buildRepo({ payment: { create: jest.fn().mockResolvedValue(row) } });
 
     const created = await repo.create({
-      idempotencyKey: 'idem-1', orderCode: 'ORD-1',
-    } as any);
+      idempotencyKey: 'idem-1',
+      orderCode: 'ORD-1',
+      amountCents: 1000,
+      currency: 'VND',
+      provider: PaymentProvider.ZALOPAY,
+      redirectUrl: 'r',
+      timeoutSeconds: 60,
+      transactionId: 'tx-1',
+      paymentUrl: 'https://pay/1',
+    });
 
     expect(created.orderCode).toBe('ORD-1');
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -610,7 +639,7 @@ npm test
 
 Expected: `Expected: "ORD-1", Received: undefined`.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 In `src/modules/payment/repository/payment.repository.ts`, change `create` to keep and map the row:
 
@@ -633,7 +662,7 @@ In `src/modules/payment/repository/payment.repository.ts`, change `create` to ke
   }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -641,7 +670,7 @@ npm test
 
 Expected: `Tests: 6 passed`, across 2 suites.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/repository/payment.repository.spec.ts src/modules/payment/repository/payment.repository.ts
@@ -664,10 +693,10 @@ Scope this to `payment-svc` only. Adding the other three services now would wire
 - Create: `.github/workflows/ts-tests.yml`
 
 **Interfaces:**
-- Consumes: the spec files from Tasks 1–5.
+- Consumes: the spec files from Tasks 1–6.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 Create `.github/workflows/ts-tests.yml` **at the repository root** (not in the service directory):
 
@@ -701,7 +730,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Matches the service Dockerfiles; @types/node is 22, the runtime is not.
+          node-version: "20"
 
       - run: npm ci
 
@@ -711,20 +741,22 @@ jobs:
       - run: npm test
 ```
 
-`prisma generate` is not optional: `payment.service.ts` imports `PaymentStatus` from `@prisma/client`, which does not exist in a fresh `node_modules` until the client is generated from `prisma/schema.prisma`.
+The client is required — deleting `node_modules/.prisma` fails both suites at `prisma.service.ts:8` — but `npm ci` already produces it, because `@prisma/client` generates it in its own `postinstall`. The explicit step is therefore redundant today and kept deliberately: it states the dependency instead of resting on a transitive package's install hook, which disappears the moment anyone adds `--ignore-scripts`.
 
-- [ ] **Step 2: Verify the whole suite passes from a clean install**
+`node-version` is `20` to match every service Dockerfile (`node:20-alpine`). There is no `engines` field or `.nvmrc` in the repo, and `@types/node` is `^22`, so the service type-checks against a Node major it never runs on — CI should test the one that ships.
 
-Reproduce what the runner does, in a scratch copy so the working tree is untouched:
+- [x] **Step 2: Verify the whole suite passes from a clean install**
+
+Reproduce what the runner does, in a scratch copy so the working tree is untouched. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`, so the check would silently test whatever branch happens to be checked out.
 
 ```bash
-cd "$(mktemp -d)" && git clone --depth 1 file://$HOME/coding/projects/TicketEventPF r \
+cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projects/TicketEventPF r \
   && cd r/services/payment-svc && npm ci && npx prisma generate && npm test
 ```
 
 Expected: `Tests: 6 passed`. A failure here is a failure CI will hit; fix it before pushing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/ts-tests.yml
@@ -736,7 +768,7 @@ enough. Scoped to payment-svc: the other three services have no tests yet, and
 a green check over an empty suite asserts nothing."
 ```
 
-- [ ] **Step 4: Push and confirm the run is green**
+- [x] **Step 4: Push and confirm the run is green**
 
 ```bash
 git push origin dev
@@ -749,11 +781,11 @@ Expected: `ts-tests` completed / success.
 
 ## Done when
 
-- [ ] `npm test` in `services/payment-svc` reports 6 passing tests across 2 suites.
-- [ ] The same passes from a clean `npm ci` in a fresh clone.
+- [x] `npm test` in `services/payment-svc` reports 6 passing tests across 2 suites.
+- [x] The same passes from a clean `npm ci` in a fresh clone.
 - [ ] `ts-tests` is green on `dev`.
-- [ ] No test requires a database, a broker or the network.
-- [ ] No `INTERNAL` is reachable from a business outcome in the paths touched.
+- [x] No test requires a database, a broker or the network.
+- [x] No `INTERNAL` is reachable from a business outcome in the paths touched.
 
 ## Not in this plan
 

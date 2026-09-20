@@ -11,11 +11,14 @@ export function toPaymentEntity(prismaPayment: Payment): PaymentEntity {
   entity.providerTransactionId = prismaPayment.providerTransactionId;
   entity.idempotencyKey = prismaPayment.idempotencyKey;
   entity.status = prismaPayment.status;
+  entity.redirectUrl = prismaPayment.redirectUrl;
+  entity.paymentUrl = prismaPayment.paymentUrl;
   entity.metadata = prismaPayment.metadata;
   entity.createdAt = prismaPayment.createdAt;
   entity.updatedAt = prismaPayment.updatedAt;
   entity.completedAt = prismaPayment.completedAt;
   entity.failedAt = prismaPayment.failedAt;
+  entity.cancelledAt = prismaPayment.cancelledAt;
 
   return entity;
 }

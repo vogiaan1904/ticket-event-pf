@@ -26,7 +26,6 @@ export class PaymentService {
   private async handleSuccessPayment(providerTransactionId: string): Promise<void> {
     const now = new Date();
 
-    // Find payment by providerTransactionId first
     const existingPayment = await this.repo.findByProviderTransactionId(providerTransactionId);
     if (!existingPayment) {
       this.logger.error(`Payment not found for providerTransactionId: ${providerTransactionId}`);
@@ -34,11 +33,17 @@ export class PaymentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.update({
-        where: { orderCode: existingPayment.orderCode },
+      // Compare-and-set: only a PENDING payment may complete. Providers retry
+      // callbacks, and a second COMPLETED write would publish a second event.
+      const claimed = await tx.payment.updateMany({
+        where: { orderCode: existingPayment.orderCode, status: PaymentStatus.PENDING },
         data: { status: PaymentStatus.COMPLETED, completedAt: now },
       });
+      if (claimed.count === 0) return;
 
+      const payment = await tx.payment.findUniqueOrThrow({
+        where: { orderCode: existingPayment.orderCode },
+      });
       await this.outboxService.savePaymentCompletedEvent(payment, tx);
     });
 
@@ -139,14 +144,23 @@ export class PaymentService {
     dto.transactionId = transactionId;
     dto.paymentUrl = url;
 
-    await this.repo.create(dto);
+    try {
+      await this.repo.create(dto);
+    } catch (error) {
+      // P2002 = the unique idempotencyKey is taken, so a concurrent request won.
+      // Its URL is the one the buyer must be sent to; ours is now orphaned.
+      if ((error as { code?: string }).code !== 'P2002') throw error;
+      const winner = await this.repo.findByIdempotencyKey(dto.idempotencyKey);
+      if (winner) return winner.paymentUrl;
+      throw error;
+    }
 
     return url;
   }
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PaymentEntity> {
     const payment = await this.repo.findByIdempotencyKey(idempotencyKey);
-    if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
+    if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PaymentNotFound);
 
     return payment;
   }
@@ -158,7 +172,10 @@ export class PaymentService {
 
     if (!output.providerTransactionId) {
       this.logger.error('Callback handling failed - missing providerTransactionId');
-    } else if (output.success) {
+      throw new RpcBusinessException(ErrorCodeEnum.InvalidCallback);
+    }
+
+    if (output.success) {
       await this.handleSuccessPayment(output.providerTransactionId);
     } else {
       await this.handleFailedPayment(output.providerTransactionId, 'Callback indicated failure');
