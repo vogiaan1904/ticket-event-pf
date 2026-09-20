@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** not started.
+**Status:** Task 1 done. Tasks 2-7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -58,7 +58,7 @@ The first behaviour under test is a taxonomy violation. `findByIdempotencyKey` t
 - Produces: `src/modules/payment/payment.service.spec.ts` exporting nothing, but defining the `buildService()` helper that Tasks 2–4 reuse. Its shape:
   `buildService(): Promise<{ service: PaymentService; repo; outbox; prisma; tx; gateway }>` where `repo`, `outbox`, `gateway` are objects of `jest.fn()`, `prisma.$transaction` invokes its callback with `tx`, and `tx.payment` carries `update`, `updateMany` and `findUnique`.
 
-- [ ] **Step 1: Teach jest the path aliases**
+- [x] **Step 1: Teach jest the path aliases**
 
 In `package.json`, inside the `jest` object, after `"rootDir": "src",` add:
 
@@ -76,7 +76,7 @@ In `package.json`, inside the `jest` object, after `"rootDir": "src",` add:
 
 `rootDir` is `src`, so every target is relative to `src/` — that is why `@/` maps to `<rootDir>/` and not `<rootDir>/src/`. The seven aliases mirror `tsconfig.json`'s `paths` exactly; a mapping that drifts from tsconfig fails only at test time, which is the confusing way to find out.
 
-- [ ] **Step 2: Write the failing test**
+- [x] **Step 2: Write the failing test**
 
 Create `src/modules/payment/payment.service.spec.ts`:
 
@@ -143,7 +143,7 @@ describe('PaymentService', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [x] **Step 3: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -151,7 +151,7 @@ npm test
 
 Expected: one failing test, `Received: {"code": 7, ...}` against `"code": 5`. gRPC 7 is `PERMISSION_DENIED`, 5 is `NOT_FOUND`. A resolution error naming `@/infra/...` instead means Step 1's mapper is wrong.
 
-- [ ] **Step 4: Fix the code**
+- [x] **Step 4: Fix the code**
 
 In `src/modules/payment/payment.service.ts:149`, change:
 
@@ -165,7 +165,7 @@ to:
     if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PaymentNotFound);
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -173,7 +173,7 @@ npm test
 
 Expected: `Tests: 1 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add package.json src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
