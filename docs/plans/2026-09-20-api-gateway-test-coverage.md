@@ -1,6 +1,6 @@
 # api-gateway Test Coverage Implementation Plan
 
-**Status:** Tasks 1-2 done. Tasks 3-4 open.
+**Status:** Tasks 1-3 done. Task 4 open.
 
 **Goal:** Put the gateway's error contract and its refresh-token storage under test, and fix the two defects the tests expose.
 
@@ -320,7 +320,7 @@ The class already has `hashData` (argon2), used for passwords. Argon2 is salted 
 - Consumes: nothing from Tasks 1-2.
 - Produces: nothing other tasks read.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/modules/auth/auth.service.spec.ts`. Build the service by direct construction rather than `Test.createTestingModule`, because its constructor takes a `ClientGrpc` whose `getService` is called in `onModuleInit` — read the constructor and `onModuleInit` first and mock exactly what they touch:
 
@@ -338,9 +338,14 @@ function buildService() {
     expire: (...a: unknown[]) => (calls.push(['expire', a]), multi),
     del: (...a: unknown[]) => (calls.push(['del', a]), multi),
     srem: (...a: unknown[]) => (calls.push(['srem', a]), multi),
+    incr: (...a: unknown[]) => (calls.push(['incr', a]), multi),
     exec: async () => [],
   };
-  const redis = { get: jest.fn().mockResolvedValue(null), multi: () => multi };
+  const redis = {
+    get: jest.fn().mockResolvedValue(null),
+    smembers: jest.fn().mockResolvedValue([]),
+    multi: () => multi,
+  };
   const jwt = { sign: jest.fn().mockReturnValue('access-token') } as unknown as JwtService;
   const config = {
     appConfig: {
@@ -372,7 +377,7 @@ describe('AuthService', () => {
 
 If the constructor or `onModuleInit` needs more than this, extend the mocks — do not change the assertion.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -380,7 +385,7 @@ npm test
 
 Expected: fails on `expect(written).not.toContain(refreshToken)` — the raw token appears in both the `setex` key and the `sadd` member.
 
-- [ ] **Step 3: Index by digest**
+- [x] **Step 3: Index by digest**
 
 In `src/modules/auth/auth.service.ts`, add `createHash` to the `crypto` import and a private helper beside `generateSecureToken`:
 
@@ -392,11 +397,17 @@ In `src/modules/auth/auth.service.ts`, add `createHash` to the `crypto` import a
   }
 ```
 
-Change `getRefreshTokenKey` to hash what it is given:
+Change `getRefreshTokenKey` to hash what it is given, with the prefix in one place — Step 4 needs to build the same key from a digest it already has:
 
 ```ts
+  // Two entry points: a raw token from a caller, a digest read back from the
+  // user's set. One place spells the prefix.
+  private refreshKeyOf(digest: string): string {
+    return `refresh_token:${digest}`;
+  }
+
   private getRefreshTokenKey(token: string): string {
-    return `refresh_token:${this.digest(token)}`;
+    return this.refreshKeyOf(this.digest(token));
   }
 ```
 
@@ -414,7 +425,9 @@ and in `invalidateRefreshToken`:
 
 Every caller already passes the raw token through `getRefreshTokenKey`, so no call site changes.
 
-- [ ] **Step 4: Stop `invalidateAllUserTokens` double-hashing**
+`changePassword` needs no edit of its own but is the worst instance of the Step 4 bug: it delegates to `invalidateAllUserTokens`, so a user changing a password *because it was compromised* would have kept every stolen session alive.
+
+- [x] **Step 4: Stop `invalidateAllUserTokens` double-hashing**
 
 `invalidateAllUserTokens:212` calls `this.getRefreshTokenKey(token)` on members read back from the `user_tokens:` set. After Step 3 those members are already digests, so that call hashes a digest and deletes a key that was never written — **a signed-out user would keep every working session.** This is not a check; it is a required part of the change.
 
@@ -423,7 +436,7 @@ Replace the loop body:
 ```ts
       // Members are already digests, so build the key rather than hashing again.
       refreshTokens.forEach((digest) => {
-        multi.del(`refresh_token:${digest}`);
+        multi.del(this.refreshKeyOf(digest));
       });
 ```
 
@@ -445,7 +458,9 @@ Add a second case to the spec proving it, before you change the code:
 
 `buildService()` must return `redis` for this — add it to the returned object in Step 1.
 
-- [ ] **Step 5: Run the test to verify it passes**
+Two fixture details this depends on, both of which fail the suite if missed. `smembers` must be **declared** in the `redis` literal, not assigned onto it later: ts-jest type-checks, so assigning an undeclared property is TS2339 and kills every suite. And `multi` needs `incr`, because `invalidateAllUserTokens` calls it after the deletes — without it the case throws `multi.incr is not a function` and goes red whether or not the double-hash bug exists, which is worthless as proof.
+
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -453,7 +468,7 @@ npm test
 
 Expected: **20 passing** across 3 suites.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/modules/auth/auth.service.ts src/modules/auth/auth.service.spec.ts
@@ -542,3 +557,4 @@ store in the platform, and neither was covered by anything that runs on a push."
 - **Refresh-token rotation.** `refreshAccessToken` returns the same refresh token, so a stolen one stays valid for its whole sliding window with no reuse detection. That is a design change, not a fix.
 - The gateway's controllers and guards. They are thin; the filter and the auth service are where the contracts live.
 - Fixing `npm run lint` across the four services (ESLint 9 vs `.eslintrc.js`).
+- Clearing stale `user_tokens:<id>` sets at deploy. They hold raw tokens written by the old code whose `refresh_token:` keys no longer resolve, and nothing can `srem` them because nothing hashes to them. They age out on `jwtRefreshExpiration`; a `user_tokens:*` flush at deploy closes the window immediately.
