@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Tasks 1-2 done. Tasks 3-7 open.
+**Status:** Tasks 1-3 done. Tasks 4-7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -304,7 +304,7 @@ same compare-and-set the webhook lambda already uses."
 
 ### Task 3: The mapper silently drops `paymentUrl`
 
-`toPaymentEntity` assigns 13 of `PaymentEntity`'s 17 fields. `paymentUrl`, `redirectUrl` and `cancelledAt` are never assigned, so they are `undefined` on every entity the repository returns — and `PaymentEntity implements Payment` makes TypeScript believe otherwise.
+`toPaymentEntity` assigns 13 of `PaymentEntity`'s 16 fields. `paymentUrl`, `redirectUrl` and `cancelledAt` are never assigned, so they are `undefined` on every entity the repository returns — and `PaymentEntity implements Payment` makes TypeScript believe otherwise.
 
 This is live, not latent. `createPaymentIntent:126` returns `existing.paymentUrl` on an idempotency-key hit, so **every repeat request for a key already in the database answers `undefined` instead of a payment url.** Task 4 depends on this being fixed: its whole fix is returning the winner's `paymentUrl`.
 
@@ -316,7 +316,7 @@ This is live, not latent. `createPaymentIntent:126` returns `existing.paymentUrl
 - Consumes: nothing.
 - Produces: `toPaymentEntity` populating `paymentUrl`, `redirectUrl` and `cancelledAt`. Task 4 relies on `paymentUrl`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `src/modules/payment/repository/payment.repository.spec.ts`:
 
@@ -354,7 +354,7 @@ describe('PaymentRepository', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -362,7 +362,7 @@ npm test
 
 Expected: `Expected: "https://pay/1", Received: undefined`.
 
-- [ ] **Step 3: Fix the mapper**
+- [x] **Step 3: Fix the mapper**
 
 In `src/modules/payment/repository/payment.mapper.ts`, add the three missing assignments after `entity.status`:
 
@@ -377,7 +377,7 @@ and after `entity.failedAt`:
   entity.cancelledAt = prismaPayment.cancelledAt;
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -385,13 +385,13 @@ npm test
 
 Expected: `Tests: 3 passed`, across 2 suites.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/repository/payment.repository.spec.ts src/modules/payment/repository/payment.mapper.ts
 git commit -m "fix(payment): carry the payment url out of the mapper
 
-toPaymentEntity assigned 13 of the entity's 17 fields and left paymentUrl,
+toPaymentEntity assigned 13 of the entity's 16 fields and left paymentUrl,
 redirectUrl and cancelledAt undefined, while 'implements Payment' told the
 compiler they were populated. A repeat request for an idempotency key already
 in the database therefore answered undefined instead of the url to pay at."
