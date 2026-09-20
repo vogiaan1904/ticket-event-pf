@@ -14,6 +14,7 @@ describe('grpcCodeOf', () => {
     GrpcStatus.CANCELLED,
     GrpcStatus.UNKNOWN,
     GrpcStatus.DATA_LOSS,
+    GrpcStatus.OK,
   ])('labels an unmapped downstream code %i as INTERNAL', (code) => {
     expect(grpcCodeOf({ code })).toBe('INTERNAL');
   });
