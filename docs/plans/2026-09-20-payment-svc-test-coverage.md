@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Tasks 1-4 done. Tasks 5-7 open.
+**Status:** Tasks 1-5 done. Tasks 6-7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -504,7 +504,9 @@ is the one the buyer must be sent to."
 
 ### Task 5: A callback with no transaction id must fail loudly
 
-`handleCallback` logs an error when the gateway returns no `providerTransactionId`, then falls through and returns `output.response` — the provider is told the callback succeeded while nothing was recorded. A malformed callback is a malformed request: `INVALID_ARGUMENT`, per the taxonomy.
+`handleCallback` logs an error when the gateway returns no `providerTransactionId`, then falls through and returns `output.response` — answering as if the callback succeeded while nothing was recorded. A malformed callback is a malformed request: `INVALID_ARGUMENT`, per the taxonomy.
+
+**This path is latent, like Task 6's.** `PaymentService.handleCallback` has no caller: the HTTP controller at `controllers/http/payment.controller.ts` is an empty shell and the live provider callback is served by `lambdas/payment-webhook-handler`. Worth fixing because the method stays reachable by anything that wires it up again — but it is not costing money today.
 
 **Files:**
 - Modify: `src/shared/constants/error-code.constant.ts`
@@ -513,9 +515,9 @@ is the one the buyer must be sent to."
 
 **Interfaces:**
 - Consumes: `buildService()` from Task 1.
-- Produces: `ErrorCodeEnum.InvalidCallback`, mapped to `['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT]`.
+- Produces: `ErrorCodeEnum.InvalidCallback = 20001`, mapped to `['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe`:
 
@@ -535,7 +537,7 @@ Append inside the top-level `describe`:
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -543,13 +545,15 @@ npm test
 
 Expected: `err.getError is not a function` — nothing is thrown, so `err` is the returned response object.
 
-- [ ] **Step 3: Add the error code**
+- [x] **Step 3: Add the error code**
 
 In `src/shared/constants/error-code.constant.ts`, add to the enum:
 
 ```ts
-  InvalidCallback = 20400,
+  InvalidCallback = 20001,
 ```
+
+Not `20400`. The house scheme is per-entity blocks numbered sequentially from `…000` — `event-svc` has `EventNotFound = 20000`, `EventConfigNotFound = 20001`, `OrganizerNotFound = 21000`. `PermissionDenied = 20403` is a one-off inherited from the auth prefix, not a "base + HTTP status" rule, which `PaymentNotFound = 20000` (HTTP 404) already contradicts. The number is caller-visible: `RpcBusinessException` formats the message as `` `${code} - ${message}` ``.
 
 and to the `ErrorCode` map:
 
@@ -557,7 +561,7 @@ and to the `ErrorCode` map:
   [ErrorCodeEnum.InvalidCallback]: ['Invalid callback payload', 400, grpcStatus.INVALID_ARGUMENT],
 ```
 
-- [ ] **Step 4: Fix the code**
+- [x] **Step 4: Fix the code**
 
 In `src/modules/payment/payment.service.ts`, replace the `if (!output.providerTransactionId)` branch with:
 
@@ -570,7 +574,7 @@ In `src/modules/payment/payment.service.ts`, replace the `if (!output.providerTr
 
 and drop the now-dead `else` on the following branch, leaving `if (output.success) { … } else { … }`.
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [x] **Step 5: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -578,7 +582,7 @@ npm test
 
 Expected: `Tests: 5 passed`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/shared/constants/error-code.constant.ts src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
