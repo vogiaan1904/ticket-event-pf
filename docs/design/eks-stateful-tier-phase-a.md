@@ -22,13 +22,14 @@
 Verify rather than trust this table:
 
 ```bash
-deploy/helm/ticketbottle/tests/assert-render.sh   # all eight assertions -> passes
+deploy/helm/ticketbottle/tests/assert-render.sh   # all eleven assertions -> pass
 ```
 
 The credential assertion is no longer opt-in: Task 3 turned it on, so a DSN
 returning to a ConfigMap now fails the suite. The Postgres password is now
 `required` from the secrets file like every other credential, and the goldens
-render from a committed fixture rather than from real secrets.
+render from a committed fixture rather than from real secrets. CI runs the
+suite on every `deploy/helm/**` change (`.github/workflows/chart-assertions.yml`).
 
 **Phase (a) is complete.** Revision 27 on the k3s box ran every migration Job
 and passed the purchase-flow gate with all four DSNs served from Secrets.
