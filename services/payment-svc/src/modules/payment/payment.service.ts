@@ -172,7 +172,10 @@ export class PaymentService {
 
     if (!output.providerTransactionId) {
       this.logger.error('Callback handling failed - missing providerTransactionId');
-    } else if (output.success) {
+      throw new RpcBusinessException(ErrorCodeEnum.InvalidCallback);
+    }
+
+    if (output.success) {
       await this.handleSuccessPayment(output.providerTransactionId);
     } else {
       await this.handleFailedPayment(output.providerTransactionId, 'Callback indicated failure');

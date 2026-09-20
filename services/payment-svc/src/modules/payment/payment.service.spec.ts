@@ -116,4 +116,20 @@ describe('PaymentService', () => {
       expect(url).toBe('https://pay/winner');
     });
   });
+
+  describe('handleCallback', () => {
+    it('rejects a callback that carries no transaction id', async () => {
+      const { service, outbox, gateway } = await buildService();
+      gateway.handleCallback.mockResolvedValue({
+        success: true,
+        providerTransactionId: undefined,
+        response: { ok: true },
+      });
+
+      const err: any = await service.handleCallback(PaymentProvider.ZALOPAY, {}).catch((e) => e);
+
+      expect(err.getError()).toMatchObject({ code: grpcStatus.INVALID_ARGUMENT });
+      expect(outbox.savePaymentCompletedEvent).not.toHaveBeenCalled();
+    });
+  });
 });
