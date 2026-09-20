@@ -6,6 +6,27 @@ metadata: { name: event-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
   ENCRYPT_KEY: "0Uc9Xa1BB59xfNxHPcUrj6BMpiCWUB7Qfd7mrJfbSpNn1z29MMj2PhU02rZ9w6R5"
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_event
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "root"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: user-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_user
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "root"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: inventory-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  POSTGRES_URL: postgresql://root:root@postgres:5432/ticketbottle_inventory?sslmode=disable
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -31,6 +52,9 @@ type: Opaque
 stringData:
   ZALOPAY_KEY1: "sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn"
   ZALOPAY_KEY2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf"
+  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_payment
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "root"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -45,6 +69,14 @@ stringData:
   APP_INIT_ADMIN_PASSWORD: "AQWBlxZteW65HlhpyNCIJnAa"
 
 ---
+# Source: ticketbottle/templates/infra/temporal.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: temporal-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  POSTGRES_PWD: "root"
+---
 # Source: ticketbottle/templates/apps/config.yaml
 apiVersion: v1
 kind: ConfigMap
@@ -53,11 +85,8 @@ data:
   ENV: development
   HOST: "0.0.0.0"
   PORT: "50052"
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_user
   DATABASE_HOST: postgres
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: root
-  DATABASE_PASSWORD: root
   DATABASE_NAME: ticketbottle_user
 ---
 # Source: ticketbottle/templates/apps/config.yaml
@@ -70,11 +99,8 @@ data:
   NAME: TicketBottle_Event
   APP_GLOBAL_PREFIX: api
   CORS_ORIGINS: "[]"
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_event
   DATABASE_HOST: postgres
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: root
-  DATABASE_PASSWORD: root
   DATABASE_NAME: ticketbottle_event
 ---
 # Source: ticketbottle/templates/apps/config.yaml
@@ -90,7 +116,6 @@ data:
   LOG_LEVEL: info
   LOG_MODE: development
   LOG_ENCODING: console
-  POSTGRES_URL: postgresql://root:root@postgres:5432/ticketbottle_inventory?sslmode=disable
   POSTGRES_MAX_OPEN_CONNS: "25"
   POSTGRES_MAX_IDLE_CONNS: "10"
   POSTGRES_CONN_MAX_LIFETIME: 5m
@@ -145,11 +170,8 @@ data:
   NODE_ENV: development
   LOG_LEVEL: debug
   ZALOPAY_APP_ID: "2554"
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_payment
   DATABASE_HOST: postgres
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: root
-  DATABASE_PASSWORD: root
   DATABASE_NAME: ticketbottle_payment
   KAFKA_CLIENT_ID: payment-service
   KAFKA_BROKERS: redpanda:9093
@@ -624,6 +646,7 @@ spec:
               memory: 32Mi
           envFrom:
             - configMapRef: { name: inventory-config }
+            - secretRef: { name: inventory-secrets }
           ports: [{ containerPort: 50057 }]
           readinessProbe:
             tcpSocket: { port: 50057 }
@@ -734,6 +757,7 @@ spec:
               memory: 64Mi
           envFrom:
             - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
 
 ---
 # Source: ticketbottle/templates/apps/payment-events.yaml
@@ -768,6 +792,7 @@ spec:
           command: ["node", "webhook.js"]
           envFrom:
             - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 8080 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
@@ -844,6 +869,7 @@ spec:
               memory: 128Mi
           envFrom:
             - configMapRef: { name: user-config }
+            - secretRef: { name: user-secrets }
           ports: [{ containerPort: 50052 }]
           readinessProbe:
             tcpSocket: { port: 50052 }
@@ -925,7 +951,9 @@ spec:
             - { name: DB_PORT, value: "5432" }
             - { name: POSTGRES_SEEDS, value: postgres }
             - { name: POSTGRES_USER, value: "root" }
-            - { name: POSTGRES_PWD, value: "root" }
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
             - { name: DBNAME, value: temporal }
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "false" }
@@ -1455,6 +1483,7 @@ spec:
           command: ["sh","-c","npx prisma migrate deploy"]
           envFrom:
             - configMapRef: { name: user-config }
+            - secretRef: { name: user-secrets }
       # wait for postgres before running (hook order doesn't guarantee DB readiness)
       initContainers:
         - name: wait-postgres
@@ -1486,6 +1515,7 @@ spec:
           command: ["sh","-c","npx prisma migrate deploy"]
           envFrom:
             - configMapRef: { name: event-config }
+            - secretRef: { name: event-secrets }
       # wait for postgres before running (hook order doesn't guarantee DB readiness)
       initContainers:
         - name: wait-postgres
@@ -1517,6 +1547,7 @@ spec:
           command: ["sh","-c","npx prisma migrate deploy"]
           envFrom:
             - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
       # wait for postgres before running (hook order doesn't guarantee DB readiness)
       initContainers:
         - name: wait-postgres

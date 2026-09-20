@@ -5,11 +5,8 @@ data:
   ENV: development
   HOST: "0.0.0.0"
   PORT: "50052"
-  DATABASE_URL: postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.hosts.shared }}:5432/ticketbottle_user
   DATABASE_HOST: {{ .Values.postgres.hosts.shared }}
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: {{ .Values.postgres.user }}
-  DATABASE_PASSWORD: {{ .Values.postgres.password }}
   DATABASE_NAME: ticketbottle_user
 ---
 apiVersion: v1
@@ -21,11 +18,8 @@ data:
   NAME: TicketBottle_Event
   APP_GLOBAL_PREFIX: api
   CORS_ORIGINS: "[]"
-  DATABASE_URL: postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.hosts.shared }}:5432/ticketbottle_event
   DATABASE_HOST: {{ .Values.postgres.hosts.shared }}
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: {{ .Values.postgres.user }}
-  DATABASE_PASSWORD: {{ .Values.postgres.password }}
   DATABASE_NAME: ticketbottle_event
 ---
 apiVersion: v1
@@ -40,7 +34,6 @@ data:
   LOG_LEVEL: info
   LOG_MODE: development
   LOG_ENCODING: console
-  POSTGRES_URL: postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.hosts.inventory }}:5432/ticketbottle_inventory?sslmode=disable
   POSTGRES_MAX_OPEN_CONNS: "25"
   POSTGRES_MAX_IDLE_CONNS: "10"
   POSTGRES_CONN_MAX_LIFETIME: 5m
@@ -93,11 +86,8 @@ data:
   NODE_ENV: development
   LOG_LEVEL: debug
   ZALOPAY_APP_ID: "2554"
-  DATABASE_URL: postgresql://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ .Values.postgres.hosts.payment }}:5432/ticketbottle_payment
   DATABASE_HOST: {{ .Values.postgres.hosts.payment }}
   DATABASE_PORT: "5432"
-  DATABASE_USERNAME: {{ .Values.postgres.user }}
-  DATABASE_PASSWORD: {{ .Values.postgres.password }}
   DATABASE_NAME: ticketbottle_payment
   KAFKA_CLIENT_ID: payment-service
   KAFKA_BROKERS: redpanda:9093

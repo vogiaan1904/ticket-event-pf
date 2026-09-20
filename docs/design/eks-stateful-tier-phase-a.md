@@ -8,26 +8,26 @@
 
 **Design:** `docs/design/eks-stateful-tier.md`
 
-## Status — 2026-09-19
+## Status — 2026-09-20
 
 | Task | State | Landed in |
 |---|---|---|
 | 0 Golden-render harness | **done** | `b72b982` |
 | 1 Per-service Postgres host | **done** | `090ba78` |
 | 2 Gate the Postgres StatefulSet | **done** | `090ba78` |
-| 3 Move the DSNs into Secrets | **not started** | — |
+| 3 Move the DSNs into Secrets | **done in the chart; Step 7 (k3s run) outstanding** | — |
 | 4 Migrations wait on the right host | **done** | `090ba78` |
 | 5 The EKS overlay opts out | **out of scope** | see spec |
 
 Verify rather than trust this table:
 
 ```bash
-deploy/helm/ticketbottle/tests/assert-render.sh                             # Tasks 0,1,2,4 -> passes
-ASSERT_NO_CONFIGMAP_CREDS=1 deploy/helm/ticketbottle/tests/assert-render.sh # Task 3 -> FAILs until done
+deploy/helm/ticketbottle/tests/assert-render.sh   # all eight assertions -> passes
 ```
 
-The second command failing is the defect Task 3 exists to fix. When it passes,
-phase (a) is complete.
+The credential assertion is no longer opt-in: Task 3 turned it on, so a DSN
+returning to a ConfigMap now fails the suite. Phase (a) closes when the gate
+below has also run on the k3s box.
 
 **Commit messages deliberately never name a phase or task** (root `CLAUDE.md`), so
 git history cannot answer "where are we". This table and the checkboxes below are
@@ -57,8 +57,10 @@ the record; keep them current in the same commit as the work.
 | `deploy/helm/ticketbottle/templates/apps/secrets.yaml` | **Modify.** Adds `user-secrets` and `inventory-secrets`; every service's DSN moves here. | 3 |
 | `deploy/helm/ticketbottle/templates/apps/user.yaml` | **Modify.** Wire `.secret` — this workload has none today. | 3 |
 | `deploy/helm/ticketbottle/templates/apps/inventory.yaml` | **Modify.** Wire `.secret` — this workload has none today. | 3 |
-| `deploy/helm/ticketbottle/templates/infra/temporal.yaml` | **Modify.** `POSTGRES_PWD` comes from a Secret, not a literal. | 3 |
-| `deploy/helm/ticketbottle/templates/apps/migrations.yaml` | **Modify.** `wait-postgres` host comes from values. | 4 |
+| `deploy/helm/ticketbottle/templates/infra/temporal.yaml` | **Modify.** `POSTGRES_PWD` comes from a Secret, defined in this file so the infra tier does not depend on the app tier. | 3 |
+| `deploy/helm/ticketbottle/templates/apps/migrations.yaml` | **Modify.** `wait-postgres` host comes from values (4); the Jobs mount their service's Secret (3). | 3, 4 |
+| `deploy/helm/ticketbottle/templates/apps/outbox-relay.yaml` | **Modify.** Mounts `payment-secrets`; the relay opens its own connection. | 3 |
+| `deploy/helm/ticketbottle/templates/apps/payment-events.yaml` | **Modify.** Mounts `payment-secrets`; the webhook opens its own connection. | 3 |
 | `deploy/helm/ticketbottle/values-eks.yaml` | **Deferred with phases (b)-(f).** | ~~5~~ |
 
 `values-local.yaml` and `values-k3s.yaml` are **not** modified. That is the point.
@@ -374,7 +376,10 @@ The password is in a ConfigMap, which anything with `get configmaps` can read an
 - Modify: `deploy/helm/ticketbottle/templates/apps/config.yaml`
 - Modify: `deploy/helm/ticketbottle/templates/apps/user.yaml`
 - Modify: `deploy/helm/ticketbottle/templates/apps/inventory.yaml`
-- Modify: `deploy/helm/ticketbottle/templates/infra/temporal.yaml:25-26`
+- Modify: `deploy/helm/ticketbottle/templates/infra/temporal.yaml` (the Secret lives here, not in `apps/secrets.yaml`)
+- Modify: `deploy/helm/ticketbottle/templates/apps/migrations.yaml` — all three Jobs run `prisma migrate deploy`, which needs `DATABASE_URL`
+- Modify: `deploy/helm/ticketbottle/templates/apps/outbox-relay.yaml` — `outbox-relay/src/runtime.ts:58` opens its own `pg.Client`
+- Modify: `deploy/helm/ticketbottle/templates/apps/payment-events.yaml` — `lambdas/common/db/kysely.ts:10` throws without it
 - Modify: `deploy/helm/ticketbottle/tests/golden/values-local.yaml` (regenerated)
 - Modify: `deploy/helm/ticketbottle/tests/golden/values-k3s.yaml` (regenerated)
 
@@ -382,11 +387,11 @@ The password is in a ConfigMap, which anything with `get configmaps` can read an
 - Consumes: `.Values.postgres.hosts` from Task 1.
 - Produces: Secrets `user-secrets` and `inventory-secrets`; `DATABASE_URL` / `POSTGRES_URL` keys served from Secrets for all four database-backed services.
 
-- [ ] **Step 1: Turn the credential assertion on**
+- [x] **Step 1: Turn the credential assertion on**
 
 In `tests/assert-render.sh`, change the guard added in Task 0 Step 5 to run unconditionally — delete the `if [ "${ASSERT_NO_CONFIGMAP_CREDS:-0}" = "1" ]; then` line and its matching `fi`.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 deploy/helm/ticketbottle/tests/assert-render.sh
@@ -394,7 +399,7 @@ deploy/helm/ticketbottle/tests/assert-render.sh
 
 Expected: FAIL with `local: a database credential is in a ConfigMap`.
 
-- [ ] **Step 3: Move the DSNs**
+- [x] **Step 3: Move the DSNs**
 
 In `templates/apps/config.yaml`, delete these keys from `user-config`, `event-config` and `payment-config`:
 
@@ -442,7 +447,7 @@ stringData:
 {{- end }}
 ```
 
-- [ ] **Step 4: Wire the two workloads that had no Secret**
+- [x] **Step 4: Wire the two workloads that had no Secret**
 
 `_appservice.tpl:42` already adds `secretRef` when the caller passes `.secret`. Each workload file is a single `tb.appService` line; add the key exactly as `event.yaml` already does.
 
@@ -467,9 +472,12 @@ helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-loc
   | grep -c "secretRef: { name: inventory-secrets }"   # expect 1
 ```
 
-- [ ] **Step 4b: Take the password out of the Temporal Deployment**
+- [x] **Step 4b: Take the password out of the Temporal Deployment**
 
-Add a `temporal-secrets` Secret alongside the others in `secrets.yaml`, inside the `apps.enabled` guard:
+Add a `temporal-secrets` Secret at the top of `templates/infra/temporal.yaml`. It does **not** go in
+`apps/secrets.yaml`: that whole file is inside `{{- if .Values.apps.enabled }}`, and `make infra-up`
+sets `apps.enabled=false`, so the Deployment would reference a Secret that never renders and the pod
+would sit in `CreateContainerConfigError`. Infra must not depend on the app tier.
 
 ```yaml
 ---
@@ -503,7 +511,7 @@ helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-loc
 If that returns 0, move the Secret out of the `apps.enabled` guard rather than making the infra tier
 depend on the app tier.
 
-- [ ] **Step 5: Re-baseline the golden files**
+- [x] **Step 5: Re-baseline the golden files**
 
 The render is *meant* to change here, so regenerate in the same commit that causes it:
 
@@ -511,7 +519,7 @@ The render is *meant* to change here, so regenerate in the same commit that caus
 deploy/helm/ticketbottle/tests/render-golden.sh
 ```
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [x] **Step 6: Run the test to verify it passes**
 
 ```bash
 deploy/helm/ticketbottle/tests/assert-render.sh
@@ -535,7 +543,7 @@ make -C deploy k3s-stop
 
 Expected: the gate passes. If a service crash-loops on a missing `DATABASE_URL`, its workload is missing the `.secret` wiring from Step 4.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add deploy/helm/ticketbottle/templates deploy/helm/ticketbottle/tests
@@ -709,9 +717,9 @@ placeholders until the instances exist; the target is not deployed until then."
 
 ## Done when
 
-- [ ] `deploy/helm/ticketbottle/tests/assert-render.sh` exits 0.
-- [ ] `git diff` against the phase start shows **no change** to `values-local.yaml` or `values-k3s.yaml`.
-- [ ] No ConfigMap on any overlay contains `DATABASE_PASSWORD` or a `postgresql://user:pass@` URL.
+- [x] `deploy/helm/ticketbottle/tests/assert-render.sh` exits 0.
+- [x] `git diff` against the phase start shows **no change** to `values-local.yaml` or `values-k3s.yaml`.
+- [x] No ConfigMap on any overlay contains `DATABASE_PASSWORD` or a `postgresql://user:pass@` URL.
 - [ ] The purchase-flow gate passes on the k3s box.
 
 `helm template -f values-eks.yaml` renders no Postgres StatefulSet only once

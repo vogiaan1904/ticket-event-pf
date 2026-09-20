@@ -20,4 +20,5 @@ spec:
           {{- include "tb.resources" (dict "ctx" . "name" "outbox-relay") | nindent 10 }}
           envFrom:
             - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
 {{- end }}

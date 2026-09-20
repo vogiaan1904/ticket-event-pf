@@ -1,3 +1,10 @@
+apiVersion: v1
+kind: Secret
+metadata: { name: temporal-secrets, namespace: {{ include "tb.namespace" . }} }
+type: Opaque
+stringData:
+  POSTGRES_PWD: {{ .Values.postgres.password | quote }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -23,7 +30,9 @@ spec:
             - { name: DB_PORT, value: "5432" }
             - { name: POSTGRES_SEEDS, value: postgres }
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }
-            - { name: POSTGRES_PWD, value: "{{ .Values.postgres.password }}" }
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
             - { name: DBNAME, value: temporal }
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }

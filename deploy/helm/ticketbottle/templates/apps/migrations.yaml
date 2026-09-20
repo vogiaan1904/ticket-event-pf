@@ -24,6 +24,7 @@ spec:
           command: ["sh","-c","npx prisma migrate deploy"]
           envFrom:
             - configMapRef: { name: {{ $svc }}-config }
+            - secretRef: { name: {{ $svc }}-secrets }
       # wait for postgres before running (hook order doesn't guarantee DB readiness)
       initContainers:
         - name: wait-postgres
