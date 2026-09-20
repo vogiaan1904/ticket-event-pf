@@ -50,8 +50,14 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  // Two entry points: a raw token from a caller, a digest read back from the
+  // user's set. One place spells the prefix.
+  private refreshKeyOf(digest: string): string {
+    return `refresh_token:${digest}`;
+  }
+
   private getRefreshTokenKey(token: string): string {
-    return `refresh_token:${this.digest(token)}`;
+    return this.refreshKeyOf(this.digest(token));
   }
 
   private getUserTokensKey(userId: string): string {
@@ -214,7 +220,7 @@ export class AuthService {
 
       // Members are already digests, so build the key rather than hashing again.
       refreshTokens.forEach((digest) => {
-        multi.del(`refresh_token:${digest}`);
+        multi.del(this.refreshKeyOf(digest));
       });
 
       // Delete user tokens set
