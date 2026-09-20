@@ -5,6 +5,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 EKS_ENV="$HERE/../terraform/envs/eks"
+. "$HERE/eks-context.sh"
 CHART="$HERE/../helm/ticketbottle"
 NS=ticketbottle
 GEN=/tmp/tb-eks-values.yaml

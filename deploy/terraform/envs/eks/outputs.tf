@@ -30,3 +30,10 @@ output "vpc_id" {
 output "order_role_arn" {
   value = module.order_irsa.role_arn
 }
+output "node_placement" {
+  value = var.private_nodes ? "private subnets, NAT egress" : "public subnets, no NAT"
+}
+
+output "nat_public_ip" {
+  value = try(module.nat_egress[0].public_ip, null)
+}

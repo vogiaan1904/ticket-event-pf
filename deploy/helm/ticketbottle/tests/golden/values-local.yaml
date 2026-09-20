@@ -1,0 +1,1242 @@
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: event-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  ENCRYPT_KEY: "fixture-not-a-real-encrypt-key"
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_event
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: user-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_user
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: inventory-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  POSTGRES_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_inventory?sslmode=disable
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: order-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  JWT_SECRET: "fixture-not-a-real-jwt-secret"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: waitroom-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  JWT_SECRET: "fixture-not-a-real-jwt-secret"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: payment-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  ZALOPAY_KEY1: "fixture-not-a-real-zalopay-key1"
+  ZALOPAY_KEY2: "fixture-not-a-real-zalopay-key2"
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_payment
+  DATABASE_USERNAME: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
+---
+# Source: ticketbottle/templates/apps/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: gateway-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  ENCRYPT_KEY: "fixture-not-a-real-encrypt-key"
+  JWT_ACCESS_SECRET: "fixture-not-a-real-access-secret"
+  JWT_REFRESH_SECRET: "fixture-not-a-real-refresh-secret"
+  INTERNAL_KEY: "fixture-not-a-real-internal-key"
+  APP_INIT_ADMIN_PASSWORD: "fixture-not-a-real-admin-password"
+
+---
+# Source: ticketbottle/templates/infra/temporal.yaml
+apiVersion: v1
+kind: Secret
+metadata: { name: temporal-secrets, namespace: ticketbottle }
+type: Opaque
+stringData:
+  POSTGRES_PWD: "fixture-not-a-real-postgres-password"
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: user-config, namespace: ticketbottle }
+data:
+  ENV: development
+  HOST: "0.0.0.0"
+  PORT: "50052"
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ticketbottle_user
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: event-config, namespace: ticketbottle }
+data:
+  HOST: "0.0.0.0"
+  GRPC_PORT: "50053"
+  NAME: TicketBottle_Event
+  APP_GLOBAL_PREFIX: api
+  CORS_ORIGINS: "[]"
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ticketbottle_event
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: inventory-config, namespace: ticketbottle }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50057"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  LOG_LEVEL: info
+  LOG_MODE: development
+  LOG_ENCODING: console
+  POSTGRES_MAX_OPEN_CONNS: "25"
+  POSTGRES_MAX_IDLE_CONNS: "10"
+  POSTGRES_CONN_MAX_LIFETIME: 5m
+  POSTGRES_CONN_MAX_IDLE_TIME: 10m
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: waitroom-config, namespace: ticketbottle }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50056"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  REDIS_ADDR: redis:6379
+  REDIS_PASSWORD: ""
+  REDIS_DB: "0"
+  REDIS_MAX_RETRIES: "3"
+  REDIS_POOL_SIZE: "10"
+  REDIS_MIN_IDLE_CONNS: "5"
+  KAFKA_ENABLED: "true"
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_CONSUMER_GROUP_ID: waitroom-service
+  KAFKA_PRODUCER_RETRY_MAX: "3"
+  KAFKA_PRODUCER_REQUIRED_ACKS: "1"
+  KAFKA_CONSUMER_SESSION_TIMEOUT: "10000"
+  # In-place retries before a message is parked on <topic>.dlq; backoff doubles.
+  KAFKA_CONSUMER_RETRY_MAX: "5"
+  KAFKA_CONSUMER_RETRY_BACKOFF: 500ms
+  QUEUE_DEFAULT_MAX_CONCURRENT: "100"
+  QUEUE_DEFAULT_RELEASE_RATE: "10"
+  QUEUE_PROCESS_INTERVAL: 1s
+  QUEUE_SESSION_TTL: 7200s
+  QUEUE_POSITION_UPDATE_INTERVAL: 5s
+  EVENT_SERVICE_ADDR: event-service:50053
+  JWT_EXPIRY: 15m
+  LOGGER_LEVEL: debug
+  LOGGER_MODE: development
+  LOGGER_ENCODING: console
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: payment-config, namespace: ticketbottle }
+data:
+  # No HOST key: payment main.ts binds 0.0.0.0 unconditionally and ignores it.
+  PORT: "8085"
+  GRPC_PORT: "50055"
+  NAME: TicketBottle_Payment
+  APP_GLOBAL_PREFIX: api
+  NODE_ENV: development
+  LOG_LEVEL: debug
+  ZALOPAY_APP_ID: "2554"
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: ticketbottle_payment
+  KAFKA_CLIENT_ID: payment-service
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_CONSUMER_GROUP_ID: payment-consumer-group
+  KAFKA_SSL: "false"
+  RELAY_SAFETY_POLL_MS: "5000"
+  OUTBOX_BATCH_SIZE: "100"
+  OUTBOX_MAX_RETRIES: "5"
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: order-config, namespace: ticketbottle }
+data:
+  ENV: development
+  SERVER_GRPC_PORT: "50054"
+  SERVER_READ_TIMEOUT: 30s
+  SERVER_WRITE_TIMEOUT: 30s
+  SERVER_IDLE_TIMEOUT: 60s
+  PAYMENT_TIMEOUT_SECONDS: "600"
+  # Bounds the wait on the CreateOrder saga. At 100 concurrent buyers on one hot
+  # ticket class the slowest saga took 33s, so a 30s bound returned 504 for ~8%.
+  ORDER_CREATE_TIMEOUT: "60s"
+  DYNAMODB_TABLE_NAME: ticketbottle-orders
+  AWS_REGION: "us-east-1"
+  DYNAMODB_ENDPOINT: "http://dynamodb:8000"
+  AWS_ACCESS_KEY_ID: "local"
+  AWS_SECRET_ACCESS_KEY: "local"
+  TEMPORAL_HOST_PORT: temporal:7233
+  TEMPORAL_NAMESPACE: default
+  JWT_EXPIRY: 15m
+  LOG_LEVEL: debug
+  LOG_MODE: development
+  LOG_ENCODING: console
+  KAFKA_BROKERS: redpanda:9093
+  KAFKA_PRODUCER_RETRY_MAX: "3"
+  KAFKA_PRODUCER_REQUIRED_ACKS: "1"
+  KAFKA_ENABLED: "true"
+  KAFKA_CONSUMER_GROUP_ID: order-service
+  EVENT_SERVICE_ADDR: event-service:50053
+  INVENTORY_SERVICE_ADDR: inventory-service:50057
+  PAYMENT_SERVICE_ADDR: payment-service:50055
+---
+# Source: ticketbottle/templates/apps/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: gateway-config, namespace: ticketbottle }
+data:
+  PORT: "3000"
+  NAME: TicketBottle_Event
+  APP_GLOBAL_PREFIX: api
+  CORS_ORIGINS: "[\"*\"]"
+  JWT_ACCESS_EXPIRATION: 1d
+  JWT_REFRESH_EXPIRATION: 7d
+  JWT_REFRESH_SLIDING_WINDOW: 24h
+  SALT_ROUND: "10"
+  USER_SERVICE: user-service:50052
+  EVENT_SERVICE: event-service:50053
+  INVENTORY_SERVICE: inventory-service:50057
+  ORDER_SERVICE: order-service:50054
+  WAITROOM_SERVICE: waitroom-service:50056
+  REDIS_URL: redis://redis:6379
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ""
+
+---
+# Source: ticketbottle/templates/infra/postgres.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+data:
+  01-create-databases.sql: |
+    SELECT 'CREATE DATABASE ticketbottle_user' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ticketbottle_user')\gexec
+    SELECT 'CREATE DATABASE ticketbottle_event' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ticketbottle_event')\gexec
+    SELECT 'CREATE DATABASE ticketbottle_payment' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ticketbottle_payment')\gexec
+    SELECT 'CREATE DATABASE ticketbottle_inventory' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ticketbottle_inventory')\gexec
+---
+# Source: ticketbottle/templates/apps/event.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: event-service
+  namespace: ticketbottle
+  labels:
+    app: event-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: event-service }
+  ports:
+    - name: grpc
+      port: 50053
+      targetPort: 50053
+
+---
+# Source: ticketbottle/templates/apps/gateway.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-gateway
+  namespace: ticketbottle
+  labels:
+    app: app-gateway
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  type: NodePort
+  selector: { app: app-gateway }
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      nodePort: 30000
+---
+# Source: ticketbottle/templates/apps/inventory.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: inventory-service
+  namespace: ticketbottle
+  labels:
+    app: inventory-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: inventory-service }
+  ports:
+    - name: grpc
+      port: 50057
+      targetPort: 50057
+
+---
+# Source: ticketbottle/templates/apps/order.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: ticketbottle
+  labels:
+    app: order-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: order-service }
+  ports:
+    - name: grpc
+      port: 50054
+      targetPort: 50054
+---
+# Source: ticketbottle/templates/apps/payment-events.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-webhook
+  namespace: ticketbottle
+  labels:
+    app: payment-webhook
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: payment-webhook }
+  ports:
+    # Named: a Service carrying more than one port rejects an unnamed one, and
+    # the name is the only handle a ServiceMonitor has on a port.
+    - name: http
+      port: 8080
+      targetPort: 8080
+
+---
+# Source: ticketbottle/templates/apps/payment.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: payment-service
+  namespace: ticketbottle
+  labels:
+    app: payment-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: payment-service }
+  ports:
+    - name: grpc
+      port: 50055
+      targetPort: 50055
+
+---
+# Source: ticketbottle/templates/apps/user.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: ticketbottle
+  labels:
+    app: user-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: user-service }
+  ports:
+    - name: grpc
+      port: 50052
+      targetPort: 50052
+
+---
+# Source: ticketbottle/templates/apps/waitroom.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: waitroom-service
+  namespace: ticketbottle
+  labels:
+    app: waitroom-service
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: waitroom-service }
+  ports:
+    - name: grpc
+      port: 50056
+      targetPort: 50056
+
+---
+# Source: ticketbottle/templates/infra/dynamodb.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: dynamodb
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: dynamodb }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+# Source: ticketbottle/templates/infra/postgres.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+
+---
+# Source: ticketbottle/templates/infra/redis.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: redis }
+  ports: [{ port: 6379, targetPort: 6379 }]
+
+---
+# Source: ticketbottle/templates/infra/redpanda.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: redpanda }
+  ports:
+    - { name: kafka, port: 9093, targetPort: 9093 }
+    - { name: admin, port: 9644, targetPort: 9644 }
+
+---
+# Source: ticketbottle/templates/infra/temporal.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: temporal
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  selector: { app: temporal }
+  ports: [{ port: 7233, targetPort: 7233 }]
+
+---
+# Source: ticketbottle/templates/apps/event.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: event-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: event-service }
+  template:
+    metadata:
+      labels: { app: event-service }
+    spec:
+      containers:
+        - name: event-service
+          image: ticketbottle/event:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          envFrom:
+            - configMapRef: { name: event-config }
+            - secretRef: { name: event-secrets }
+          ports: [{ containerPort: 50053 }]
+          readinessProbe:
+            tcpSocket: { port: 50053 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/apps/gateway.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-gateway
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: app-gateway }
+  template:
+    metadata:
+      labels: { app: app-gateway }
+    spec:
+      containers:
+        - name: app-gateway
+          image: ticketbottle/gateway:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: "1"
+              memory: 384Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          envFrom:
+            - configMapRef: { name: gateway-config }
+            - secretRef: { name: gateway-secrets }
+          ports: [{ containerPort: 3000 }]
+          readinessProbe:
+            httpGet: { path: /api, port: 3000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 24
+---
+# Source: ticketbottle/templates/apps/inventory.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: inventory-service }
+  template:
+    metadata:
+      labels: { app: inventory-service }
+    spec:
+      containers:
+        - name: inventory-service
+          image: ticketbottle/inventory:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+          envFrom:
+            - configMapRef: { name: inventory-config }
+            - secretRef: { name: inventory-secrets }
+          ports: [{ containerPort: 50057 }]
+          readinessProbe:
+            tcpSocket: { port: 50057 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/apps/order.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: order-service }
+  template:
+    metadata:
+      labels: { app: order-service }
+    spec:
+      containers:
+        - name: order-service
+          image: ticketbottle/order-api:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+          envFrom:
+            - configMapRef: { name: order-config }
+            - secretRef: { name: order-secrets }
+          ports: [{ containerPort: 50054 }]
+          readinessProbe:
+            tcpSocket: { port: 50054 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/apps/order.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-consumer
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: order-consumer }
+  template:
+    metadata:
+      labels: { app: order-consumer }
+    spec:
+      containers:
+        - name: order-consumer
+          image: ticketbottle/order-consumer:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+          envFrom:
+            - configMapRef: { name: order-config }
+            - secretRef: { name: order-secrets }
+---
+# Source: ticketbottle/templates/apps/outbox-relay.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outbox-relay
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: outbox-relay }
+  template:
+    metadata:
+      labels: { app: outbox-relay }
+    spec:
+      containers:
+        - name: outbox-relay
+          image: ticketbottle/outbox-relay:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          envFrom:
+            - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
+
+---
+# Source: ticketbottle/templates/apps/payment-events.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-webhook
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: payment-webhook }
+  template:
+    metadata:
+      labels: { app: payment-webhook }
+    spec:
+      containers:
+        - name: payment-webhook
+          image: ticketbottle/payment-events:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          command: ["node", "webhook.js"]
+          envFrom:
+            - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+# Source: ticketbottle/templates/apps/payment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payment-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: payment-service }
+  template:
+    metadata:
+      labels: { app: payment-service }
+    spec:
+      containers:
+        - name: payment-service
+          image: ticketbottle/payment:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          envFrom:
+            - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
+          ports: [{ containerPort: 50055 }]
+          readinessProbe:
+            tcpSocket: { port: 50055 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/apps/user.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: user-service }
+  template:
+    metadata:
+      labels: { app: user-service }
+    spec:
+      containers:
+        - name: user-service
+          image: ticketbottle/user:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 384Mi
+            requests:
+              cpu: 50m
+              memory: 128Mi
+          envFrom:
+            - configMapRef: { name: user-config }
+            - secretRef: { name: user-secrets }
+          ports: [{ containerPort: 50052 }]
+          readinessProbe:
+            tcpSocket: { port: 50052 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/apps/waitroom.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: waitroom-service
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: waitroom-service }
+  template:
+    metadata:
+      labels: { app: waitroom-service }
+    spec:
+      containers:
+        - name: waitroom-service
+          image: ticketbottle/waitroom:local
+          imagePullPolicy: IfNotPresent
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+          envFrom:
+            - configMapRef: { name: waitroom-config }
+            - secretRef: { name: waitroom-secrets }
+          ports: [{ containerPort: 50056 }]
+          readinessProbe:
+            tcpSocket: { port: 50056 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/infra/dynamodb.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dynamodb
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dynamodb }
+  template:
+    metadata:
+      labels: { app: dynamodb }
+    spec:
+      containers:
+        - name: dynamodb
+          image: amazon/dynamodb-local:2.5.2
+          
+          resources:
+            limits:
+              cpu: 500m
+              memory: 768Mi
+            requests:
+              cpu: 50m
+              memory: 256Mi
+          # -inMemory keeps it light; data is recreated by the init Job each install.
+          command: ["java","-jar","DynamoDBLocal.jar","-inMemory","-sharedDb"]
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+# Source: ticketbottle/templates/infra/temporal.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: temporal }
+  template:
+    metadata:
+      labels: { app: temporal }
+    spec:
+      containers:
+        - name: temporal
+          image: temporalio/auto-setup:1.27.2
+          
+          resources:
+            limits:
+              cpu: "1"
+              memory: 768Mi
+            requests:
+              cpu: 100m
+              memory: 192Mi
+          # auto-setup creates the temporal + temporal_visibility databases and schema
+          # in the shared Postgres (needs the root superuser), then registers "default".
+          env:
+            - { name: DB, value: postgres12 }
+            - { name: DB_PORT, value: "5432" }
+            - { name: POSTGRES_SEEDS, value: postgres }
+            - { name: POSTGRES_USER, value: "root" }
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
+            - { name: DBNAME, value: temporal }
+            - { name: VISIBILITY_DBNAME, value: temporal_visibility }
+            - { name: ENABLE_ES, value: "false" }
+            - { name: SKIP_DB_CREATE, value: "false" }
+            # Listen on all interfaces so the Service (and in-cluster clients like order-svc) can
+            # reach the frontend. auto-setup defaults to 127.0.0.1, which the Service can't route to.
+            - { name: BIND_ON_IP, value: "0.0.0.0" }
+          ports: [{ containerPort: 7233 }]
+          readinessProbe:
+            exec:
+              # Target localhost, NOT the Service name. The Service has no endpoints until
+              # the pod is Ready, so a Service-addressed probe would deadlock (never Ready).
+              command: ["tctl", "--address", "127.0.0.1:7233", "cluster", "health"]
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 12
+---
+# Source: ticketbottle/templates/infra/postgres.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15-alpine
+          
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          ports: [{ containerPort: 5432 }]
+          env:
+            - { name: POSTGRES_USER, value: "root" }
+            - { name: POSTGRES_PASSWORD, value: "fixture-not-a-real-postgres-password" }
+            - { name: POSTGRES_DB, value: "root" }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: init, mountPath: /docker-entrypoint-initdb.d }
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "root"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: init
+          configMap: { name: postgres-init }
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: "1Gi" } }
+---
+# Source: ticketbottle/templates/infra/redis.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels: { app: redis }
+  template:
+    metadata:
+      labels: { app: redis }
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          
+          resources:
+            limits:
+              cpu: 250m
+              memory: 256Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          ports: [{ containerPort: 6379 }]
+          volumeMounts: [{ name: data, mountPath: /data }]
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: "1Gi" } }
+---
+# Source: ticketbottle/templates/infra/redpanda.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector:
+    matchLabels: { app: redpanda }
+  template:
+    metadata:
+      labels: { app: redpanda }
+    spec:
+      # A dynamically provisioned EBS volume arrives root:root; the redpanda image runs
+      # as non-root and cannot write its data dir. kind/k3s local-path happened to create
+      # world-writable directories, which hid this. fsGroup makes the chart portable.
+      securityContext:
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: redpanda
+          image: redpandadata/redpanda:v24.2.7
+          
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 1280Mi
+          # NOTE: use args (not command) so the image ENTRYPOINT (/entrypoint.sh -> rpk)
+          # is preserved. `rpk redpanda start` understands --mode/--kafka-addr; the raw
+          # `redpanda` broker binary does not. Overriding command bypasses rpk and fails.
+          args:
+            - redpanda
+            - start
+            - --mode=dev-container
+            - --smp=1
+            # advertise the in-cluster service name so clients reach the broker
+            - --kafka-addr=PLAINTEXT://0.0.0.0:9093
+            - --advertise-kafka-addr=PLAINTEXT://redpanda:9093
+          ports:
+            - { containerPort: 9093 }   # Kafka API
+            - { containerPort: 9644 }   # Admin API (health)
+          volumeMounts: [{ name: data, mountPath: /var/lib/redpanda/data }]
+          readinessProbe:
+            httpGet: { path: /v1/status/ready, port: 9644 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: "1Gi" } }
+---
+# Source: ticketbottle/templates/apps/migrations.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: user-migrate
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ticketbottle/user-migrate:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c","npx prisma migrate deploy"]
+          envFrom:
+            - configMapRef: { name: user-config }
+            - secretRef: { name: user-secrets }
+      # wait for postgres before running (hook order doesn't guarantee DB readiness)
+      initContainers:
+        - name: wait-postgres
+          image: postgres:15-alpine
+          command: ["sh","-c","until pg_isready -h postgres -U root; do echo waiting for postgres; sleep 2; done"]
+---
+# Source: ticketbottle/templates/apps/migrations.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: event-migrate
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ticketbottle/event-migrate:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c","npx prisma migrate deploy"]
+          envFrom:
+            - configMapRef: { name: event-config }
+            - secretRef: { name: event-secrets }
+      # wait for postgres before running (hook order doesn't guarantee DB readiness)
+      initContainers:
+        - name: wait-postgres
+          image: postgres:15-alpine
+          command: ["sh","-c","until pg_isready -h postgres -U root; do echo waiting for postgres; sleep 2; done"]
+---
+# Source: ticketbottle/templates/apps/migrations.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: payment-migrate
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ticketbottle/payment-migrate:local
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c","npx prisma migrate deploy"]
+          envFrom:
+            - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
+      # wait for postgres before running (hook order doesn't guarantee DB readiness)
+      initContainers:
+        - name: wait-postgres
+          image: postgres:15-alpine
+          command: ["sh","-c","until pg_isready -h postgres -U root; do echo waiting for postgres; sleep 2; done"]
+
+---
+# Source: ticketbottle/templates/infra/dynamodb.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: dynamodb-init
+  namespace: ticketbottle
+  labels:
+    app.kubernetes.io/part-of: ticketbottle
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-table
+          image: amazon/aws-cli:2.17.0
+          env:
+            - { name: AWS_ACCESS_KEY_ID, value: "local" }
+            - { name: AWS_SECRET_ACCESS_KEY, value: "local" }
+            - { name: AWS_REGION, value: "us-east-1" }
+            - { name: EP, value: "http://dynamodb:8000" }
+            - { name: TABLE, value: "ticketbottle-orders" }
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              until aws dynamodb list-tables --endpoint-url "$EP" >/dev/null 2>&1; do
+                echo "waiting for dynamodb..."; sleep 2; done
+              if aws dynamodb describe-table --endpoint-url "$EP" --table-name "$TABLE" >/dev/null 2>&1; then
+                echo "table $TABLE already exists"; exit 0; fi
+              aws dynamodb create-table --endpoint-url "$EP" --table-name "$TABLE" \
+                --attribute-definitions \
+                  AttributeName=PK,AttributeType=S AttributeName=SK,AttributeType=S \
+                  AttributeName=GSI1PK,AttributeType=S AttributeName=GSI1SK,AttributeType=S \
+                  AttributeName=GSI2PK,AttributeType=S AttributeName=GSI2SK,AttributeType=S \
+                --key-schema AttributeName=PK,KeyType=HASH AttributeName=SK,KeyType=RANGE \
+                --global-secondary-indexes \
+                  'IndexName=GSI1,KeySchema=[{AttributeName=GSI1PK,KeyType=HASH},{AttributeName=GSI1SK,KeyType=RANGE}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=5,WriteCapacityUnits=5}' \
+                  'IndexName=GSI2,KeySchema=[{AttributeName=GSI2PK,KeyType=HASH},{AttributeName=GSI2SK,KeyType=RANGE}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=5,WriteCapacityUnits=5}' \
+                --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+              aws dynamodb wait table-exists --endpoint-url "$EP" --table-name "$TABLE"
+              echo "table $TABLE created"
+

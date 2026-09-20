@@ -139,8 +139,7 @@ k3s-load:          ## Drive sustained purchase traffic on k3s (tunnel must be op
 
 
 # --- Ephemeral EKS ----------------------------------------------------
-# Brought up on demand and torn down after use. There is NO stop switch: the
-# control plane bills $0.10/hr from `eks-up` until `eks-down`.
+# Brought up on demand and torn down after use. 
 EKS_ENV     := terraform/envs/eks
 EKS_VALUES  := $(CHART)/values-eks.yaml
 EKS_CLUSTER := ticketbottle-eks
@@ -279,6 +278,8 @@ secrets-init:      ## Generate $(SECRETS_FILE) with fresh random keys (refuses t
 	   echo "  encryptKey: \"$$(rand 64)\""; \
 	   echo "  internalKey: \"$$(rand 48)\""; \
 	   echo "  adminPassword: \"$$(rand 24)\""; \
+	   echo "  # Only applies at initdb: an existing PVC keeps the password it was created with."; \
+	   echo "  postgresPassword: \"$$(rand 32)\""; \
 	   echo "  # ZaloPay's published sandbox pair for app id 2554 — test credentials,"; \
 	   echo "  # not merchant keys. Replace both when integrating a real merchant account."; \
 	   echo "  zalopayKey1: \"sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn\""; \

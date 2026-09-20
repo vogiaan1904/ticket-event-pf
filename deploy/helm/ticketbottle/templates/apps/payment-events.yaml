@@ -21,6 +21,7 @@ spec:
           command: ["node", "webhook.js"]
           envFrom:
             - configMapRef: { name: payment-config }
+            - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 8080 }]
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }

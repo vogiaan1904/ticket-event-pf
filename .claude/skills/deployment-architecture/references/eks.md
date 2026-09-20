@@ -28,7 +28,7 @@ The chart is the same. The app topology is the same. Four things change:
 | Concern | k3s box | EKS | Why it matters |
 |---|---|---|---|
 | **Control plane** | k3s process on the instance you own | AWS-managed, multi-AZ, you never see the masters | managed vs self-hosted trade-off |
-| **Nodes** | the same one instance | managed node group on **spot** (`t3.large`/`t3a.large`), across the 2 existing public subnets | node lifecycle, spot interruption, drain |
+| **Nodes** | the same one instance | managed node group on **spot** (`t3.large`/`t3a.large`), placed by `private_nodes` (§ node placement) | node lifecycle, spot interruption, drain |
 | **Ingress** | NodePort 30000 + SSH tunnel | **ALB** via the AWS Load Balancer Controller, real public hostname | `Ingress` → cloud LB, target groups, health checks |
 | **AWS credentials** | EC2 **instance profile** (node-wide) | **IRSA** — per-ServiceAccount IAM role via OIDC | per-workload least privilege |
 
@@ -99,6 +99,56 @@ diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
 is *where the credentials come from*, not any app config: empty env creds fall through the SDK chain
 to the web-identity step instead of IMDS. This is why `config.yaml` must **omit** the AWS env vars
 rather than blank them — an empty-string env var still wins over IMDS.
+
+---
+
+## Node placement — `private_nodes`
+
+`envs/eks/variables.tf` carries a boolean that picks between the two layouts AWS
+documents. Both are real; they differ in price and in what they prove.
+
+| `private_nodes` | Nodes | Egress | Session cost | What it is |
+|---|---|---|---|---|
+| `false` (default) | public subnets | straight out the IGW | $0.73 | AWS's "using only public subnets" layout |
+| `true` | private subnets | NAT gateway created in `envs/eks` | ~$0.95 | AWS's **recommended** layout |
+
+**Why `false` is defensible and not sloppy.** AWS documents public-subnet nodes as
+one of three valid configurations, with one condition: *"While not recommended, if
+you choose to deploy your worker nodes in public subnets, implement AWS security
+group rules to limit their exposure."* The cluster SG admits nothing from
+`0.0.0.0/0`, and the API endpoint is pinned to one `/32`. The condition is met.
+
+**Why `true` exists anyway.** The reason to avoid a NAT gateway is its **$32/mo**
+standing cost — a monthly argument. This cluster is ephemeral, and NAT bills
+**hourly** ($0.045/hr + $0.045/GB in us-east-1), so a two-hour session pays about
+**$0.22**. The rule that rejects NAT on the k3s box does not transfer to a target
+that cannot idle. Every showcase EKS repo worth comparing against advertises
+private nodes; at $0.22 there is no reason to be the exception.
+
+The NAT lives in `envs/eks`, never in `envs/foundation` — it is created and
+destroyed with the cluster, so the meter cannot outlive the session. `private_nodes
+= false` produces a plan identical to the public-only layout, cluster subnets
+included, so the toggle costs nothing when it is off.
+
+**Private subnets themselves are free** and live in `envs/foundation`
+(`10.0.11.0/24`, `10.0.12.0/24`). A subnet with no `0.0.0.0/0` route bills nothing,
+which is also why the stateful-tier design puts RDS there.
+
+### IMDS is pinned, and that strengthens the IRSA claim
+
+`modules/eks` attaches a launch template for one reason: a managed node group has
+no other way to set metadata options. It sets IMDSv2 `required` and
+**`http_put_response_hop_limit = 1`**, which stops a *pod* from reaching
+`169.254.169.254` while the kubelet on the host still can.
+
+That turns the headline property from a policy statement into a network fact: the
+node role has no DynamoDB permission **and a pod cannot reach the node role at
+all.** Safe because every workload needing AWS credentials has an IRSA role.
+Note the k3s box deliberately uses hop limit **2** — there, pods *must* reach the
+instance profile, because IRSA does not exist on that target.
+
+> Attaching a launch template moves `disk_size` off the node group; it is now
+> `block_device_mappings` in the template (gp3, encrypted). Setting both is an error.
 
 ---
 

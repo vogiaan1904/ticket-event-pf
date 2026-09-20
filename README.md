@@ -45,9 +45,14 @@ The platform is polyglot by design: Go for the concurrency- and latency-sensitiv
 
 ## Architecture
 
-A single HTTP gateway is the only public entry point; every service behind it speaks gRPC. Cross-service notifications travel over Kafka. The diagram below shows the system as deployed on AWS — the workload topology is identical wherever it runs, since one Helm chart serves every target.
+A single HTTP gateway is the only public entry point; every service behind it speaks gRPC. Cross-service notifications travel over Kafka. The diagram below shows the system on its Amazon EKS target — the workload topology is identical wherever it runs, since one Helm chart serves every target.
 
-![TicketBottle architecture on AWS](assets/architecture-aws.png)
+![TicketBottle architecture on Amazon EKS](assets/eks-arc.png)
+
+The node group sits in private subnets and reaches the internet through a NAT gateway,
+which is the layout AWS recommends. Both are created by the ephemeral `envs/eks` stack,
+so `terraform destroy` takes the NAT's meter with it — see `private_nodes` under
+Deployment.
 
 ---
 
@@ -198,7 +203,9 @@ One Helm chart deploys the platform to every target. The workload topology never
 
 Infrastructure is Terraform, split into composable modules under `deploy/terraform/`. Images are built in GitHub Actions and pushed to ECR.
 
-**No workload holds a long-lived AWS credential.** CI authenticates through GitHub OIDC federation, instances through an EC2 instance profile, and pods on EKS through IRSA. The EKS node role is deliberately granted no DynamoDB access, so a working purchase flow is itself proof that the pod-level identity is what authenticated.
+**No workload holds a long-lived AWS credential.** CI authenticates through GitHub OIDC federation, instances through an EC2 instance profile, and pods on EKS through IRSA. The EKS node role is deliberately granted no DynamoDB access, and the node launch template caps the IMDS hop limit at 1 so a pod cannot reach that role to begin with — a working purchase flow is therefore proof that the pod-level identity is what authenticated.
+
+EKS nodes default to public subnets, which AWS documents as a valid layout on the condition that security groups carry the exposure; the cluster admits nothing from `0.0.0.0/0` and the API endpoint is pinned to one address. Setting `private_nodes = true` moves them to private subnets behind a NAT gateway — AWS's recommended layout — for roughly $0.22 on a two-hour session, since the cluster is ephemeral and NAT bills hourly.
 
 See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure detail.
 

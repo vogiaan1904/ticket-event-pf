@@ -36,8 +36,9 @@ module "budget" {
 }
 
 module "vpc" {
-  source = "../../modules/vpc"
-  tags   = local.tags
+  source               = "../../modules/vpc"
+  private_subnet_cidrs = var.private_subnet_cidrs
+  tags                 = local.tags
 }
 
 locals {

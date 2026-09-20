@@ -6,6 +6,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 EKS_ENV="$HERE/../terraform/envs/eks"
+. "$HERE/eks-context.sh"
 
 CLUSTER=$(cd "$EKS_ENV" && terraform output -raw cluster_name)
 LBC_ROLE=$(cd "$EKS_ENV" && terraform output -raw lbc_role_arn)
@@ -34,12 +35,9 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
 kubectl -n kube-system rollout status deploy/aws-load-balancer-controller --timeout=5m
 
 echo "== 3. metrics-server =="
-# EKS ships no metrics-server; k3s bundles one, which is why the k3s target
-# never needed this step. Without it every HPA reports <unknown> and never
-# scales.
+# EKS ships no metrics-server; Without it every HPA reports <unknown> and never scales.
 #
-# No --kubelet-insecure-tls: EKS kubelet serving certs are signed by the cluster
-# CA. kind needs that flag, EKS does not.
+# No --kubelet-insecure-tls: EKS kubelet serving certs are signed by the cluster CA.
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null 2>&1 || true
 helm repo update metrics-server >/dev/null
 

@@ -36,10 +36,9 @@ resource "aws_eks_cluster" "this" {
     endpoint_public_access = true
     public_access_cidrs    = [var.my_ip_cidr]
 
-    # REQUIRED here, not optional: the nodes live in public subnets, so with only a
-    # CIDR-restricted PUBLIC endpoint their kubelets would be refused by the API
-    # server. Private access gives them an in-VPC path and keeps the public door
-    # locked to one /32.
+    # REQUIRED, not optional, on either node placement: a CIDR-restricted PUBLIC
+    # endpoint refuses kubelets from public nodes, and private nodes have no public
+    # path at all. This gives them an in-VPC route and keeps the door on one /32.
     endpoint_private_access = true
   }
 
@@ -71,8 +70,7 @@ resource "aws_iam_openid_connect_provider" "oidc" {
 }
 
 # ------------------------------------------------------------------ node group
-# NOTE: this role has NO DynamoDB permission, on purpose. On the k3s target the node's
-# instance profile granted DynamoDB to every pod on the box; here only the
+# NOTE: this role has NO DynamoDB permission, only the
 # order-service ServiceAccount gets it, through IRSA.
 resource "aws_iam_role" "node" {
   name = "${var.cluster_name}-node"
@@ -87,25 +85,65 @@ resource "aws_iam_role" "node" {
   tags = var.tags
 }
 
+# Keys are static: for_each addresses must resolve at plan time, the ARNs cannot.
 resource "aws_iam_role_policy_attachment" "node" {
-  for_each = toset([
-    "${local.managed_policy_prefix}/AmazonEKSWorkerNodePolicy",
-    "${local.managed_policy_prefix}/AmazonEKS_CNI_Policy",
-    # kubelet pulls straight from ECR — no regcred + systemd timer like k3s needed.
-    "${local.managed_policy_prefix}/AmazonEC2ContainerRegistryReadOnly",
-  ])
+  for_each = {
+    worker = "${local.managed_policy_prefix}/AmazonEKSWorkerNodePolicy"
+    cni    = "${local.managed_policy_prefix}/AmazonEKS_CNI_Policy"
+    ecr    = "${local.managed_policy_prefix}/AmazonEC2ContainerRegistryReadOnly"
+  }
   role       = aws_iam_role.node.name
   policy_arn = each.value
+}
+
+# The only way to set metadata options on a managed node group. image_id and
+# user_data stay unset, so EKS still owns the AMI and the bootstrap script.
+resource "aws_launch_template" "node" {
+  name_prefix = "${var.cluster_name}-node-"
+
+  # Hop limit 1 puts IMDS beyond a pod's reach, so the node role is not a fallback
+  # any workload can drop back to. Safe: each one that needs AWS holds an IRSA role.
+  metadata_options {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required" # IMDSv2
+    http_put_response_hop_limit = 1
+  }
+
+  # Carries the node disk: disk_size and a launch template are mutually exclusive.
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = var.node_disk_gb
+      volume_type           = "gp3"
+      encrypted             = true
+      delete_on_termination = true
+    }
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags          = merge(var.tags, { Name = "${var.cluster_name}-node" })
+  }
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = var.tags
 }
 
 resource "aws_eks_node_group" "spot" {
   cluster_name    = aws_eks_cluster.this.name
   node_group_name = "spot"
   node_role_arn   = aws_iam_role.node.arn
-  subnet_ids      = var.subnet_ids
+  subnet_ids      = coalesce(var.node_subnet_ids, var.subnet_ids)
   capacity_type   = "SPOT"
   instance_types  = var.node_instance_types
-  disk_size       = var.node_disk_gb
+
+  launch_template {
+    id      = aws_launch_template.node.id
+    version = aws_launch_template.node.latest_version
+  }
 
   scaling_config {
     desired_size = var.node_desired_size

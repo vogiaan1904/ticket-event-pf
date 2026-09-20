@@ -40,7 +40,11 @@ Cost is a **first-class design constraint** here, not an afterthought. The hard 
 
 **1 — Elastic IPs bill while stopped.** Since Feb 2024 AWS charges ~$0.005/hr (~$3.60/mo) per public IPv4 — including an EIP **that is attached to a stopped instance**. A parked EIP would silently negate the entire saving from stopping the box. **Design rule: use the ephemeral auto-assigned public IP** (bills only while running, ~$0.75/mo). The cost is that the IP changes on every start — accepted deliberately, and why `make start-ec2-k3s` re-prints the SSH command and the host key isn't pinned.
 
-**2 — NAT gateways.** ~$32/mo for a resource that does nothing but let private subnets reach the internet. The VPC has **none**: the box sits in a public subnet behind a security group that only admits port 22 from one IP. If anyone proposes private subnets, they're proposing a NAT gateway — make that cost explicit first.
+**2 — NAT gateways.** $0.045/hr + $0.045/GB in us-east-1 — **~$32/mo standing**, which is why the k3s box sits in a public subnet behind a security group admitting port 22 from one IP, and why no NAT exists in `envs/foundation`.
+
+> **The $32/mo figure is a *standing* cost, and it does not transfer to an ephemeral target.** NAT bills hourly, so a two-hour EKS session pays ~$0.09 plus processing — about **$0.22** all in. `envs/eks` therefore has a `private_nodes` toggle that creates one, **in the EKS env** so `terraform destroy` takes the meter with it. Judge a NAT by how long it stands up, not by its monthly rate. Private *subnets* are free either way: no `0.0.0.0/0` route, no bill.
+
+A free **S3 gateway endpoint** is attached to both route tables. ECR keeps image layers in S3, so the bulk of a pull bypasses the NAT's per-GB charge entirely.
 
 **3 — Orphaned load balancers (EKS).** An ALB created by the Load Balancer Controller in response to a k8s `Ingress` is *not* in Terraform state and *survives* `terraform destroy`. Delete the k8s objects first; `eks-teardown.sh` does this in order, and `eks-leak-check.sh` proves it.
 
@@ -63,7 +67,7 @@ These come up whenever someone asks "why not just…":
 
 | Decision | Saves | Costs |
 |---|---|---|
-| No NAT gateway; public subnet + tight SG | ~$32/mo | egress goes out the instance's public IP; SG is the only barrier |
+| No NAT gateway; public subnet + tight SG (k3s, and EKS by default) | ~$32/mo standing | egress goes out the instance's public IP; SG is the only barrier. On EKS, `private_nodes = true` buys AWS's recommended layout back for ~$0.22/session |
 | Ephemeral IP over Elastic IP | ~$2.85/mo | IP changes every start — fresh tunnel each session |
 | Redpanda instead of Kafka + Zookeeper | ~2GB RAM (→ smaller instance) | not the JVM Kafka most deployments run; wire-compatible, so client code is unchanged |
 | Temporal with SQL visibility, no Elasticsearch | ~1–2GB RAM | no advanced workflow search |

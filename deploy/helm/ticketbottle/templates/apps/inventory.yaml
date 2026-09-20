@@ -1,1 +1,1 @@
-{{ include "tb.appService" (dict "ctx" . "name" "inventory-service" "image" "ticketbottle/inventory" "port" 50057 "config" "inventory-config" "svcName" "inventory-service" "probe" "tcp" "metricsPort" 2112) }}
+{{ include "tb.appService" (dict "ctx" . "name" "inventory-service" "image" "ticketbottle/inventory" "port" 50057 "config" "inventory-config" "secret" "inventory-secrets" "svcName" "inventory-service" "probe" "tcp" "metricsPort" 2112) }}

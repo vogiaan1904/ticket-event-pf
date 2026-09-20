@@ -1,3 +1,10 @@
+apiVersion: v1
+kind: Secret
+metadata: { name: temporal-secrets, namespace: {{ include "tb.namespace" . }} }
+type: Opaque
+stringData:
+  POSTGRES_PWD: {{ include "tb.pgPassword" . | quote }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,9 +28,11 @@ spec:
           env:
             - { name: DB, value: postgres12 }
             - { name: DB_PORT, value: "5432" }
-            - { name: POSTGRES_SEEDS, value: postgres }
+            - { name: POSTGRES_SEEDS, value: {{ .Values.postgres.hosts.shared }} }
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }
-            - { name: POSTGRES_PWD, value: "{{ .Values.postgres.password }}" }
+            - name: POSTGRES_PWD
+              valueFrom:
+                secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
             - { name: DBNAME, value: temporal }
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
@@ -66,6 +75,9 @@ spec:
     metadata:
       labels: { app: temporal-ui }
     spec:
+      # The Service's name would inject TEMPORAL_UI_PORT=tcp://<ip>:8080, which the
+      # UI reads as its own listen port. It finds the frontend by DNS, not links.
+      enableServiceLinks: false
       containers:
         - name: temporal-ui
           image: {{ .Values.temporal.ui.image }}

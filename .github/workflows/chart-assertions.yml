@@ -1,0 +1,30 @@
+name: chart-assertions
+
+# The chart's own tests. No AWS and no secrets: the goldens render from
+# tests/fixture-secrets.yaml, so a runner needs nothing but helm.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "deploy/helm/**"
+      - ".github/workflows/chart-assertions.yml"
+  pull_request:
+    paths:
+      - "deploy/helm/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  assert-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.2.3
+
+      - name: Assert the chart renders as committed
+        run: deploy/helm/ticketbottle/tests/assert-render.sh
