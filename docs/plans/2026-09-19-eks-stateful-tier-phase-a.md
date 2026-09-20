@@ -1,5 +1,9 @@
 # EKS Stateful Tier — Phase (a): Chart Toggles Implementation Plan
 
+**Status: COMPLETE 2026-09-20.** Every task below is done and verified on the
+k3s box; the checkboxes are a record, not open work. Task 5 was deliberately
+dropped — see the parent design.
+
 **Goal:** Make the Helm chart able to point each service at an external Postgres host without forking a manifest, and get every database credential out of the ConfigMaps — while kind and k3s keep rendering exactly what they render today.
 
 **Architecture:** Follows the existing `dynamodb.enabled` precedent. A `postgres.enabled` flag gates the in-cluster StatefulSet, and a `postgres.hosts` map gives each service its own host. All hosts default to `postgres`, so every current target is unaffected. Credentials move from the ConfigMaps into per-service Secrets, which `envFrom` already supports.

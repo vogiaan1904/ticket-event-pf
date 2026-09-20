@@ -64,11 +64,9 @@ docs/*.yaml
 docs/*.yml
 docs/*.html
 
-# keep the platform guides under root docs/; everything else there is local
-!/docs/
-!/docs/ARCHITECTURE.md
-!/docs/METRICS.md
-!/docs/RUNBOOK.md
+# Root docs/ is tracked in full: the guides, design/, plans/ and diagram sources.
+# See docs/README.md for what belongs in each. The rules above ignore generated
+# API specs (docs/*.json|yaml|html) wherever they appear, including under a service.
 
 # --- Local data / runtime state -------------------------------------------
 *-data/
