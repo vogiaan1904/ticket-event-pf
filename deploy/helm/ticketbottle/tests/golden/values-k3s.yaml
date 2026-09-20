@@ -69,13 +69,14 @@ stringData:
   APP_INIT_ADMIN_PASSWORD: "fixture-not-a-real-admin-password"
 
 ---
-# Source: ticketbottle/templates/infra/temporal.yaml
+# Source: ticketbottle/templates/infra/temporal-secrets.yaml
 apiVersion: v1
 kind: Secret
 metadata: { name: temporal-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
   POSTGRES_PWD: "fixture-not-a-real-postgres-password"
+
 ---
 # Source: ticketbottle/templates/apps/config.yaml
 apiVersion: v1
@@ -552,6 +553,10 @@ spec:
     matchLabels: { app: event-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: event-service }
     spec:
       containers:
@@ -591,6 +596,10 @@ spec:
     matchLabels: { app: app-gateway }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: app-gateway }
     spec:
       containers:
@@ -630,6 +639,10 @@ spec:
     matchLabels: { app: inventory-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: inventory-service }
     spec:
       containers:
@@ -669,6 +682,10 @@ spec:
     matchLabels: { app: order-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: order-service }
     spec:
       containers:
@@ -708,6 +725,10 @@ spec:
     matchLabels: { app: order-consumer }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: order-consumer }
     spec:
       containers:
@@ -741,6 +762,10 @@ spec:
     matchLabels: { app: outbox-relay }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: outbox-relay }
     spec:
       containers:
@@ -775,6 +800,10 @@ spec:
     matchLabels: { app: payment-webhook }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: payment-webhook }
     spec:
       containers:
@@ -814,6 +843,10 @@ spec:
     matchLabels: { app: payment-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: payment-service }
     spec:
       containers:
@@ -853,6 +886,10 @@ spec:
     matchLabels: { app: user-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: user-service }
     spec:
       containers:
@@ -892,6 +929,10 @@ spec:
     matchLabels: { app: waitroom-service }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: waitroom-service }
     spec:
       containers:
@@ -931,6 +972,10 @@ spec:
     matchLabels: { app: temporal }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # the pod running the old password. The digest rolls it.
+        checksum/secret: 4e3325a65db09c7e104ccbcf4a404ad65c6b5d29812b0bd1f0b442da211fc8b5
       labels: { app: temporal }
     spec:
       containers:

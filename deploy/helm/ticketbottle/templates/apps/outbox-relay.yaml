@@ -11,6 +11,10 @@ spec:
     matchLabels: { app: outbox-relay }
   template:
     metadata:
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: {{ include (print $.Template.BasePath "/apps/secrets.yaml") $ | sha256sum }}
       labels: { app: outbox-relay }
     spec:
       containers:
