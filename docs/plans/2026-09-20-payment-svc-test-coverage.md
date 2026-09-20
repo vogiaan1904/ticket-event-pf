@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Tasks 1-6 done. Task 7 open.
+**Status: COMPLETE 2026-09-20.** All seven tasks done; the checkboxes are a record, not open work.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -693,10 +693,10 @@ Scope this to `payment-svc` only. Adding the other three services now would wire
 - Create: `.github/workflows/ts-tests.yml`
 
 **Interfaces:**
-- Consumes: the spec files from Tasks 1–5.
+- Consumes: the spec files from Tasks 1–6.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the workflow**
+- [x] **Step 1: Write the workflow**
 
 Create `.github/workflows/ts-tests.yml` **at the repository root** (not in the service directory):
 
@@ -730,7 +730,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Matches the service Dockerfiles; @types/node is 22, the runtime is not.
+          node-version: "20"
 
       - run: npm ci
 
@@ -740,9 +741,11 @@ jobs:
       - run: npm test
 ```
 
-`prisma generate` is not optional: `payment.service.ts` imports `PaymentStatus` from `@prisma/client`, which does not exist in a fresh `node_modules` until the client is generated from `prisma/schema.prisma`.
+The client is required — deleting `node_modules/.prisma` fails both suites at `prisma.service.ts:8` — but `npm ci` already produces it, because `@prisma/client` generates it in its own `postinstall`. The explicit step is therefore redundant today and kept deliberately: it states the dependency instead of resting on a transitive package's install hook, which disappears the moment anyone adds `--ignore-scripts`.
 
-- [ ] **Step 2: Verify the whole suite passes from a clean install**
+`node-version` is `20` to match every service Dockerfile (`node:20-alpine`). There is no `engines` field or `.nvmrc` in the repo, and `@types/node` is `^22`, so the service type-checks against a Node major it never runs on — CI should test the one that ships.
+
+- [x] **Step 2: Verify the whole suite passes from a clean install**
 
 Reproduce what the runner does, in a scratch copy so the working tree is untouched. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`, so the check would silently test whatever branch happens to be checked out.
 
@@ -753,7 +756,7 @@ cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projec
 
 Expected: `Tests: 6 passed`. A failure here is a failure CI will hit; fix it before pushing.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/ts-tests.yml
@@ -765,7 +768,7 @@ enough. Scoped to payment-svc: the other three services have no tests yet, and
 a green check over an empty suite asserts nothing."
 ```
 
-- [ ] **Step 4: Push and confirm the run is green**
+- [x] **Step 4: Push and confirm the run is green**
 
 ```bash
 git push origin dev
@@ -778,11 +781,11 @@ Expected: `ts-tests` completed / success.
 
 ## Done when
 
-- [ ] `npm test` in `services/payment-svc` reports 6 passing tests across 2 suites.
-- [ ] The same passes from a clean `npm ci` in a fresh clone.
+- [x] `npm test` in `services/payment-svc` reports 6 passing tests across 2 suites.
+- [x] The same passes from a clean `npm ci` in a fresh clone.
 - [ ] `ts-tests` is green on `dev`.
-- [ ] No test requires a database, a broker or the network.
-- [ ] No `INTERNAL` is reachable from a business outcome in the paths touched.
+- [x] No test requires a database, a broker or the network.
+- [x] No `INTERNAL` is reachable from a business outcome in the paths touched.
 
 ## Not in this plan
 

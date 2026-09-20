@@ -27,7 +27,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          # Matches the service Dockerfiles; @types/node is 22, the runtime is not.
+          node-version: "20"
 
       - run: npm ci
 
