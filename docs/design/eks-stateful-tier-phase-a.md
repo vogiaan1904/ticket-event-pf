@@ -15,7 +15,7 @@
 | 0 Golden-render harness | **done** | `b72b982` |
 | 1 Per-service Postgres host | **done** | `090ba78` |
 | 2 Gate the Postgres StatefulSet | **done** | `090ba78` |
-| 3 Move the DSNs into Secrets | **done in the chart; Step 7 (k3s run) outstanding** | — |
+| 3 Move the DSNs into Secrets | **done** | `40e3834`, `53f0a09` |
 | 4 Migrations wait on the right host | **done** | `090ba78` |
 | 5 The EKS overlay opts out | **out of scope** | see spec |
 
@@ -28,8 +28,10 @@ deploy/helm/ticketbottle/tests/assert-render.sh   # all eight assertions -> pass
 The credential assertion is no longer opt-in: Task 3 turned it on, so a DSN
 returning to a ConfigMap now fails the suite. The Postgres password is now
 `required` from the secrets file like every other credential, and the goldens
-render from a committed fixture rather than from real secrets. Phase (a) closes
-when the gate below has also run on the k3s box.
+render from a committed fixture rather than from real secrets.
+
+**Phase (a) is complete.** Revision 27 on the k3s box ran every migration Job
+and passed the purchase-flow gate with all four DSNs served from Secrets.
 
 **Commit messages deliberately never name a phase or task** (root `CLAUDE.md`), so
 git history cannot answer "where are we". This table and the checkboxes below are
@@ -530,7 +532,7 @@ deploy/helm/ticketbottle/tests/assert-render.sh
 
 Expected: `all render assertions passed`, now including both `ConfigMaps carry no credential` lines.
 
-- [ ] **Step 7: Verify on a real cluster**
+- [x] **Step 7: Verify on a real cluster**
 
 The migrations Job and four services now read their DSN from a different object. This is the one task in the plan that can break at runtime while rendering perfectly.
 
@@ -538,11 +540,18 @@ kind is retired on this machine for disk pressure, so the k3s box is the venue.
 It is the only step in this phase that is not free.
 
 ```bash
-make -C deploy k3s-up
+make -C deploy start-ec2-k3s     # the public IP changes on every start
+make -C deploy k3s-allow-ip      # the SSH allowlist is pinned to one /32
+make -C deploy k3s-kubeconfig
+make -C deploy tunnel-ec2-k3s    # blocks; its own terminal
 make -C deploy k3s-deploy
-make -C deploy gate2a
-make -C deploy k3s-stop
+make -C deploy k3s-gate2
+make -C deploy stop-ec2-k3s
 ```
+
+A box that has been stopped for a day holds an expired ECR token, so the pods
+come back `ErrImagePull` before any of this. `ecr-refresh.timer` fixes it on its
+own schedule; `sudo systemctl start ecr-refresh.service` does it now.
 
 Expected: the gate passes. If a service crash-loops on a missing `DATABASE_URL`, its workload is missing the `.secret` wiring from Step 4.
 
@@ -723,7 +732,7 @@ placeholders until the instances exist; the target is not deployed until then."
 - [x] `deploy/helm/ticketbottle/tests/assert-render.sh` exits 0.
 - [x] `git diff` against the phase start shows **no change** to `values-local.yaml` or `values-k3s.yaml`.
 - [x] No ConfigMap on any overlay contains `DATABASE_PASSWORD` or a `postgresql://user:pass@` URL.
-- [ ] The purchase-flow gate passes on the k3s box.
+- [x] The purchase-flow gate passes on the k3s box.
 
 `helm template -f values-eks.yaml` renders no Postgres StatefulSet only once
 Task 5 lands, which is deferred.
