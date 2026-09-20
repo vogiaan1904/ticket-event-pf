@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Task 1 done. Tasks 2-7 open.
+**Status:** Tasks 1-2 done. Tasks 3-7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -25,6 +25,8 @@ Out of scope, deliberately:
 - **Comment budget** (root `CLAUDE.md`): 3 lines inline, 5 on a symbol, 8 for a file header. No paragraphs.
 - **Commit messages describe the platform.** No mention of plans, phases or task numbers.
 - **Tests must run with no infrastructure.** No database, no Kafka, no network. If a test needs any of those, it belongs in `lambdas/`, not here.
+- **Prettier is an eslint error here** (`plugin:prettier/recommended`, `printWidth: 100`). The snippets below are not pre-formatted; reflow as you paste and verify with `npx prettier --check <files>`.
+- **ts-jest type-checks.** A type error fails the entire suite, not one test.
 - Run every command from `services/payment-svc/`.
 
 ## File Structure
@@ -203,7 +205,7 @@ The lambda path already gets this right: `lambdas/payment-webhook-handler/__test
 - Consumes: `buildService()` from Task 1.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe('PaymentService', ...)` in `payment.service.spec.ts`:
 
@@ -229,7 +231,7 @@ Append inside the top-level `describe('PaymentService', ...)` in `payment.servic
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -237,7 +239,7 @@ npm test
 
 Expected: `Expected number of calls: 1, Received number of calls: 2`. The current code never calls `updateMany`, so both passes reach the outbox.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.service.ts:26-48` with:
 
@@ -260,7 +262,7 @@ Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.servi
       });
       if (claimed.count === 0) return;
 
-      const payment = await tx.payment.findUnique({
+      const payment = await tx.payment.findUniqueOrThrow({
         where: { orderCode: existingPayment.orderCode },
       });
       await this.outboxService.savePaymentCompletedEvent(payment, tx);
@@ -274,7 +276,11 @@ Replace the body of `handleSuccessPayment` in `src/modules/payment/payment.servi
 
 `updateMany` is what makes this atomic: it applies the `status` predicate inside the same statement that writes, so two concurrent callbacks cannot both see `PENDING`. `update` takes a unique `where` and cannot carry a status guard.
 
-- [ ] **Step 4: Run the test to verify it passes**
+`findUniqueOrThrow`, not `findUnique`: the latter returns `Payment | null` and `savePaymentCompletedEvent` takes a non-nullable `PaymentEntity`, so ts-jest fails the whole suite on a type error. The row is guaranteed to exist — the `updateMany` just matched it in this transaction — and a throw rolls the transaction back, keeping the status write and the outbox write atomic. The re-read is not redundant: the event's `completed_at` comes from `payment.completedAt`, which only the post-update row carries.
+
+Add `findUniqueOrThrow: jest.fn()` to the `tx.payment` mock in `buildService()`.
+
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -282,7 +288,7 @@ npm test
 
 Expected: `Tests: 2 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
