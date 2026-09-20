@@ -26,23 +26,25 @@ done
 for overlay in local k3s; do
   cms=$(helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" \
         | awk '/^kind: ConfigMap$/{f=1} /^---$/{f=0} f')
-  if printf '%s' "$cms" | grep -qiE '(DATABASE_PASSWORD|postgresql://[^:]+:[^@]+@)'; then
+  if grep -qiE '(DATABASE_PASSWORD|postgresql://[^:]+:[^@]+@)' <<<"$cms"; then
     fail "$overlay: a database credential is in a ConfigMap"
   fi
   echo "OK  $overlay ConfigMaps carry no credential"
 done
 
+# grep -q closes the pipe at the first match, which fails a `printf |` producer
+# under pipefail. Match against a here-string, never a pipeline.
 # An external-database target renders no datastore and still renders every
 # application workload, and each migration Job waits on its own service's host.
 off=$(helm template tb "$CHART" -f "$CHART/values-local.yaml" -f "$SECRETS" --set postgres.enabled=false)
-printf '%s' "$off" | grep -q "name: postgres$" && fail "postgres.enabled=false still renders a postgres object"
-printf '%s' "$off" | grep -q "name: order-service" || fail "postgres.enabled=false wrongly removed an application workload"
+grep -q "name: postgres$" <<<"$off" && fail "postgres.enabled=false still renders a postgres object"
+grep -q "name: order-service" <<<"$off" || fail "postgres.enabled=false wrongly removed an application workload"
 echo "OK  postgres.enabled=false removes only the datastore"
 
 ext=$(helm template tb "$CHART" -f "$CHART/values-local.yaml" -f "$SECRETS" \
       --set postgres.enabled=false --set postgres.hosts.payment=pay.example.com \
       --set postgres.hosts.shared=shared.example.com)
-printf '%s' "$ext" | grep -q "pg_isready -h postgres " && fail "a migration Job still waits on the in-cluster host"
+grep -q "pg_isready -h postgres " <<<"$ext" && fail "a migration Job still waits on the in-cluster host"
 echo "OK  migration Jobs wait on their configured host"
 
 # A DSN now lives in a Secret, so every container that reads a database-backed
