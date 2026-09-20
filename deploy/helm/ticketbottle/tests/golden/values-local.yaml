@@ -5,10 +5,10 @@ kind: Secret
 metadata: { name: event-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  ENCRYPT_KEY: "0Uc9Xa1BB59xfNxHPcUrj6BMpiCWUB7Qfd7mrJfbSpNn1z29MMj2PhU02rZ9w6R5"
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_event
+  ENCRYPT_KEY: "fixture-not-a-real-encrypt-key"
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_event
   DATABASE_USERNAME: "root"
-  DATABASE_PASSWORD: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -16,9 +16,9 @@ kind: Secret
 metadata: { name: user-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_user
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_user
   DATABASE_USERNAME: "root"
-  DATABASE_PASSWORD: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -26,7 +26,7 @@ kind: Secret
 metadata: { name: inventory-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  POSTGRES_URL: postgresql://root:root@postgres:5432/ticketbottle_inventory?sslmode=disable
+  POSTGRES_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_inventory?sslmode=disable
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -34,7 +34,7 @@ kind: Secret
 metadata: { name: order-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  JWT_SECRET: "ERSZp3va6aLUUxo2s7L3VxvWtgsThCe7ASqU69BxPZnDwz3U6yN4S2g9VsNgHhF6"
+  JWT_SECRET: "fixture-not-a-real-jwt-secret"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -42,7 +42,7 @@ kind: Secret
 metadata: { name: waitroom-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  JWT_SECRET: "ERSZp3va6aLUUxo2s7L3VxvWtgsThCe7ASqU69BxPZnDwz3U6yN4S2g9VsNgHhF6"
+  JWT_SECRET: "fixture-not-a-real-jwt-secret"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -50,11 +50,11 @@ kind: Secret
 metadata: { name: payment-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  ZALOPAY_KEY1: "sdngKKJmqEMzvh5QQcdD2A9XBSKUNaYn"
-  ZALOPAY_KEY2: "trMrHtvjo6myautxDUiAcYsVtaeQ8nhf"
-  DATABASE_URL: postgresql://root:root@postgres:5432/ticketbottle_payment
+  ZALOPAY_KEY1: "fixture-not-a-real-zalopay-key1"
+  ZALOPAY_KEY2: "fixture-not-a-real-zalopay-key2"
+  DATABASE_URL: postgresql://root:fixture-not-a-real-postgres-password@postgres:5432/ticketbottle_payment
   DATABASE_USERNAME: "root"
-  DATABASE_PASSWORD: "root"
+  DATABASE_PASSWORD: "fixture-not-a-real-postgres-password"
 ---
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
@@ -62,11 +62,11 @@ kind: Secret
 metadata: { name: gateway-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  ENCRYPT_KEY: "0Uc9Xa1BB59xfNxHPcUrj6BMpiCWUB7Qfd7mrJfbSpNn1z29MMj2PhU02rZ9w6R5"
-  JWT_ACCESS_SECRET: "cVtxyRCY2vD3V8gHiH7Nlhq2qMIDYEz3sdDpJ3YTF9svRk3C"
-  JWT_REFRESH_SECRET: "KcEYo8JWwWtKNGHD44dRnwoFMFHFtP5aVoJtRHnmEtWUospx"
-  INTERNAL_KEY: "dlvSSL1jd9jkHx4qYKVJxe4EqKsRNjJXAO1FpmAcQUKIKDYU"
-  APP_INIT_ADMIN_PASSWORD: "AQWBlxZteW65HlhpyNCIJnAa"
+  ENCRYPT_KEY: "fixture-not-a-real-encrypt-key"
+  JWT_ACCESS_SECRET: "fixture-not-a-real-access-secret"
+  JWT_REFRESH_SECRET: "fixture-not-a-real-refresh-secret"
+  INTERNAL_KEY: "fixture-not-a-real-internal-key"
+  APP_INIT_ADMIN_PASSWORD: "fixture-not-a-real-admin-password"
 
 ---
 # Source: ticketbottle/templates/infra/temporal.yaml
@@ -75,7 +75,7 @@ kind: Secret
 metadata: { name: temporal-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
-  POSTGRES_PWD: "root"
+  POSTGRES_PWD: "fixture-not-a-real-postgres-password"
 ---
 # Source: ticketbottle/templates/apps/config.yaml
 apiVersion: v1
@@ -974,7 +974,7 @@ spec:
           ports: [{ containerPort: 5432 }]
           env:
             - { name: POSTGRES_USER, value: "root" }
-            - { name: POSTGRES_PASSWORD, value: "root" }
+            - { name: POSTGRES_PASSWORD, value: "fixture-not-a-real-postgres-password" }
             - { name: POSTGRES_DB, value: "root" }
             - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
           volumeMounts:

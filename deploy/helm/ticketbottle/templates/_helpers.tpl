@@ -24,3 +24,11 @@ resources:
 {{ toYaml . | indent 2 }}
 {{- end -}}
 {{- end -}}
+
+{{/*
+The Postgres password. Supplied like every other credential, from the gitignored
+secrets file; `required` fails the render rather than defaulting to a known value.
+*/}}
+{{- define "tb.pgPassword" -}}
+{{- required "secrets.postgresPassword is required (make -C deploy secrets-init)" .Values.secrets.postgresPassword -}}
+{{- end -}}

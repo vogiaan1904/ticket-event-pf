@@ -3,10 +3,10 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CHART="$HERE/.."
-SECRETS="$CHART/../../secrets.values.yaml"
+SECRETS="$HERE/fixture-secrets.yaml"
 fail() { echo "FAIL: $1"; exit 1; }
 
-[ -f "$SECRETS" ] || fail "deploy/secrets.values.yaml missing — run 'make -C deploy secrets-init'"
+[ -f "$SECRETS" ] || fail "tests/fixture-secrets.yaml missing"
 
 # Render to a file, as render-golden.sh does: $(...) would strip helm's
 # trailing blank line and every diff would report it.
@@ -61,5 +61,17 @@ for overlay in local k3s; do
     || fail "$overlay: a container reads $(sort -u "$actual.bad" | tr '\n' ' ')config without the matching Secret"
   echo "OK  $overlay pairs every database config with its Secret"
 done
+
+# The goldens are committed, so a real secret reaching one is published. Skipped
+# where the developer's file is absent, as in CI.
+REAL="$CHART/../../secrets.values.yaml"
+if [ -f "$REAL" ]; then
+  while read -r val; do
+    [ ${#val} -ge 12 ] || continue
+    grep -qF -- "$val" "$HERE"/golden/*.yaml \
+      && fail "a value from deploy/secrets.values.yaml is in a golden file — render them with fixture-secrets.yaml"
+  done < <(sed -n 's/^[[:space:]]*[A-Za-z]*:[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' "$REAL")
+  echo "OK  goldens carry no real secret"
+fi
 
 echo "all render assertions passed"

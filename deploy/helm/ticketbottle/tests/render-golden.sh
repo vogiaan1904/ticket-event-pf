@@ -4,7 +4,7 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CHART="$HERE/.."
-SECRETS="$CHART/../../secrets.values.yaml"
+SECRETS="$HERE/fixture-secrets.yaml"
 mkdir -p "$HERE/golden"
 for overlay in local k3s; do
   helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" \

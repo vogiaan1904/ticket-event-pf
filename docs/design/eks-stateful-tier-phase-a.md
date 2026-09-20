@@ -26,8 +26,10 @@ deploy/helm/ticketbottle/tests/assert-render.sh   # all eight assertions -> pass
 ```
 
 The credential assertion is no longer opt-in: Task 3 turned it on, so a DSN
-returning to a ConfigMap now fails the suite. Phase (a) closes when the gate
-below has also run on the k3s box.
+returning to a ConfigMap now fails the suite. The Postgres password is now
+`required` from the secrets file like every other credential, and the goldens
+render from a committed fixture rather than from real secrets. Phase (a) closes
+when the gate below has also run on the k3s box.
 
 **Commit messages deliberately never name a phase or task** (root `CLAUDE.md`), so
 git history cannot answer "where are we". This table and the checkboxes below are
@@ -38,7 +40,7 @@ the record; keep them current in the same commit as the work.
 - **Chart invariant #1:** targets are values overlays, never forked manifests. Do not add a second mechanism for "external datastore" — follow `dynamodb.enabled`.
 - **`values-local.yaml` and `values-k3s.yaml` must render byte-identical to today** through Task 2. Task 3 changes them deliberately and re-baselines the golden files in the same commit.
 - **No database password may appear in any ConfigMap** once Task 3 lands. This is asserted, not intended.
-- **No secret values in committed files.** `deploy/secrets.values.yaml` is gitignored and supplies them.
+- **No secret values in committed files.** `deploy/secrets.values.yaml` is gitignored and supplies them. The golden renders are committed, so they are rendered from `tests/fixture-secrets.yaml`; an assertion fails if a value from the real file reaches a golden.
 - **Comment budget** (root `CLAUDE.md`): 3 lines inline, 5 on a symbol, 8 for a file header. No paragraphs.
 - **Commit messages describe the platform.** No mention of plans, phases, or task numbers.
 - Phase (a) creates **no AWS resource.** Only Task 3's runtime check needs a cluster: four services start reading their DSN from a different object, which renders perfectly and can still break. kind is retired here, so that check runs on the k3s box.
@@ -49,6 +51,7 @@ the record; keep them current in the same commit as the work.
 |---|---|---|
 | `deploy/helm/ticketbottle/tests/render-golden.sh` | **Create.** Regenerates the golden renders. Run deliberately when a change is meant to alter output. | 0 |
 | `deploy/helm/ticketbottle/tests/assert-render.sh` | **Create.** The test: re-renders each overlay and diffs against its golden file, plus the no-password-in-ConfigMap assertion. | 0 |
+| `deploy/helm/ticketbottle/tests/fixture-secrets.yaml` | **Create.** Fixed, non-secret inputs for the goldens. The harness renders from this, never from `deploy/secrets.values.yaml`. | 3 |
 | `deploy/helm/ticketbottle/tests/golden/values-local.yaml` | **Create.** Committed baseline render. | 0 |
 | `deploy/helm/ticketbottle/tests/golden/values-k3s.yaml` | **Create.** Committed baseline render. | 0 |
 | `deploy/helm/ticketbottle/values.yaml` | **Modify.** `postgres.enabled`, `postgres.hosts`. | 1, 2 |

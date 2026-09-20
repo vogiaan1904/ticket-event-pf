@@ -3,7 +3,7 @@ kind: Secret
 metadata: { name: temporal-secrets, namespace: {{ include "tb.namespace" . }} }
 type: Opaque
 stringData:
-  POSTGRES_PWD: {{ .Values.postgres.password | quote }}
+  POSTGRES_PWD: {{ include "tb.pgPassword" . | quote }}
 ---
 apiVersion: apps/v1
 kind: Deployment
