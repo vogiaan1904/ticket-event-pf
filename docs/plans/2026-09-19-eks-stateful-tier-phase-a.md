@@ -1,5 +1,9 @@
 # EKS Stateful Tier — Phase (a): Chart Toggles Implementation Plan
 
+**Status: COMPLETE 2026-09-20.** Every task below is done and verified on the
+k3s box; the checkboxes are a record, not open work. Task 5 was deliberately
+dropped — see the parent design.
+
 **Goal:** Make the Helm chart able to point each service at an external Postgres host without forking a manifest, and get every database credential out of the ConfigMaps — while kind and k3s keep rendering exactly what they render today.
 
 **Architecture:** Follows the existing `dynamodb.enabled` precedent. A `postgres.enabled` flag gates the in-cluster StatefulSet, and a `postgres.hosts` map gives each service its own host. All hosts default to `postgres`, so every current target is unaffected. Credentials move from the ConfigMaps into per-service Secrets, which `envFrom` already supports.
@@ -22,13 +26,14 @@
 Verify rather than trust this table:
 
 ```bash
-deploy/helm/ticketbottle/tests/assert-render.sh   # all eight assertions -> passes
+deploy/helm/ticketbottle/tests/assert-render.sh   # all eleven assertions -> pass
 ```
 
 The credential assertion is no longer opt-in: Task 3 turned it on, so a DSN
 returning to a ConfigMap now fails the suite. The Postgres password is now
 `required` from the secrets file like every other credential, and the goldens
-render from a committed fixture rather than from real secrets.
+render from a committed fixture rather than from real secrets. CI runs the
+suite on every `deploy/helm/**` change (`.github/workflows/chart-assertions.yml`).
 
 **Phase (a) is complete.** Revision 27 on the k3s box ran every migration Job
 and passed the purchase-flow gate with all four DSNs served from Secrets.

@@ -206,4 +206,13 @@ it reads as noise once the bug is forgotten. State the invariant instead.
     - Don't scaffold empty layers. A small service (e.g. `user-svc`) should not carry the same folder depth as the gateway. Collapse single-file `common/`/`shared/` folders into flat files.
   - The three TS services currently use **three different** module/DTO conventions. `event-svc` is the converged reference implementation; bring the others onto it when you touch them.
 
+## Documentation layout
+
+`docs/` separates two kinds of document, because they have different lifespans:
+**`docs/design/<name>.md`** is a target state, named and undated, read
+repeatedly. **`docs/plans/YYYY-MM-DD-<name>.md`** is a work order derived from a
+design, dated because it records a decision made on a day, and read once. A
+completed plan says so in its first lines. Plans address whoever does the work,
+never a tool. Full rules: `docs/README.md`.
+
 When you change a system-wide rule or invariant, update this file.
