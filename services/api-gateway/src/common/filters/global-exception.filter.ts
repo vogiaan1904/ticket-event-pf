@@ -5,24 +5,7 @@ import { LoggerService } from '@services/logger.service';
 import { status as GrpcStatus } from '@grpc/grpc-js';
 import { Response } from 'express';
 import { BusinessException } from '../exceptions/business.exception';
-import { TB_CODE, grpcCodeOf } from '@/shared/metrics/code';
-
-// Downstream services speak gRPC, and a gRPC error is not an HttpException, so
-// without this table every business rejection falls through to the 500 branch
-// below. A code absent from the map is genuinely ours to answer for.
-const GRPC_TO_HTTP: Partial<Record<GrpcStatus, HttpStatus>> = {
-  [GrpcStatus.INVALID_ARGUMENT]: HttpStatus.BAD_REQUEST,
-  [GrpcStatus.NOT_FOUND]: HttpStatus.NOT_FOUND,
-  [GrpcStatus.ALREADY_EXISTS]: HttpStatus.CONFLICT,
-  [GrpcStatus.PERMISSION_DENIED]: HttpStatus.FORBIDDEN,
-  [GrpcStatus.UNAUTHENTICATED]: HttpStatus.UNAUTHORIZED,
-  [GrpcStatus.FAILED_PRECONDITION]: HttpStatus.CONFLICT,
-  [GrpcStatus.OUT_OF_RANGE]: HttpStatus.BAD_REQUEST,
-  [GrpcStatus.ABORTED]: HttpStatus.CONFLICT,
-  [GrpcStatus.UNIMPLEMENTED]: HttpStatus.NOT_IMPLEMENTED,
-  [GrpcStatus.UNAVAILABLE]: HttpStatus.SERVICE_UNAVAILABLE,
-  [GrpcStatus.DEADLINE_EXCEEDED]: HttpStatus.GATEWAY_TIMEOUT,
-};
+import { GRPC_TO_HTTP, TB_CODE, grpcCodeOf } from '@/shared/metrics/code';
 
 interface GrpcError {
   code: GrpcStatus;

@@ -102,6 +102,23 @@
       "ts"
     ],
     "rootDir": "src",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@infra/(.*)$": "<rootDir>/infra/$1",
+      "^@interfaces/(.*)$": "<rootDir>/shared/interfaces/$1",
+      "^@services/(.*)$": "<rootDir>/shared/services/$1",
+      "^@constants/(.*)$": "<rootDir>/shared/constants/$1",
+      "^@utils/(.*)$": "<rootDir>/shared/utils/$1",
+      "^@repositories/(.*)$": "<rootDir>/shared/repositories/$1",
+      "^@decorators/(.*)$": "<rootDir>/common/decorators/$1",
+      "^@filters/(.*)$": "<rootDir>/common/filters/$1",
+      "^@guards/(.*)$": "<rootDir>/common/guards/$1",
+      "^@interceptors/(.*)$": "<rootDir>/common/interceptors/$1",
+      "^@middlewares/(.*)$": "<rootDir>/common/middlewares/$1",
+      "^@exceptions/(.*)$": "<rootDir>/common/exceptions/$1",
+      "^@protogen/(.*)$": "<rootDir>/protogen/$1"
+    },
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
