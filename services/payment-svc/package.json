@@ -85,6 +85,15 @@
       "ts"
     ],
     "rootDir": "src",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1",
+      "^@modules/(.*)$": "<rootDir>/modules/$1",
+      "^@common/(.*)$": "<rootDir>/common/$1",
+      "^@infra/(.*)$": "<rootDir>/infra/$1",
+      "^@shared/(.*)$": "<rootDir>/shared/$1",
+      "^@interfaces/(.*)$": "<rootDir>/shared/interfaces/$1",
+      "^@protogen/(.*)$": "<rootDir>/protogen/$1"
+    },
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

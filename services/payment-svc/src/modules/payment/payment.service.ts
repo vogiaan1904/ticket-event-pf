@@ -146,7 +146,7 @@ export class PaymentService {
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PaymentEntity> {
     const payment = await this.repo.findByIdempotencyKey(idempotencyKey);
-    if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
+    if (!payment) throw new RpcBusinessException(ErrorCodeEnum.PaymentNotFound);
 
     return payment;
   }
