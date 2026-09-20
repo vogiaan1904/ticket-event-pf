@@ -1,0 +1,37 @@
+name: ts-tests
+
+# Unit tests only: they mock every collaborator, so the runner needs no
+# database, broker or network.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "services/payment-svc/**"
+      - ".github/workflows/ts-tests.yml"
+  pull_request:
+    paths:
+      - "services/payment-svc/**"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  payment-svc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/payment-svc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
+      - run: npm test
