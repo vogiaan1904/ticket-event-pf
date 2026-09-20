@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Tasks 1-5 done. Tasks 6-7 open.
+**Status:** Tasks 1-6 done. Task 7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -604,10 +604,10 @@ It is a malformed request and now answers INVALID_ARGUMENT."
 - Modify: `src/modules/payment/repository/payment.repository.ts:12-27`
 
 **Interfaces:**
-- Consumes: nothing.
+- Consumes: the `row` fixture and `buildRepo()` helper from Task 3, in the spec file Task 3 created. Append a second `it(...)` to its existing `describe`; do not create a second spec file and do not redefine either helper.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append a second case inside the existing `describe('PaymentRepository', ...)` in `src/modules/payment/repository/payment.repository.spec.ts`. It reuses the `row` fixture and `buildRepo` helper Task 3 created:
 
@@ -616,14 +616,22 @@ Append a second case inside the existing `describe('PaymentRepository', ...)` in
     const repo = await buildRepo({ payment: { create: jest.fn().mockResolvedValue(row) } });
 
     const created = await repo.create({
-      idempotencyKey: 'idem-1', orderCode: 'ORD-1',
-    } as any);
+      idempotencyKey: 'idem-1',
+      orderCode: 'ORD-1',
+      amountCents: 1000,
+      currency: 'VND',
+      provider: PaymentProvider.ZALOPAY,
+      redirectUrl: 'r',
+      timeoutSeconds: 60,
+      transactionId: 'tx-1',
+      paymentUrl: 'https://pay/1',
+    });
 
     expect(created.orderCode).toBe('ORD-1');
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -631,7 +639,7 @@ npm test
 
 Expected: `Expected: "ORD-1", Received: undefined`.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 In `src/modules/payment/repository/payment.repository.ts`, change `create` to keep and map the row:
 
@@ -654,7 +662,7 @@ In `src/modules/payment/repository/payment.repository.ts`, change `create` to ke
   }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -662,7 +670,7 @@ npm test
 
 Expected: `Tests: 6 passed`, across 2 suites.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/repository/payment.repository.spec.ts src/modules/payment/repository/payment.repository.ts
@@ -736,10 +744,10 @@ jobs:
 
 - [ ] **Step 2: Verify the whole suite passes from a clean install**
 
-Reproduce what the runner does, in a scratch copy so the working tree is untouched:
+Reproduce what the runner does, in a scratch copy so the working tree is untouched. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`, so the check would silently test whatever branch happens to be checked out.
 
 ```bash
-cd "$(mktemp -d)" && git clone --depth 1 file://$HOME/coding/projects/TicketEventPF r \
+cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projects/TicketEventPF r \
   && cd r/services/payment-svc && npm ci && npx prisma generate && npm test
 ```
 
