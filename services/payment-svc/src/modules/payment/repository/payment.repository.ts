@@ -10,7 +10,7 @@ export class PaymentRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(dto: CreatePaymentIntentDto): Promise<PaymentEntity> {
-    await this.prisma.payment.create({
+    const payment = await this.prisma.payment.create({
       data: {
         amountCents: dto.amountCents,
         currency: dto.currency,
@@ -23,7 +23,8 @@ export class PaymentRepository {
         paymentUrl: dto.paymentUrl,
       },
     });
-    return {} as PaymentEntity;
+
+    return toPaymentEntity(payment);
   }
 
   async findByIdempotencyKey(idempotencyKey: string): Promise<PaymentEntity | null> {
