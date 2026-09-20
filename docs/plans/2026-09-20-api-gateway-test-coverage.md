@@ -1,6 +1,6 @@
 # api-gateway Test Coverage Implementation Plan
 
-**Status:** Tasks 1-3 done. Task 4 open.
+**Status: COMPLETE 2026-09-20.** All four tasks done; the checkboxes are a record, not open work.
 
 **Goal:** Put the gateway's error contract and its refresh-token storage under test, and fix the two defects the tests expose.
 
@@ -497,9 +497,11 @@ re-authenticates once."
 - Consumes: the spec files from Tasks 1-3.
 - Produces: nothing.
 
-- [ ] **Step 1: Add the job**
+- [x] **Step 1: Add the job**
 
-Read the existing file first. Extend the `paths` filters to include `services/api-gateway/**`, and add a job mirroring `payment-svc`'s:
+Read the existing file first. Extend the `paths` filters to include `services/api-gateway/**`, and add a job mirroring `payment-svc`'s.
+
+**`paths` is workflow-level, not per-job** — GitHub Actions has no per-job `paths` key. Widening it means a payment-only push also runs the gateway's job and vice versa. That is deliberate: both jobs run in parallel and take under a minute, and a `paths`-skipped job reports *no status at all*, which stalls a required check on a protected branch forever. Per-job selectivity would need `dorny/paths-filter` plus `if: needs.changes.outputs.*`, which is more machinery than two fast jobs justify.
 
 ```yaml
   api-gateway:
@@ -522,7 +524,7 @@ Read the existing file first. Extend the `paths` filters to include `services/ap
 
 **No `prisma generate` step:** the gateway has no Prisma schema — verified, `services/api-gateway/prisma` does not exist. It is a pure gRPC client.
 
-- [ ] **Step 2: Verify from a clean clone**
+- [x] **Step 2: Verify from a clean clone**
 
 ```bash
 cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projects/TicketEventPF r \
@@ -531,7 +533,7 @@ cd "$(mktemp -d)" && git clone --depth 1 --branch dev file://$HOME/coding/projec
 
 Expected: **20 passed**. `--branch dev` is explicit: without it the clone follows the local repo's symbolic `HEAD`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .github/workflows/ts-tests.yml
@@ -545,11 +547,11 @@ store in the platform, and neither was covered by anything that runs on a push."
 
 ## Done when
 
-- [ ] `npm test` in `services/api-gateway` reports 20 passing tests across 3 suites.
-- [ ] The same passes from a clean `npm ci` in a fresh clone.
+- [x] `npm test` in `services/api-gateway` reports 20 passing tests across 3 suites.
+- [x] The same passes from a clean `npm ci` in a fresh clone.
 - [ ] `ts-tests` is green on `dev` for both jobs.
-- [ ] No test requires Redis, a database or the network.
-- [ ] No gRPC code answered 500 is labelled anything but `INTERNAL`.
+- [x] No test requires Redis, a database or the network.
+- [x] No gRPC code answered 500 is labelled anything but `INTERNAL`.
 
 ## Not in this plan
 
@@ -557,4 +559,6 @@ store in the platform, and neither was covered by anything that runs on a push."
 - **Refresh-token rotation.** `refreshAccessToken` returns the same refresh token, so a stolen one stays valid for its whole sliding window with no reuse detection. That is a design change, not a fix.
 - The gateway's controllers and guards. They are thin; the filter and the auth service are where the contracts live.
 - Fixing `npm run lint` across the four services (ESLint 9 vs `.eslintrc.js`).
+- `pull_request.paths` omits `.github/workflows/ts-tests.yml` while `push.paths` includes it, so a PR whose only change is the workflow does not trigger the workflow it changes. Inherited from the payment-svc plan; both need the same one-line fix.
+- The gateway depends on `@prisma/client` and `prisma` with no schema anywhere — dead weight in the image, and the reason "does this job need `prisma generate`?" is a live question at all.
 - Clearing stale `user_tokens:<id>` sets at deploy. They hold raw tokens written by the old code whose `refresh_token:` keys no longer resolve, and nothing can `srem` them because nothing hashes to them. They age out on `jwtRefreshExpiration`; a `user_tokens:*` flush at deploy closes the window immediately.
