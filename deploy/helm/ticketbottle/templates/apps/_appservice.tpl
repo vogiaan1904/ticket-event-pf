@@ -19,6 +19,12 @@ spec:
     matchLabels: { app: {{ .name }} }
   template:
     metadata:
+      {{- if .secret }}
+      annotations:
+        # Env is resolved at container creation, so a Secret change alone leaves
+        # pods running the old values. The digest rolls them.
+        checksum/secret: {{ include (print $.Template.BasePath "/apps/secrets.yaml") $ | sha256sum }}
+      {{- end }}
       labels: { app: {{ .name }} }
     spec:
       {{- if $.Values.topologySpread.enabled }}

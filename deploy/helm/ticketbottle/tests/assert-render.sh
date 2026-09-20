@@ -64,6 +64,21 @@ for overlay in local k3s; do
   echo "OK  $overlay pairs every database config with its Secret"
 done
 
+# A Deployment that mounts a Secret needs a digest of it in the pod template.
+# Without one, rotating a Secret changes no Deployment, helm rolls nothing, and
+# the pods keep serving the old value until something else happens to restart them.
+for overlay in local k3s; do
+  helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" > "$actual"
+  awk 'BEGIN { RS = "\n---\n" }
+    /kind: Deployment/ && /secretRef/ && !/checksum\/secret/ {
+      match($0, /name: [a-z-]+/); print substr($0, RSTART + 6, RLENGTH - 6); bad = 1
+    }
+    END { exit bad ? 1 : 0 }
+  ' "$actual" > "$actual.nodigest" \
+    || fail "$overlay: $(tr '\n' ' ' < "$actual.nodigest")mounts a Secret with no checksum annotation"
+  echo "OK  $overlay rolls its pods when a Secret changes"
+done
+
 # The goldens are committed, so a real secret reaching one is published. Skipped
 # where the developer's file is absent, as in CI.
 REAL="$CHART/../../secrets.values.yaml"
