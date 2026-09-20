@@ -1,6 +1,6 @@
 # payment-svc `src/` Test Coverage Implementation Plan
 
-**Status:** Tasks 1-3 done. Tasks 4-7 open.
+**Status:** Tasks 1-4 done. Tasks 5-7 open.
 
 **Goal:** Put the NestJS half of the money path under test, and fix the five defects the tests expose.
 
@@ -413,7 +413,7 @@ The insert is the only real arbiter, because the database holds the unique const
 - Consumes: `buildService()` from Task 1.
 - Produces: nothing new.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append inside the top-level `describe`:
 
@@ -431,16 +431,25 @@ Append inside the top-level `describe`:
       repo.create.mockRejectedValue(Object.assign(new Error('unique'), { code: 'P2002' }));
 
       const url = await service.createPaymentIntent({
-        idempotencyKey: 'idem-1', provider: 'zalopay', amountCents: 1000,
-        orderCode: 'ORD-1', currency: 'VND', redirectUrl: 'r', timeoutSeconds: 60,
-      } as any);
+        idempotencyKey: 'idem-1',
+        provider: PaymentProvider.ZALOPAY,
+        amountCents: 1000,
+        orderCode: 'ORD-1',
+        currency: 'VND',
+        redirectUrl: 'r',
+        timeoutSeconds: 60,
+        transactionId: '',
+        paymentUrl: '',
+      });
 
       expect(url).toBe('https://pay/winner');
     });
   });
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+Import `PaymentProvider` from `./enums/provider.enum` at the top of the spec. **Do not cast the DTO `as any`:** the cast hides that `'zalopay'` is not a `PaymentProvider` member (`ZALOPAY | PAYOS | VNPAY`) and that `transactionId` and `paymentUrl` are required. A real caller passes both empty — `createPaymentIntent` assigns them itself at lines 144-145. An `as any` on a DTO is the same hole as the `implements Payment` that let the Task 3 mapper bug survive.
+
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 npm test
@@ -448,7 +457,7 @@ npm test
 
 Expected: the test rejects with `unique` — the P2002 propagates, because nothing catches it.
 
-- [ ] **Step 3: Fix the code**
+- [x] **Step 3: Fix the code**
 
 In `src/modules/payment/payment.service.ts`, replace `await this.repo.create(dto);` and the `return url;` that follows it with:
 
@@ -467,9 +476,11 @@ In `src/modules/payment/payment.service.ts`, replace `await this.repo.create(dto
     return url;
 ```
 
+`(error as { code?: string }).code` is the right access: `PrismaClientKnownRequestError` declares `code: string` as a plain own property (verified against `@prisma/client` 6.17.0), `PaymentRepository.create` does not wrap, and `PrismaService` adds no `$extends`, `$use` or `errorFormat`. It is duck-typed rather than an `instanceof` narrow, which keeps the test free of Prisma's runtime error class.
+
 **Known residual, deliberately not fixed here:** both requests still call the provider, so a second payment link exists at the gateway even though only one is persisted. Closing that needs the row reserved before the gateway call, which changes the schema (`paymentUrl` must become nullable) and belongs in its own change.
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 npm test
@@ -477,7 +488,7 @@ npm test
 
 Expected: `Tests: 4 passed`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/modules/payment/payment.service.spec.ts src/modules/payment/payment.service.ts
