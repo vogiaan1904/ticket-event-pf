@@ -21,7 +21,12 @@ async function buildService() {
     saveEvent: jest.fn(),
   };
   const tx = {
-    payment: { update: jest.fn(), updateMany: jest.fn(), findUnique: jest.fn() },
+    payment: {
+      update: jest.fn(),
+      updateMany: jest.fn(),
+      findUnique: jest.fn(),
+      findUniqueOrThrow: jest.fn(),
+    },
   };
   const prisma = { $transaction: jest.fn(async (fn: any) => fn(tx)) };
   const gateway = { createPaymentLink: jest.fn(), handleCallback: jest.fn() };
@@ -59,6 +64,26 @@ describe('PaymentService', () => {
 
       // PERMISSION_DENIED tells a caller to stop; NOT_FOUND tells it to refetch.
       expect(err.getError()).toMatchObject({ code: grpcStatus.NOT_FOUND });
+    });
+  });
+
+  describe('handleSuccessPayment, via handleCallback', () => {
+    it('emits one completed event when the provider retries its callback', async () => {
+      const { service, repo, outbox, tx, gateway } = await buildService();
+      gateway.handleCallback.mockResolvedValue({
+        success: true,
+        providerTransactionId: 'tx-1',
+        response: { ok: true },
+      });
+      repo.findByProviderTransactionId.mockResolvedValue({ orderCode: 'ORD-1' });
+      // First call transitions PENDING -> COMPLETED; the retry matches no PENDING row.
+      tx.payment.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+      tx.payment.findUniqueOrThrow.mockResolvedValue({ id: 'pay-1', orderCode: 'ORD-1' });
+
+      await service.handleCallback('zalopay' as any, {});
+      await service.handleCallback('zalopay' as any, {});
+
+      expect(outbox.savePaymentCompletedEvent).toHaveBeenCalledTimes(1);
     });
   });
 });

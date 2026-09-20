@@ -26,7 +26,6 @@ export class PaymentService {
   private async handleSuccessPayment(providerTransactionId: string): Promise<void> {
     const now = new Date();
 
-    // Find payment by providerTransactionId first
     const existingPayment = await this.repo.findByProviderTransactionId(providerTransactionId);
     if (!existingPayment) {
       this.logger.error(`Payment not found for providerTransactionId: ${providerTransactionId}`);
@@ -34,11 +33,17 @@ export class PaymentService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.update({
-        where: { orderCode: existingPayment.orderCode },
+      // Compare-and-set: only a PENDING payment may complete. Providers retry
+      // callbacks, and a second COMPLETED write would publish a second event.
+      const claimed = await tx.payment.updateMany({
+        where: { orderCode: existingPayment.orderCode, status: PaymentStatus.PENDING },
         data: { status: PaymentStatus.COMPLETED, completedAt: now },
       });
+      if (claimed.count === 0) return;
 
+      const payment = await tx.payment.findUniqueOrThrow({
+        where: { orderCode: existingPayment.orderCode },
+      });
       await this.outboxService.savePaymentCompletedEvent(payment, tx);
     });
 
