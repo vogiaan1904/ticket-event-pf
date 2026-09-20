@@ -9,7 +9,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ClientGrpc } from '@nestjs/microservices';
 import * as argon2 from 'argon2';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import Redis from 'ioredis';
 import { firstValueFrom } from 'rxjs';
 import { ChangePasswordDto } from './dtos/change-password.dto';
@@ -44,8 +44,14 @@ export class AuthService {
     return randomBytes(32).toString('hex');
   }
 
+  // Refresh tokens are 32 random bytes, so a digest needs no stretching -- and
+  // unlike argon2 it is stable, which is what makes it usable as a key.
+  private digest(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
   private getRefreshTokenKey(token: string): string {
-    return `refresh_token:${token}`;
+    return `refresh_token:${this.digest(token)}`;
   }
 
   private getUserTokensKey(userId: string): string {
@@ -83,7 +89,7 @@ export class AuthService {
     const multi = this.redis.multi();
     multi.setex(refreshKey, this.refreshTokenExpiry, JSON.stringify(refreshTokenData));
 
-    multi.sadd(userTokensKey, refreshToken);
+    multi.sadd(userTokensKey, this.digest(refreshToken));
     multi.expire(userTokensKey, this.refreshTokenExpiry);
 
     await multi.exec();
@@ -193,7 +199,7 @@ export class AuthService {
 
       const multi = this.redis.multi();
       multi.del(refreshKey);
-      multi.srem(userTokensKey, refreshToken);
+      multi.srem(userTokensKey, this.digest(refreshToken));
 
       await multi.exec();
     }
@@ -206,9 +212,9 @@ export class AuthService {
     if (refreshTokens.length > 0) {
       const multi = this.redis.multi();
 
-      // Delete all refresh token data
-      refreshTokens.forEach((token) => {
-        multi.del(this.getRefreshTokenKey(token));
+      // Members are already digests, so build the key rather than hashing again.
+      refreshTokens.forEach((digest) => {
+        multi.del(`refresh_token:${digest}`);
       });
 
       // Delete user tokens set
