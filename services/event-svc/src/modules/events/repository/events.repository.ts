@@ -287,9 +287,11 @@ export class EventsRepository {
     });
   }
 
-  async updateConfig(id: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
+  // eventId, not id: EventConfig.id is its own uuid and every caller here holds
+  // the event's.
+  async updateConfigByEventId(eventId: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
     return this.prisma.eventConfig.update({
-      where: { id },
+      where: { eventId },
       data: dto,
     });
   }

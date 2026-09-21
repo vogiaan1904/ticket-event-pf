@@ -2,6 +2,7 @@ import { status as grpcStatus } from '@grpc/grpc-js';
 import { RpcException } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
 import { EventRoleType, EventStatus } from '@prisma/client';
+import { UpdateConfigDto } from './dtos';
 import { EventEntity } from './entities';
 import { EventsService } from './events.service';
 import { EventsRepository } from './repository/events.repository';
@@ -128,5 +129,44 @@ describe('EventsService authorization, on the paths that already had it', () => 
     const error = await rejectionOf(service.publishEvent('evt-1', 'stranger'));
 
     expect(errorOf(error).code).toBe(grpcStatus.PERMISSION_DENIED);
+  });
+});
+
+describe('EventsService.updateConfig', () => {
+  const configPatch: UpdateConfigDto = {
+    eventId: 'evt-1',
+    ticketSaleStartDate: new Date('2026-01-01T00:00:00.000Z'),
+    ticketSaleEndDate: new Date('2026-01-02T00:00:00.000Z'),
+    isFree: false,
+    maxAttendees: 100,
+    isPublic: false,
+    requiresApproval: false,
+    allowWaitRoom: true,
+    isNewTrending: false,
+  };
+
+  it('addresses the config by its event, not by the event id as a config id', async () => {
+    const updateConfigByEventId = jest.fn().mockResolvedValue({ id: 'cfg-1' });
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.CONFIGURED)),
+      updateConfigByEventId,
+    });
+
+    await service.updateConfig('evt-1', 'admin-1', configPatch);
+
+    expect(updateConfigByEventId).toHaveBeenCalledWith('evt-1', configPatch);
+  });
+
+  it('refuses a caller with no role before touching the config', async () => {
+    const updateConfigByEventId = jest.fn();
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.CONFIGURED)),
+      updateConfigByEventId,
+    });
+
+    const error = await rejectionOf(service.updateConfig('evt-1', 'stranger', configPatch));
+
+    expect(errorOf(error).code).toBe(grpcStatus.PERMISSION_DENIED);
+    expect(updateConfigByEventId).not.toHaveBeenCalled();
   });
 });

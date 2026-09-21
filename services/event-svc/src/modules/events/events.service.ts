@@ -94,15 +94,19 @@ export class EventsService {
     return config;
   }
 
-  async updateConfig(id: string, userId: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
-    const event = await this.repository.findById(id);
+  async updateConfig(
+    eventId: string,
+    userId: string,
+    dto: UpdateConfigDto,
+  ): Promise<EventConfigEntity> {
+    const event = await this.repository.findById(eventId);
     if (!event) {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
 
     this.assertRole(event.roles, userId, CAN_EDIT);
 
-    const config = await this.repository.updateConfig(id, dto);
+    const config = await this.repository.updateConfigByEventId(eventId, dto);
     return config;
   }
 
