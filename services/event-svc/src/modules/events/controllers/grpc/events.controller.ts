@@ -120,12 +120,12 @@ export class GrpcEventsController {
 
   // ********************* EVENT-SPECIFIC OPERATIONS ********************* //
   @GrpcMethod(EVENT_SERVICE_NAME, 'publishEvent')
-  publishEvent(dto: PublishEventDto) {
-    this.eventsService.publishEvent(dto.eventId, dto.userId);
+  async publishEvent(dto: PublishEventDto): Promise<void> {
+    await this.eventsService.publishEvent(dto.eventId, dto.userId);
   }
 
   @GrpcMethod(EVENT_SERVICE_NAME, 'approveEvent')
-  approveEvent(dto: ApproveEventDto) {
-    this.eventsService.approveEvent(dto.eventId, dto.userId);
+  async approveEvent(dto: ApproveEventDto): Promise<void> {
+    await this.eventsService.approveEvent(dto.eventId, dto.userId);
   }
 }

@@ -3,45 +3,61 @@ import { GetPaginationResponse } from '@/shared/interfaces/pagination-resp.inter
 import { Injectable } from '@nestjs/common';
 import { EventRoleType, EventStatus } from '@prisma/client';
 import { CreateEventDto, FilterEventDto, UpdateConfigDto } from './dtos';
-import { EventConfigEntity, EventEntity } from './entities';
+import { EventConfigEntity, EventEntity, EventRoleEntity } from './entities';
 import { EventsRepository } from './repository/events.repository';
 import { UpdateEventDto } from './dtos/update-event.dto';
 import { RpcBusinessException } from '@/common/exceptions/rpc-business.exception';
 import { ErrorCodeEnum } from '@/shared/constants/error-code.constant';
 import { CreateConfigDto } from './dtos/create-config.dto';
 
+// Editing an event and configuring it are the same privilege; approving is not.
+const CAN_EDIT = [EventRoleType.ADMIN, EventRoleType.EDITOR];
+
+// The one state each transition may be entered from.
+//   DRAFT -> CONFIGURED -> APPROVED -> PUBLISHED
+const APPROVE_FROM = EventStatus.CONFIGURED;
+const PUBLISH_FROM = EventStatus.APPROVED;
+
 @Injectable()
 export class EventsService {
   constructor(private readonly repository: EventsRepository) {}
 
+  // Every gated method asks the same question of the caller. Asking it in one
+  // place is what makes a missing gate visible.
+  private assertRole(
+    roles: EventRoleEntity[] | undefined,
+    userId: string,
+    allowed: EventRoleType[],
+  ): void {
+    const held = roles?.some((role) => role.userId === userId && allowed.includes(role.role));
+    if (!held) {
+      throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
+    }
+  }
+
+  // A transition out of turn is a valid request against the wrong world state,
+  // which the taxonomy calls FAILED_PRECONDITION. It is never INTERNAL.
+  private assertStatus(event: EventEntity, required: EventStatus): void {
+    if (event.status !== required) {
+      throw new RpcBusinessException(ErrorCodeEnum.EventStateInvalid);
+    }
+  }
+
   async create(dto: CreateEventDto): Promise<EventEntity> {
-    const event = await this.repository.create(dto);
-
-    await this.repository.createRole({
-      userId: dto.createdBy,
-      eventId: event.id,
-      role: EventRoleType.ADMIN,
-    });
-
-    return event;
+    // The creator's ADMIN role is nested in the same insert: an event with no
+    // role can be administered by nobody, and no method can repair it.
+    return this.repository.create(dto);
   }
 
   async update(id: string, userId: string, dto: UpdateEventDto): Promise<EventEntity> {
     const roles = await this.repository.findEventRoles(id);
-    const canUpdate = roles.some(
-      (role) =>
-        role.userId === userId &&
-        (role.role === EventRoleType.ADMIN || role.role === EventRoleType.EDITOR),
-    );
-    if (!canUpdate) {
-      throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
-    }
+    this.assertRole(roles, userId, CAN_EDIT);
 
     return this.repository.update(id, dto);
   }
 
-  findById(id: string): Promise<EventEntity> {
-    const event = this.repository.findById(id);
+  async findById(id: string): Promise<EventEntity> {
+    const event = await this.repository.findById(id);
     if (!event) {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
@@ -77,37 +93,31 @@ export class EventsService {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
 
-    const isAdminOrEditor = event.roles.some(
-      (role) =>
-        role.userId === userId &&
-        (role.role === EventRoleType.ADMIN || role.role === EventRoleType.EDITOR),
-    );
-    if (!isAdminOrEditor) {
-      throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
-    }
+    this.assertRole(event.roles, userId, CAN_EDIT);
 
     const config = await this.repository.createConfig(dto);
-    await this.repository.update(dto.eventId, { status: EventStatus.CONFIGURED });
+
+    // Only a draft advances. Configuring a live event must not un-publish it.
+    if (event.status === EventStatus.DRAFT) {
+      await this.repository.update(dto.eventId, { status: EventStatus.CONFIGURED });
+    }
 
     return config;
   }
 
-  async updateConfig(id: string, userId: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
-    const event = await this.repository.findById(id);
+  async updateConfig(
+    eventId: string,
+    userId: string,
+    dto: UpdateConfigDto,
+  ): Promise<EventConfigEntity> {
+    const event = await this.repository.findById(eventId);
     if (!event) {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
 
-    const isAdminOrEditor = event.roles.some(
-      (role) =>
-        role.userId === userId &&
-        (role.role === EventRoleType.ADMIN || role.role === EventRoleType.EDITOR),
-    );
-    if (!isAdminOrEditor) {
-      throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
-    }
+    this.assertRole(event.roles, userId, CAN_EDIT);
 
-    const config = await this.repository.updateConfig(id, dto);
+    const config = await this.repository.updateConfigByEventId(eventId, dto);
     return config;
   }
 
@@ -118,14 +128,7 @@ export class EventsService {
     }
 
     if (userId) {
-      const isAdminOrEditor = event.roles.some(
-        (role) =>
-          role.userId === userId &&
-          (role.role === EventRoleType.ADMIN || role.role === EventRoleType.EDITOR),
-      );
-      if (!isAdminOrEditor) {
-        throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
-      }
+      this.assertRole(event.roles, userId, CAN_EDIT);
     }
 
     const config = await this.repository.findConfigByEventId(eventId);
@@ -143,6 +146,10 @@ export class EventsService {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
 
+    // Approving is the gate before publish, so it is not an editor's to open.
+    this.assertRole(event.roles, userId, [EventRoleType.ADMIN]);
+    this.assertStatus(event, APPROVE_FROM);
+
     await this.repository.update(id, { status: EventStatus.APPROVED });
   }
 
@@ -152,14 +159,8 @@ export class EventsService {
       throw new RpcBusinessException(ErrorCodeEnum.EventNotFound);
     }
 
-    const isAdminOrEditor = event.roles.some(
-      (role) =>
-        role.userId === userId &&
-        (role.role === EventRoleType.ADMIN || role.role === EventRoleType.EDITOR),
-    );
-    if (!isAdminOrEditor) {
-      throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
-    }
+    this.assertRole(event.roles, userId, CAN_EDIT);
+    this.assertStatus(event, PUBLISH_FROM);
 
     await this.repository.update(id, { status: EventStatus.PUBLISHED });
 

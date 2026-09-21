@@ -3,7 +3,7 @@ import { IPaginationOptions } from '@/shared/interfaces/pagination-input.interfa
 import { GetPaginationResponse } from '@/shared/interfaces/pagination-resp.interface';
 import { createPaginator } from '@/shared/utils/pagination.util';
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { EventRoleType, Prisma } from '@prisma/client';
 import { CreateCategoryDto, CreateEventDto, FilterEventDto, UpdateConfigDto } from '../dtos';
 import { CreateConfigDto } from '../dtos/create-config.dto';
 import { CreateEventRoleDto } from '../dtos/create-role.dto';
@@ -185,16 +185,15 @@ export class EventsRepository {
             })),
           },
         },
+        roles: {
+          create: {
+            userId: dto.createdBy,
+            role: EventRoleType.ADMIN,
+          },
+        },
       },
       include: this.baseInclude,
     });
-
-    // await this.prisma.eventCategory.createMany({
-    //   data: dto.categoryIds.map((id) => ({
-    //     eventId: event.id,
-    //     categoryId: id,
-    //   })),
-    // });
 
     return mapToEventEntity(event);
   }
@@ -287,9 +286,11 @@ export class EventsRepository {
     });
   }
 
-  async updateConfig(id: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
+  // eventId, not id: EventConfig.id is its own uuid and every caller here holds
+  // the event's.
+  async updateConfigByEventId(eventId: string, dto: UpdateConfigDto): Promise<EventConfigEntity> {
     return this.prisma.eventConfig.update({
-      where: { id },
+      where: { eventId },
       data: dto,
     });
   }
