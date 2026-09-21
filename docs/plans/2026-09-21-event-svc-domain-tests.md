@@ -724,7 +724,7 @@ describe('EventsService lifecycle transitions', () => {
 
 Run: `cd services/event-svc && npm test -- events.service`
 
-Expected: four fail — the two `FAILED_PRECONDITION` cases resolve instead of rejecting, and `does not drag a published event back to configured` sees `update` called. `publishes an approved event` and `marks a draft configured` pass already; they are the guard that the new checks do not over-reject.
+Expected: **three** fail — the two `FAILED_PRECONDITION` cases resolve instead of rejecting, and `does not drag a published event back to configured` sees `update` called. `publishes an approved event` and `marks a draft configured` pass already; they are the guard that the new checks do not over-reject.
 
 - [ ] **Step 4: Enforce the order**
 
@@ -780,7 +780,15 @@ Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"`
 
 Expected: **25 passed**.
 
-Then confirm the code stays out of the alert rules: `grep -rn "FAILED_PRECONDITION" deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` must return nothing.
+Then confirm the code stays out of the alert rules. A bare grep is the wrong
+check — it always matches the comment at the head of `ticketbottle.alerts` that
+*states* the policy. Strip comments first:
+
+```bash
+sed 's/#.*//' deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml | grep -c FAILED_PRECONDITION
+```
+
+Expected: `0`. Anything above zero means a rule expression references the code.
 
 - [ ] **Step 6: Commit**
 
@@ -923,6 +931,10 @@ EOF
 ---
 
 ## Found, not fixed
+
+- **A completed transition is refused, not idempotent.** Approving an already-`APPROVED` event, or publishing an already-`PUBLISHED` one, raises `FAILED_PRECONDITION`. Both RPCs return `void` and carry no other effect, so a gRPC retry after a successful publish whose response was lost reports failure for work that did happen — and the taxonomy's advice for that code, "refetch; do not retry identically", is exactly wrong here. `ALREADY_EXISTS` ("treat as success, or refetch") fits better, or the method should return successfully without writing. A contract decision, not a defect in this code.
+- **The approval gate can be emptied from the side.** `createConfig` gained a status *effect* guard but no status *precondition*, so an `APPROVED` event can be reconfigured — new sale dates, `maxAttendees`, `isPublic` — and stays `APPROVED`, then publishes without re-approval. A `PUBLISHED` event's config can likewise change underneath it. Approval only means something if it approves a *specific* configuration.
+- **Nothing pins the order of `assertRole` before `assertStatus`.** With the current fixtures both orders return the same code, so the ordering is unconstrained by any test. It matters: checking status first would leak an event's state to a caller who holds no role on it.
 
 - **No test covers a repository `where` clause.** Every spec here mocks `EventsRepository`, so its bodies never run. Task 3's suite pins the *call site* — that the service asks for `updateConfigByEventId` with the event's id — not the *query*. Mutating `where: { eventId }` back to `where: { id: eventId }` kills nothing, and `tsc` accepts it because both columns are `@unique` on `EventConfig`. The rename is the real protection: a method whose name states which id it takes makes the wrong clause hard to write. Closing the gap needs a Prisma client mock or a database, and neither belongs in this plan.
 - **`findConfigById` has no callers.** `events.repository.ts:299`. The live lookup is `findConfigByEventId` beside it.
