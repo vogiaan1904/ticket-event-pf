@@ -307,9 +307,13 @@ And `approveEvent` (lines 140-147):
 
 Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"`
 
-Expected: **13 passed** (6 existing + 7 new).
+Expected: **14 passed** (6 existing + 8 new).
 
-Then mutate to check the tests bite: change `allowed.includes(role.role)` to `true` and confirm the three `PERMISSION_DENIED` cases fail. Put it back.
+Then mutate `assertRole` twice, because its predicate has two independent halves and each needs its own guard:
+- `allowed.includes(role.role)` → `true` kills **1** test (`refuses an editor`). The stranger cases still refuse, because the user check is untouched.
+- dropping `role.userId === userId` kills **4** (every `PERMISSION_DENIED` case).
+
+Restore after each.
 
 - [ ] **Step 5: Commit**
 
@@ -439,7 +443,7 @@ In `services/event-svc/src/modules/events/controllers/grpc/events.controller.ts`
 
 Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"`
 
-Expected: **17 passed**, and no unhandled-rejection warning in the output.
+Expected: **18 passed**, and no unhandled-rejection warning in the output.
 
 - [ ] **Step 5: Commit**
 
@@ -556,7 +560,7 @@ Rename the service method's first parameter from `id` to `eventId` so the two ag
 
 Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"`
 
-Expected: **19 passed**.
+Expected: **20 passed**.
 
 Then grep for any remaining caller of the old name — `grep -rn "updateConfig(" services/event-svc/src --include='*.ts'` — and confirm only the service method and the controller's own `updateConfig` handler remain. The repository method must have no caller under its old name.
 
@@ -763,7 +767,7 @@ In `createConfig`, replace the unconditional status write (line 90):
 
 Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"`
 
-Expected: **24 passed**.
+Expected: **25 passed**.
 
 Then confirm the code stays out of the alert rules: `grep -rn "FAILED_PRECONDITION" deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` must return nothing.
 
@@ -885,7 +889,7 @@ In `services/event-svc/src/modules/events/events.service.ts`, `create` collapses
 
 Run: `cd services/event-svc && npm test && npx prettier --check "src/**/*.ts"` and `npx tsc --noEmit --incremental false`
 
-Expected: **25 passed**, tsc clean.
+Expected: **26 passed**, tsc clean.
 
 Then grep for other callers of `repository.createRole` — `grep -rn "createRole" services/event-svc/src --include='*.ts'`. If the repository method now has none, leave it in place (it is the obvious home for adding a collaborator later) but say so in your report.
 
@@ -922,4 +926,4 @@ EOF
 - **Placeholders.** None: every step carries the code or the exact command.
 - **Type consistency.** `buildService`, `errorOf`, `rejectionOf` and `eventWith` are declared in Task 1's spec and reused by Tasks 3, 4 and 5 from the same file. `updateConfigByEventId` is named identically in Task 3's Interfaces block, its repository signature and its service call site. `EventRoleEntity` is imported in Task 1, `EventRoleType` added to the repository's Prisma import in Task 5.
 - **Fixtures.** Every DTO fixture is fully declared against its real type, because a fixture that names the real shape is what catches a field being dropped. The `eventWith` helper is the one deliberate partial cast, and it is legal: verified with `tsc`, `{ a } as Full` compiles when the literal is a pure subset, and only fails (TS2352) when it carries a property the target does not have.
-- **Test-count arithmetic.** 6 existing + 7 (Task 1) = 13; + 4 (Task 2) = 17; + 2 (Task 3) = 19; + 5 (Task 4) = 24; + 1 (Task 5) = 25. Each task's Step 4 states the running total.
+- **Test-count arithmetic.** 6 existing + 8 (Task 1) = 14; + 4 (Task 2) = 18; + 2 (Task 3) = 20; + 5 (Task 4) = 25; + 1 (Task 5) = 26. Each task's Step 4 states the running total. (Task 1's count was written as 7 and is 8 — corrected after running it.)
