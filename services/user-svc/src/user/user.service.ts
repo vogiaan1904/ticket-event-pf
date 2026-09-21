@@ -20,9 +20,16 @@ export class UserServiceImpl implements UserService {
       throw new RpcBusinessException(ErrorCodeEnum.UserAlreadyExists);
     }
 
-    return this.prisma.user.create({
-      data: dto,
-    });
+    try {
+      // `return await`, not `return`: an un-awaited promise settles outside this
+      // try block and the catch never runs.
+      return await this.prisma.user.create({ data: dto });
+    } catch (error) {
+      // P2002 = the unique email was taken between the read above and this
+      // insert. Only the constraint can see that race.
+      if ((error as { code?: string }).code !== 'P2002') throw error;
+      throw new RpcBusinessException(ErrorCodeEnum.UserAlreadyExists);
+    }
   }
 
   async update(dto: UpdateUserDto): Promise<User> {
