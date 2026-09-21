@@ -7,12 +7,14 @@ on:
     branches: [main, dev]
     paths:
       - "services/api-gateway/**"
+      - "services/event-svc/**"
       - "services/payment-svc/**"
       - "services/user-svc/**"
       - ".github/workflows/ts-tests.yml"
   pull_request:
     paths:
       - "services/api-gateway/**"
+      - "services/event-svc/**"
       - "services/payment-svc/**"
       - "services/user-svc/**"
   workflow_dispatch: {}
@@ -73,6 +75,28 @@ jobs:
 
       - run: npm ci
 
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
+      - run: npm test
+
+  event-svc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/event-svc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the service Dockerfiles; @types/node is 22, the runtime is not.
+          node-version: "20"
+
+      - run: npm ci
+
+      # Every TS service with a schema generates its client; api-gateway is the
+      # only one without one. Here the schema is the prisma/schema/ folder.
       - name: Generate the Prisma client
         run: npx prisma generate
 
