@@ -393,8 +393,10 @@ describe('GrpcEventsController lifecycle methods', () => {
 
   it('does not answer until the publish has actually happened', async () => {
     let written = false;
+    // A real write outlasts a microtask. Awaiting a dropped promise's `undefined`
+    // yields one tick, which is enough to hide the bug behind Promise.resolve().
     const publishEvent = jest.fn(async () => {
-      await Promise.resolve();
+      await new Promise((resolve) => setImmediate(resolve));
       written = true;
     });
     const controller = await buildController({ publishEvent });
@@ -421,7 +423,16 @@ Run: `cd services/event-svc && npm test -- events.controller`
 
 Expected: the two `rejects.toThrow` cases fail — the methods return `undefined`, so there is nothing to reject and jest reports `received value must be a promise`. The `written` case fails with `Expected: true / Received: false`, because the answer came back before the write. The fourth passes: the arguments are forwarded correctly today, it is only the waiting that is missing.
 
-Both failing rejection cases will also print an `UnhandledPromiseRejection` warning during this run. That warning *is* defect 3 — note it, it disappears with the fix.
+The dropped rejections do more than warn. On Node 20+ the default is
+`--unhandled-rejections=throw`, and in practice the first one **kills the jest
+worker outright** — the run ends with `Node.js v24.0.1` and *no test results at
+all*, not even a suite summary. To read per-test results during the red run, use
+`NODE_OPTIONS=--unhandled-rejections=warn npm test -- events.controller`; it then
+prints the warning twice, once per dropped handler. After the fix a plain
+`npm test` contains zero occurrences of "unhandled". That crash *is* defect 3,
+and it is why the timing mock above defers with `setImmediate` rather than
+`Promise.resolve` — one microtask is exactly what awaiting the dropped
+`undefined` already yields, so the weaker mock passes with the bug present.
 
 - [ ] **Step 3: Return the promise**
 
