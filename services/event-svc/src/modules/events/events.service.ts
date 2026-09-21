@@ -44,15 +44,9 @@ export class EventsService {
   }
 
   async create(dto: CreateEventDto): Promise<EventEntity> {
-    const event = await this.repository.create(dto);
-
-    await this.repository.createRole({
-      userId: dto.createdBy,
-      eventId: event.id,
-      role: EventRoleType.ADMIN,
-    });
-
-    return event;
+    // The creator's ADMIN role is nested in the same insert: an event with no
+    // role can be administered by nobody, and no method can repair it.
+    return this.repository.create(dto);
   }
 
   async update(id: string, userId: string, dto: UpdateEventDto): Promise<EventEntity> {

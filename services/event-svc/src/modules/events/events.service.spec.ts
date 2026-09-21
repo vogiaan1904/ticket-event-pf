@@ -2,7 +2,7 @@ import { status as grpcStatus } from '@grpc/grpc-js';
 import { RpcException } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
 import { EventRoleType, EventStatus } from '@prisma/client';
-import { UpdateConfigDto } from './dtos';
+import { CreateEventDto, UpdateConfigDto } from './dtos';
 import { CreateConfigDto } from './dtos/create-config.dto';
 import { EventEntity } from './entities';
 import { EventsService } from './events.service';
@@ -249,5 +249,37 @@ describe('EventsService lifecycle transitions', () => {
     await service.createConfig('admin-1', newConfig);
 
     expect(update).toHaveBeenCalledWith('evt-1', { status: EventStatus.CONFIGURED });
+  });
+});
+
+describe('EventsService.create', () => {
+  const newEvent: CreateEventDto = {
+    createdBy: 'admin-1',
+    name: 'On sale',
+    description: 'd',
+    startDate: new Date('2026-01-01T00:00:00.000Z'),
+    endDate: new Date('2026-01-02T00:00:00.000Z'),
+    thumbnailUrl: 't',
+    venue: 'v',
+    street: 's',
+    city: 'c',
+    country: 'co',
+    categoryIds: ['cat-1'],
+    organizerName: 'o',
+    organizerDescription: 'od',
+    organizerLogoUrl: 'ol',
+  };
+
+  it('creates the event and its admin role in one call', async () => {
+    const create = jest.fn().mockResolvedValue(eventWith(EventStatus.DRAFT));
+    const createRole = jest.fn();
+    const service = await buildService({ create, createRole });
+
+    await service.create(newEvent);
+
+    expect(create).toHaveBeenCalledWith(newEvent);
+    // A second statement is a second chance to fail, and an event with no role
+    // can never be administered by anyone.
+    expect(createRole).not.toHaveBeenCalled();
   });
 });
