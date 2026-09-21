@@ -2,7 +2,7 @@ import { RpcBusinessException } from '@/common/exceptions/rpc-business.exception
 import { ErrorCodeEnum } from '@/shared/constants/error-code.constant';
 import { PrismaService } from '@/shared/prisma/prisma.service';
 import { Injectable } from '@nestjs/common';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { CreateUserDto } from './dto/create-user.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -61,19 +61,18 @@ export class UserServiceImpl implements UserService {
   }
 
   async findAll(dto: QueryUserDto): Promise<User[]> {
-    try {
-      return this.prisma.user.findMany({
-        where: {
-          OR: [
-            { id: { in: dto.ids } },
-            { email: { in: dto.emails } },
-            { firstName: { contains: dto.name } },
-            { lastName: { contains: dto.name } },
-          ],
-        },
-      });
-    } catch (error) {
-      console.log(error);
+    const filters: Prisma.UserWhereInput[] = [];
+    if (dto.ids?.length) filters.push({ id: { in: dto.ids } });
+    if (dto.emails?.length) filters.push({ email: { in: dto.emails } });
+    if (dto.name) {
+      filters.push({ firstName: { contains: dto.name } });
+      filters.push({ lastName: { contains: dto.name } });
     }
+
+    // Prisma drops an undefined filter, so an unfiltered query would leave an OR
+    // of empty conditions -- every user, password hash and all.
+    if (filters.length === 0) return [];
+
+    return this.prisma.user.findMany({ where: { OR: filters } });
   }
 }
