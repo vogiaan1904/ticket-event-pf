@@ -5,17 +5,21 @@ export enum ErrorCodeEnum {
 
   EventNotFound = 20000,
   EventConfigNotFound = 20001,
+  EventStateInvalid = 20002,
 
   OrganizerNotFound = 21000,
 }
 
 // [message, httpStatus, grpcCode]. The gRPC code is required — it is what the
 // caller maps to an HTTP status. See the error taxonomy in the root CLAUDE.md.
-export const ErrorCode = Object.freeze<
-  Record<ErrorCodeEnum, [string, number, grpcStatus]>
->({
+export const ErrorCode = Object.freeze<Record<ErrorCodeEnum, [string, number, grpcStatus]>>({
   [ErrorCodeEnum.PermissionDenied]: ['Permission denied', 403, grpcStatus.PERMISSION_DENIED],
   [ErrorCodeEnum.EventNotFound]: ['Event not found', 404, grpcStatus.NOT_FOUND],
   [ErrorCodeEnum.OrganizerNotFound]: ['Organizer not found', 404, grpcStatus.NOT_FOUND],
   [ErrorCodeEnum.EventConfigNotFound]: ['Event config not found', 404, grpcStatus.NOT_FOUND],
+  [ErrorCodeEnum.EventStateInvalid]: [
+    'Event is not in a state that allows this',
+    409,
+    grpcStatus.FAILED_PRECONDITION,
+  ],
 });

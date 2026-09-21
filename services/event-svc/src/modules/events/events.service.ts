@@ -13,6 +13,11 @@ import { CreateConfigDto } from './dtos/create-config.dto';
 // Editing an event and configuring it are the same privilege; approving is not.
 const CAN_EDIT = [EventRoleType.ADMIN, EventRoleType.EDITOR];
 
+// The one state each transition may be entered from.
+//   DRAFT -> CONFIGURED -> APPROVED -> PUBLISHED
+const APPROVE_FROM = EventStatus.CONFIGURED;
+const PUBLISH_FROM = EventStatus.APPROVED;
+
 @Injectable()
 export class EventsService {
   constructor(private readonly repository: EventsRepository) {}
@@ -27,6 +32,14 @@ export class EventsService {
     const held = roles?.some((role) => role.userId === userId && allowed.includes(role.role));
     if (!held) {
       throw new RpcBusinessException(ErrorCodeEnum.PermissionDenied);
+    }
+  }
+
+  // A transition out of turn is a valid request against the wrong world state,
+  // which the taxonomy calls FAILED_PRECONDITION. It is never INTERNAL.
+  private assertStatus(event: EventEntity, required: EventStatus): void {
+    if (event.status !== required) {
+      throw new RpcBusinessException(ErrorCodeEnum.EventStateInvalid);
     }
   }
 
@@ -89,7 +102,11 @@ export class EventsService {
     this.assertRole(event.roles, userId, CAN_EDIT);
 
     const config = await this.repository.createConfig(dto);
-    await this.repository.update(dto.eventId, { status: EventStatus.CONFIGURED });
+
+    // Only a draft advances. Configuring a live event must not un-publish it.
+    if (event.status === EventStatus.DRAFT) {
+      await this.repository.update(dto.eventId, { status: EventStatus.CONFIGURED });
+    }
 
     return config;
   }
@@ -137,6 +154,7 @@ export class EventsService {
 
     // Approving is the gate before publish, so it is not an editor's to open.
     this.assertRole(event.roles, userId, [EventRoleType.ADMIN]);
+    this.assertStatus(event, APPROVE_FROM);
 
     await this.repository.update(id, { status: EventStatus.APPROVED });
   }
@@ -148,6 +166,7 @@ export class EventsService {
     }
 
     this.assertRole(event.roles, userId, CAN_EDIT);
+    this.assertStatus(event, PUBLISH_FROM);
 
     await this.repository.update(id, { status: EventStatus.PUBLISHED });
 

@@ -3,6 +3,7 @@ import { RpcException } from '@nestjs/microservices';
 import { Test } from '@nestjs/testing';
 import { EventRoleType, EventStatus } from '@prisma/client';
 import { UpdateConfigDto } from './dtos';
+import { CreateConfigDto } from './dtos/create-config.dto';
 import { EventEntity } from './entities';
 import { EventsService } from './events.service';
 import { EventsRepository } from './repository/events.repository';
@@ -168,5 +169,85 @@ describe('EventsService.updateConfig', () => {
 
     expect(errorOf(error).code).toBe(grpcStatus.PERMISSION_DENIED);
     expect(updateConfigByEventId).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventsService lifecycle transitions', () => {
+  const newConfig: CreateConfigDto = {
+    eventId: 'evt-1',
+    ticketSaleStartDate: new Date('2026-01-01T00:00:00.000Z'),
+    ticketSaleEndDate: new Date('2026-01-02T00:00:00.000Z'),
+    isFree: false,
+    maxAttendees: 100,
+    isPublic: true,
+    requiresApproval: false,
+    allowWaitRoom: true,
+    isNewTrending: false,
+  };
+
+  it('refuses to approve an event that was never configured', async () => {
+    const update = jest.fn();
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.DRAFT)),
+      update,
+    });
+
+    const error = await rejectionOf(service.approveEvent('evt-1', 'admin-1'));
+
+    expect(errorOf(error).code).toBe(grpcStatus.FAILED_PRECONDITION);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to publish an event that was never approved', async () => {
+    const update = jest.fn();
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.CONFIGURED)),
+      update,
+    });
+
+    const error = await rejectionOf(service.publishEvent('evt-1', 'admin-1'));
+
+    expect(errorOf(error).code).toBe(grpcStatus.FAILED_PRECONDITION);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('publishes an approved event', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.APPROVED)),
+      update,
+    });
+
+    await service.publishEvent('evt-1', 'admin-1');
+
+    expect(update).toHaveBeenCalledWith('evt-1', { status: EventStatus.PUBLISHED });
+  });
+
+  it('does not drag a published event back to configured', async () => {
+    const update = jest.fn();
+    const createConfig = jest.fn().mockResolvedValue({ id: 'cfg-1' });
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.PUBLISHED)),
+      createConfig,
+      update,
+    });
+
+    await service.createConfig('admin-1', newConfig);
+
+    expect(createConfig).toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('marks a draft configured once it has a config', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    const service = await buildService({
+      findById: jest.fn().mockResolvedValue(eventWith(EventStatus.DRAFT)),
+      createConfig: jest.fn().mockResolvedValue({ id: 'cfg-1' }),
+      update,
+    });
+
+    await service.createConfig('admin-1', newConfig);
+
+    expect(update).toHaveBeenCalledWith('evt-1', { status: EventStatus.CONFIGURED });
   });
 });
