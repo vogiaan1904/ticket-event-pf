@@ -8,6 +8,8 @@
 
 **Spec:** none. This plan is derived from a read of `services/user-svc/src/` on 2026-09-21; the defects below were found in that read, and each one is stated with the evidence that makes it real.
 
+**Line numbers throughout are as of that read.** Each task shifts the ones below it — Task 1 alone adds seven lines above `findAll`. Match on the quoted block text, not on the line number.
+
 ## Global Constraints
 
 - **ts-jest type-checks every spec.** A type error in one spec fails the whole suite, not one test. Compile what you write.
@@ -106,9 +108,11 @@ async function buildService(prisma: any): Promise<UserServiceImpl> {
 }
 
 // RpcException.getError() is typed `string | object`; every exception this
-// service raises carries the object form.
+// service means to raise carries the object form. Anything else escaped
+// unclassified, which is the defect these cases are about -- so report it as a
+// missing code rather than crashing on the missing method.
 const errorOf = (e: unknown): { code?: number; message?: string } =>
-  (e as RpcException).getError() as { code?: number; message?: string };
+  e instanceof RpcException ? (e.getError() as { code?: number; message?: string }) : {};
 
 const rejectionOf = (p: Promise<unknown>): Promise<unknown> =>
   p.then(
@@ -160,7 +164,7 @@ describe('UserServiceImpl.create', () => {
 
 Run: `cd services/user-svc && npm test -- user.service`
 
-Expected: the first and third pass; **the second fails** — the P2002 error escapes `create` unchanged, so `errorOf(error).code` is `undefined`, not `6`.
+Expected: the first and third pass; **the second fails** with `Expected: 6 / Received: undefined` — the P2002 error escapes `create` unchanged, carrying no gRPC code at all.
 
 If the second one *passes* here, stop: the fix is already in and the test proves nothing. Re-read `user.service.ts` before going on.
 
