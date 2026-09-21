@@ -1,5 +1,7 @@
 # user-svc Test Coverage Implementation Plan
 
+**Status: COMPLETE 2026-09-21.** All four tasks done; the checkboxes are a record, not open work.
+
 **Goal:** Put `user-svc` under unit test, and fix the four defects the tests are written to catch — chief among them that this service can never emit the one metric label its alert watches.
 
 **Architecture:** Same shape as the two completed plans: jest with `moduleNameMapper` aliases, `Test.createTestingModule` with every collaborator supplied as a plain mock, no database and no network. Each task writes a failing test first, then the smallest fix that turns it green, then commits.
@@ -587,7 +589,7 @@ EOF
 
 - [ ] **Step 1: Add user-svc to the workflow**
 
-`user-svc` needs `npx prisma generate` — it has no `postinstall`, and ts-jest will not resolve `@prisma/client` types without a generated client. This is the same reason the `payment-svc` job has that step and `api-gateway` does not.
+`user-svc` needs `npx prisma generate` — no TS service has a `postinstall`, and `node_modules/` is gitignored, so CI installs a client that has not been generated. Without it `jest` cannot even *resolve* `@prisma/client/default` at require time, so the suite dies before types matter; `tsc` then adds 14 errors of its own. `payment-svc` has the same step. `api-gateway` does not — and must not: it has no `prisma/schema.prisma` at all, so the command would fail there for want of a schema.
 
 In `.github/workflows/ts-tests.yml`, add `"services/user-svc/**"` to both `paths` lists (the `push` one keeps `.github/workflows/ts-tests.yml` as its last entry), then append this job after `api-gateway`:
 
@@ -631,7 +633,7 @@ Expected: the `Object.freeze<...>` generic argument collapses onto one line — 
 
 Run: `cd services/user-svc && npm test && npx prettier --check "src/**/*.ts"`
 
-Expected: 13 passed, Prettier clean across the service.
+Expected: 13 passed, and `[warn] Code style issues found in 3 files` — `src/shared/services/config.service.ts` and the two `src/protogen/*.pb.ts`, all dirty before this plan and all out of scope. `error-code.constant.ts` is no longer among them.
 
 - [ ] **Step 5: Commit**
 
@@ -652,6 +654,8 @@ EOF
 ---
 
 ## Found, not fixed
+
+- **A stale `tsbuildinfo` makes `tsc --noEmit` lie in this service.** `tsconfig.json` sets `incremental: true`, so with the Prisma client deleted a plain `npx tsc --noEmit` still reported zero errors while `npx tsc --noEmit --incremental false` reported 14. Any type-check used as evidence here needs `--incremental false`.
 
 Recorded here so the next reader does not rediscover them. None is in scope for this plan.
 
