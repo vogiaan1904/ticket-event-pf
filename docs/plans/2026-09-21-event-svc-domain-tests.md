@@ -924,6 +924,9 @@ EOF
 
 ## Found, not fixed
 
+- **No test covers a repository `where` clause.** Every spec here mocks `EventsRepository`, so its bodies never run. Task 3's suite pins the *call site* — that the service asks for `updateConfigByEventId` with the event's id — not the *query*. Mutating `where: { eventId }` back to `where: { id: eventId }` kills nothing, and `tsc` accepts it because both columns are `@unique` on `EventConfig`. The rename is the real protection: a method whose name states which id it takes makes the wrong clause hard to write. Closing the gap needs a Prisma client mock or a database, and neither belongs in this plan.
+- **`findConfigById` has no callers.** `events.repository.ts:299`. The live lookup is `findConfigByEventId` beside it.
+
 - **`CANCELLED` is in both enums and in no transition.** Nothing sets it and nothing refuses it. The state machine in Task 4 treats it as a terminal state only by accident — every transition requires a specific predecessor, so a cancelled event is stuck, which is probably right but is not stated anywhere.
 - **`delete` has no authorization and no status check.** `events.service.ts:69-71` forwards straight to the repository, so any caller who can reach the RPC can delete any event, published or not. It is not in the proto's service block, so it is unreachable over gRPC today — which is the only reason this plan does not treat it as a P0.
 - **`updateCategory(dto: any)`** at `events.repository.ts:321` — the only `any` in the repository, and it has no caller.
