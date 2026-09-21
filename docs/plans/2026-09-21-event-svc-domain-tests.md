@@ -1,5 +1,7 @@
 # event-svc Domain Test Coverage Implementation Plan
 
+**Status: COMPLETE 2026-09-21.** All five tasks done; the checkboxes are a record, not open work. 26 tests, all seven defects fixed.
+
 **Goal:** Put the event lifecycle under test, and fix the seven defects the tests are written to catch — including an approval step with no authorization, a config update that can never succeed, and two gRPC methods that report success before doing the work.
 
 **Architecture:** Same shape as the three completed plans: jest with `moduleNameMapper` aliases (already present), `Test.createTestingModule` with the repository supplied as a plain mock, no database and no network. Each task writes a failing test first, then the smallest fix that turns it green, then commits.
@@ -936,14 +938,18 @@ EOF
 - **The approval gate can be emptied from the side.** `createConfig` gained a status *effect* guard but no status *precondition*, so an `APPROVED` event can be reconfigured — new sale dates, `maxAttendees`, `isPublic` — and stays `APPROVED`, then publishes without re-approval. A `PUBLISHED` event's config can likewise change underneath it. Approval only means something if it approves a *specific* configuration.
 - **Nothing pins the order of `assertRole` before `assertStatus`.** With the current fixtures both orders return the same code, so the ordering is unconstrained by any test. It matters: checking status first would leak an event's state to a caller who holds no role on it.
 
-- **No test covers a repository `where` clause.** Every spec here mocks `EventsRepository`, so its bodies never run. Task 3's suite pins the *call site* — that the service asks for `updateConfigByEventId` with the event's id — not the *query*. Mutating `where: { eventId }` back to `where: { id: eventId }` kills nothing, and `tsc` accepts it because both columns are `@unique` on `EventConfig`. The rename is the real protection: a method whose name states which id it takes makes the wrong clause hard to write. Closing the gap needs a Prisma client mock or a database, and neither belongs in this plan.
+- **No test covers anything inside the repository.** Every spec here mocks `EventsRepository`, so its method bodies never run. This was measured twice, by mutation:
+  - Task 3: reverting `where: { eventId }` to `where: { id: eventId }` kills **nothing**, and `tsc` accepts it because both columns are `@unique` on `EventConfig`. The *rename* is the protection — a method whose name states which id it takes makes the wrong clause hard to write.
+  - Task 5: deleting the nested `roles: { create: ... }` block outright kills **nothing**. The suite pins that the service makes no second call, not that the role is written.
+
+  In both cases the service-side change is tested and the persistence-side change is not. Closing this needs a Prisma client mock or a real database — a different kind of test than this plan builds, and worth its own plan before anyone trusts these two fixes to a refactor.
 - **`findConfigById` has no callers.** `events.repository.ts:299`. The live lookup is `findConfigByEventId` beside it.
 
 - **`CANCELLED` is in both enums and in no transition.** Nothing sets it and nothing refuses it. The state machine in Task 4 treats it as a terminal state only by accident — every transition requires a specific predecessor, so a cancelled event is stuck, which is probably right but is not stated anywhere.
 - **`delete` has no authorization and no status check.** `events.service.ts:69-71` forwards straight to the repository, so any caller who can reach the RPC can delete any event, published or not. It is not in the proto's service block, so it is unreachable over gRPC today — which is the only reason this plan does not treat it as a P0.
 - **`updateCategory(dto: any)`** at `events.repository.ts:321` — the only `any` in the repository, and it has no caller.
 - **`findMany` trusts `dto.filter`.** `events.controller.ts:70` calls `dto.filter.toServiceDto()` with no null check; a `findMany` with no filter throws a `TypeError`, which is now correctly an `INTERNAL`. It should be `INVALID_ARGUMENT`, or `filter` should be optional with a default.
-- **`create`'s commented-out `eventCategory.createMany`** at `events.repository.ts:191-196` is superseded by the nested `categories` block above it. Dead, and should be deleted.
+- ~~**`create`'s commented-out `eventCategory.createMany`**~~ — deleted in Task 5. It sat inside the method that task rewrote, and the comment-budget hook flagged it on the first write.
 - **The proto `EventStatus` carries `UNSPECIFIED = 0`, which neither mapper handles.** `EventStatusMapper.toPrisma(0)` throws a bare `Error`, not an `RpcException` — so an unset status field on the wire produces an `INTERNAL` rather than an `INVALID_ARGUMENT`.
 
 ## Self-review
@@ -953,3 +959,13 @@ EOF
 - **Type consistency.** `buildService`, `errorOf`, `rejectionOf` and `eventWith` are declared in Task 1's spec and reused by Tasks 3, 4 and 5 from the same file. `updateConfigByEventId` is named identically in Task 3's Interfaces block, its repository signature and its service call site. `EventRoleEntity` is imported in Task 1, `EventRoleType` added to the repository's Prisma import in Task 5.
 - **Fixtures.** Every DTO fixture is fully declared against its real type, because a fixture that names the real shape is what catches a field being dropped. The `eventWith` helper is the one deliberate partial cast, and it is legal: verified with `tsc`, `{ a } as Full` compiles when the literal is a pure subset, and only fails (TS2352) when it carries a property the target does not have.
 - **Test-count arithmetic.** 6 existing + 8 (Task 1) = 14; + 4 (Task 2) = 18; + 2 (Task 3) = 20; + 5 (Task 4) = 25; + 1 (Task 5) = 26. Each task's Step 4 states the running total. (Task 1's count was written as 7 and is 8 — corrected after running it.)
+
+## Outcome
+
+26 tests across 4 suites. All five tasks ran red-then-green as written; three plan defects were found and corrected in the same pass:
+
+1. Task 1's new-test count was 7, actually 8 — running totals were off by one throughout.
+2. Task 2's timing mock deferred by one microtask, which is exactly what awaiting a dropped promise already yields, so the test **passed with the bug present**. Fixed with `setImmediate`.
+3. Task 4's alerting check grepped the rules file for `FAILED_PRECONDITION`, which always matches the comment declaring the policy — a check that could not fail. Fixed by stripping comments first.
+
+The pattern across 2 and 3 is one thing: **a check that cannot go red is not a check.** Both were caught by mutation testing, not by review.
