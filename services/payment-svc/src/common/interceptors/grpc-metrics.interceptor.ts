@@ -9,13 +9,14 @@ import { finalize, tap } from 'rxjs/operators';
 //
 // RpcBusinessException | RpcValidationException -> { code } from the ErrorCode
 //                                                  tuple -> that code on the wire
-// anything else -> GlobalGrpcExceptionFilter replaces it with a codeless
-//                  RpcException, which grpc-js sends as UNKNOWN, not INTERNAL
+// anything else -> a bug, which the taxonomy calls INTERNAL. UNKNOWN is in no
+//                  row of that table and in no alert rule, so it would hide one.
 const codeOf = (err: unknown): string => {
   const error = err instanceof RpcException ? err.getError() : undefined;
   const code =
     typeof error === 'object' && error !== null ? (error as { code?: unknown }).code : undefined;
-  return typeof code === 'number' ? (grpcStatus[code] ?? 'UNKNOWN') : 'UNKNOWN';
+  if (typeof code !== 'number') return 'INTERNAL';
+  return grpcStatus[code] ?? 'INTERNAL';
 };
 
 // The gRPC transport hands the handler (data, metadata, call), so the third
