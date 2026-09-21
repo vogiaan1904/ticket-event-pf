@@ -8,11 +8,13 @@ on:
     paths:
       - "services/api-gateway/**"
       - "services/payment-svc/**"
+      - "services/user-svc/**"
       - ".github/workflows/ts-tests.yml"
   pull_request:
     paths:
       - "services/api-gateway/**"
       - "services/payment-svc/**"
+      - "services/user-svc/**"
   workflow_dispatch: {}
 
 permissions:
@@ -53,5 +55,25 @@ jobs:
           node-version: "20"
 
       - run: npm ci
+
+      - run: npm test
+
+  user-svc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/user-svc
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the service Dockerfiles; @types/node is 22, the runtime is not.
+          node-version: "20"
+
+      - run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate
 
       - run: npm test

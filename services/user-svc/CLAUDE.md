@@ -30,5 +30,5 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 
 ## Notes
 
-- Passwords are hashed with bcrypt; this service is the source of truth for credentials and JWT subject claims consumed elsewhere.
+- Passwords arrive already hashed — the API Gateway hashes with argon2 and this service stores the digest verbatim. It neither hashes nor verifies; it is the store of record for credentials and for the JWT subject claims read elsewhere.
 - Bootstrap registers a global `ValidationPipe` (`whitelist: true, transform: true`) that throws `RpcValidationException`; keep DTO validation decorators authoritative.
