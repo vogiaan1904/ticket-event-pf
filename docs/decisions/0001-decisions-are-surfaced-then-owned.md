@@ -1,7 +1,7 @@
 # 0001 — Decisions are surfaced, chosen by the architect, and recorded
 
 **Date:** 2026-09-22
-**Status:** accepted
+**Status:** superseded by [0002](0002-the-agent-is-a-mentor-not-a-gate.md) on 2026-09-22
 
 ## Context
 
@@ -44,10 +44,9 @@ agent's view does not transfer the decision — it deletes it.
 Option **2, options plus teach-back**, scoped to **anything with a trade-off**
 — any choice where a competent engineer could pick differently.
 
-> _Rationale in the architect's own words: pending._
-> This record is incomplete until that line is written by the person who made
-> the call. Per `README.md`, a paraphrase here would record the wrong person's
-> reasoning.
+> _No rationale was ever recorded here._ The ritual that asked for it was the
+> part of this decision that did not work, and [0002](0002-the-agent-is-a-mentor-not-a-gate.md)
+> replaced it before the gap was filled. The empty field is the evidence.
 
 ## Consequences
 
