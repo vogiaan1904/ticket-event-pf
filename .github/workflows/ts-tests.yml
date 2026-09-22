@@ -17,6 +17,7 @@ on:
       - "services/event-svc/**"
       - "services/payment-svc/**"
       - "services/user-svc/**"
+      - ".github/workflows/ts-tests.yml"
   workflow_dispatch: {}
 
 permissions:
