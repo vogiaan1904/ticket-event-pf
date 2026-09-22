@@ -1,6 +1,6 @@
 # Go service CI Implementation Plan
 
-**Status: open 2026-09-22.**
+**Status: COMPLETE 2026-09-22.** Both tasks done; the checkboxes are a record, not open work. 149 test functions across three services now run on every push, against real datastores, with the cache defeated.
 
 **Goal:** Run the three Go services' test suites on every push. 34 test files
 covering the saga orchestrator, the oversell guard and the queue are in the tree
@@ -153,4 +153,37 @@ and what `go-tests.yml` does by construction.
 
 ## Outcome
 
-_To be filled on completion._
+`go-tests.yml` runs three jobs on every push to `main` or `dev` and on any pull
+request touching a Go service.
+
+| Service | Test funcs | Files | Datastore in CI |
+|---|---|---|---|
+| `order-svc` | 49 | 14 | `amazon/dynamodb-local:2.5.2` on 8000 |
+| `inventory-svc` | 59 | 14 | `postgres:15-alpine` on 5435 |
+| `waitroom-svc` | 41 | 6 | `redis:7-alpine` on 6379 |
+
+Run `35732900763` on `dev`: all three green, **0 skipped**, **0 cached**, 17
+packages with real timings. Jobs finish in about a minute each.
+
+Three commits of workflow, one of test code:
+
+- `059134f` the workflow, on the wrong premise
+- `6b87a6b` datastores per job, and `waitroom`'s gate made `CI`-aware
+- `0299c1e` `pull_request.paths` names its own workflow
+- `74a7a7c` `-count=1`
+
+### What the first red run was worth
+
+It failed 24 tests, and every one of them was the harnesses working as designed.
+Three things came out of it that a green first run would have buried:
+
+1. the premise "unit tests, no datastore" was never true of these three;
+2. `waitroom-svc` had a gate that could not go red, so its check asserted
+   nothing — it was the only service that *passed* the first run;
+3. `setup-go` restores the Go build cache across runs, so five packages reported
+   `(cached)` on their first real execution in CI. Sound, but it meant a green
+   check needed a paragraph of reasoning to trust. `-count=1` removes that.
+
+The recurring shape: **a check that cannot go red is not a check** — and the
+machine that runs it is part of the check. Both times here, the thing that could
+not fail was the verification, not the code.
