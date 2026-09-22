@@ -12,13 +12,14 @@ import (
 	"github.com/vogiaan/ticketbottle-inventory/internal/models"
 	pkgGorm "github.com/vogiaan/ticketbottle-inventory/pkg/gorm"
 	pkgLog "github.com/vogiaan/ticketbottle-inventory/pkg/logger"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 var seedCounter atomic.Int64
 
 const defaultTestDSN = "postgresql://root:root@localhost:5435/ticketbottle_inventory_test?sslmode=disable"
 
-func newTestDB(t *testing.T) *pkgGorm.Repository {
+func newTestDB(t testing.TB) *pkgGorm.Repository {
 	t.Helper()
 	dsn := os.Getenv("TEST_POSTGRES_URL")
 	if dsn == "" {
@@ -39,6 +40,10 @@ func newTestDB(t *testing.T) *pkgGorm.Repository {
 		}
 		t.Skipf("skipping: cannot reach test postgres (%s): %v", dsn, err)
 	}
+	// pkg/gorm hardcodes LogLevel: Info, which writes a line per statement.
+	// In a contention measurement that is I/O on the path being measured.
+	db.Logger = gormLogger.Discard
+
 	if err := db.AutoMigrate(&models.TicketClass{}, &models.Reservation{}); err != nil {
 		t.Fatalf("automigrate: %v", err)
 	}
@@ -64,7 +69,7 @@ func newTestLogger() pkgLog.Logger {
 	})
 }
 
-func seedTicketClass(t *testing.T, repo *pkgGorm.Repository, total, reserved, sold int) models.TicketClass {
+func seedTicketClass(t testing.TB, repo *pkgGorm.Repository, total, reserved, sold int) models.TicketClass {
 	t.Helper()
 	n := seedCounter.Add(1)
 	tc := models.TicketClass{
