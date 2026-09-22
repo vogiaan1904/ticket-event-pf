@@ -1,0 +1,49 @@
+name: go-tests
+
+# Unit tests only: they mock every collaborator, so the runner needs no
+# database, broker or network at test time.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "services/order-svc/**"
+      - "services/inventory-svc/**"
+      - "services/waitroom-svc/**"
+      - ".github/workflows/go-tests.yml"
+  pull_request:
+    paths:
+      - "services/order-svc/**"
+      - "services/inventory-svc/**"
+      - "services/waitroom-svc/**"
+      - ".github/workflows/go-tests.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.svc }}
+    runs-on: ubuntu-latest
+    strategy:
+      # One service failing must not cancel the other two: a run that reports
+      # only the first failure costs a second push to learn the rest.
+      fail-fast: false
+      matrix:
+        svc: [order-svc, inventory-svc, waitroom-svc]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.svc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Each service pins its own toolchain and go.mod is that pin, so a
+          # version here would be a second copy to keep in sync.
+          go-version-file: services/${{ matrix.svc }}/go.mod
+          cache-dependency-path: services/${{ matrix.svc }}/go.sum
+
+      # -race, not bare `go test`: these three own the saga, the oversell guard
+      # and the queue, so their bugs are concurrency-shaped. It costs ~10s.
+      - run: go test -race ./...
