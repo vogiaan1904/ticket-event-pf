@@ -24,6 +24,9 @@ permissions:
 
 # -race throughout: these three own the saga, the oversell guard and the queue,
 # so their bugs are concurrency-shaped and the detector costs seconds.
+# -count=1 defeats the test cache, which setup-go restores across runs: a green
+# check has to mean every test ran on this commit, not that it ran on some
+# earlier one against a differently configured datastore.
 jobs:
   order-svc:
     runs-on: ubuntu-latest
@@ -58,7 +61,7 @@ jobs:
           echo "dynamodb-local never accepted a connection on :8000" >&2
           exit 1
 
-      - run: go test -race ./...
+      - run: go test -race -count=1 ./...
 
   inventory-svc:
     runs-on: ubuntu-latest
@@ -89,7 +92,7 @@ jobs:
           go-version-file: services/inventory-svc/go.mod
           cache-dependency-path: services/inventory-svc/go.sum
 
-      - run: go test -race ./...
+      - run: go test -race -count=1 ./...
 
   waitroom-svc:
     runs-on: ubuntu-latest
@@ -118,4 +121,4 @@ jobs:
           go-version-file: services/waitroom-svc/go.mod
           cache-dependency-path: services/waitroom-svc/go.sum
 
-      - run: go test -race ./...
+      - run: go test -race -count=1 ./...
