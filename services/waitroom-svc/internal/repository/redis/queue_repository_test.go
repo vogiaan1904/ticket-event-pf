@@ -22,6 +22,12 @@ func newTestRepo(t *testing.T) (QueueRepository, *redis.Client) {
 
 	addr := os.Getenv("WAITROOM_TEST_REDIS_ADDR")
 	if addr == "" {
+		// Skips locally so `go test ./...` works without Redis, and hard-fails
+		// when CI is set, so the suite can never report success having
+		// asserted nothing.
+		if os.Getenv("CI") != "" {
+			t.Fatalf("CI requires WAITROOM_TEST_REDIS_ADDR to point at a test redis")
+		}
 		t.Skip("WAITROOM_TEST_REDIS_ADDR not set; skipping Redis integration test")
 	}
 

@@ -1,7 +1,8 @@
 name: go-tests
 
-# Unit tests only: they mock every collaborator, so the runner needs no
-# database, broker or network at test time.
+# These suites are integration tests, not unit tests: each service's harness
+# talks to a real datastore and hard-fails when CI is set rather than skipping,
+# so a runner without one reports failure instead of a hollow pass.
 on:
   push:
     branches: [main, dev]
@@ -21,19 +22,21 @@ on:
 permissions:
   contents: read
 
+# -race throughout: these three own the saga, the oversell guard and the queue,
+# so their bugs are concurrency-shaped and the detector costs seconds.
 jobs:
-  test:
-    name: ${{ matrix.svc }}
+  order-svc:
     runs-on: ubuntu-latest
-    strategy:
-      # One service failing must not cancel the other two: a run that reports
-      # only the first failure costs a second push to learn the rest.
-      fail-fast: false
-      matrix:
-        svc: [order-svc, inventory-svc, waitroom-svc]
     defaults:
       run:
-        working-directory: services/${{ matrix.svc }}
+        working-directory: services/order-svc
+    services:
+      # The harness builds its own client against this endpoint with static
+      # "test" credentials, so no AWS configuration is needed.
+      dynamodb:
+        image: amazon/dynamodb-local:2.5.2
+        ports:
+          - 8000:8000
     steps:
       - uses: actions/checkout@v4
 
@@ -41,9 +44,78 @@ jobs:
         with:
           # Each service pins its own toolchain and go.mod is that pin, so a
           # version here would be a second copy to keep in sync.
-          go-version-file: services/${{ matrix.svc }}/go.mod
-          cache-dependency-path: services/${{ matrix.svc }}/go.sum
+          go-version-file: services/order-svc/go.mod
+          cache-dependency-path: services/order-svc/go.sum
 
-      # -race, not bare `go test`: these three own the saga, the oversell guard
-      # and the queue, so their bugs are concurrency-shaped. It costs ~10s.
+      # The image carries no shell tools for a healthcheck, so the wait happens
+      # here. The harness retries DescribeTable only three times.
+      - name: Wait for dynamodb-local
+        run: |
+          for _ in $(seq 60); do
+            (echo > /dev/tcp/127.0.0.1/8000) 2>/dev/null && exit 0
+            sleep 1
+          done
+          echo "dynamodb-local never accepted a connection on :8000" >&2
+          exit 1
+
+      - run: go test -race ./...
+
+  inventory-svc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/inventory-svc
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: ticketbottle_inventory_test
+        ports:
+          # 5435 is the port docker-compose.dev.yml publishes, and the default
+          # in the harness. Matching it keeps TEST_POSTGRES_URL unset here.
+          - 5435:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d ticketbottle_inventory_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/inventory-svc/go.mod
+          cache-dependency-path: services/inventory-svc/go.sum
+
+      - run: go test -race ./...
+
+  waitroom-svc:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/waitroom-svc
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Unset, the Redis suite skips. The harness treats that as a failure when
+      # CI is set, so this is what keeps nine tests from silently not running.
+      WAITROOM_TEST_REDIS_ADDR: localhost:6379
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/waitroom-svc/go.mod
+          cache-dependency-path: services/waitroom-svc/go.sum
+
       - run: go test -race ./...
