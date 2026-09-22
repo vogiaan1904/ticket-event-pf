@@ -11,14 +11,16 @@ High-throughput, gRPC-only ticket inventory (port **50057**, PostgreSQL via GORM
 ## Three-step reservation flow
 
 ```
-Reserve  → lock ticket rows, hold quantity for ~9 min (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
+Reserve  → guarded UPDATE per class, hold quantity for ~9 min (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
 Confirm  → convert a held reservation into a sale (decrement reserved, increment sold)
 Release  → free a held reservation
 ```
 
-Keyed by **order code**. A background `ReservationExpiryWorker` (`internal/workers/`) auto-releases holds that expire, so the Order saga's compensation and the worker can both free inventory safely. `Reserve` runs as a **single transaction**: it locks all target `ticket_class` rows in **ascending id order** (deadlock-free), validates sale eligibility and availability, increments `reserved`, and batch-inserts the reservation rows — all-or-nothing.
+Keyed by **order code**. A background `ReservationExpiryWorker` (`internal/workers/`) auto-releases holds that expire, so the Order saga's compensation and the worker can both free inventory safely. `Reserve` runs as a **single transaction** and takes **no `SELECT ... FOR UPDATE`**. It issues one guarded `UPDATE` per class in **ascending id order** (deadlock-free), then batch-inserts the reservation rows — all-or-nothing.
 
-**Sale eligibility** is enforced inside that locked transaction: the ticket class must be `ACTIVE` and `now` must fall within `[sale_start_at, sale_end_at]` (either bound may be null). Violations return `ErrSaleClosed` → gRPC `FailedPrecondition`. `CheckAvailability` applies the same rule.
+**Eligibility and availability live in that `UPDATE`'s predicate** — `status = ACTIVE`, `now` within `[sale_start_at, sale_end_at]` (either bound may be null), and `reserved + sold + qty <= total`. Under READ COMMITTED Postgres re-checks the predicate against the newest committed row after taking its own lock, so `RowsAffected == 0` is a correct verdict without a prior read. `explainReserveMiss` then reads the row *unlocked* to name which of the three reasons it was: `ErrNotFound`, `ErrSaleClosed` → gRPC `FailedPrecondition`, or `ErrInsufficientStock`. `CheckAvailability` applies the same eligibility rule.
+
+**The row is still held from that `UPDATE` to `COMMIT`**, so one hot ticket class is processed serially. Measured: ~1300 reserves/sec, peaking at four concurrent reservers and declining above that. Numbers and method in `docs/plans/2026-09-22-inventory-contention-benchmark.md`. Do not autoscale this service expecting a hot class to go faster.
 
 ## Commands
 
@@ -30,7 +32,9 @@ make test         # run tests against a live Postgres (see below; go test ./inte
 go build ./...
 ```
 
-Use `make test`, not bare `go test ./...`: without a reachable Postgres on 5435, `go test ./...` silently `t.Skipf`s every DB-backed test and reports PASS having asserted nothing. `make test` runs `test-db` first (creates `ticketbottle_inventory_test` against the `ticketbottle-inventory` container) so the suite actually executes. `setup_test.go` also hard-fails instead of skipping when the `CI` env var is set, but nothing exercises that guard today: the only workflow (`.github/workflows/build-push-ecr.yml`) builds images and never runs this suite.
+Use `make test`, not bare `go test ./...`: without a reachable Postgres on 5435, `go test ./...` silently `t.Skipf`s every DB-backed test and reports PASS having asserted nothing. `make test` runs `test-db` first (creates `ticketbottle_inventory_test` against the `ticketbottle-inventory` container) so the suite actually executes. `setup_test.go` hard-fails instead of skipping when `CI` is set, and `.github/workflows/go-tests.yml` exercises that guard on every push, with Postgres as a service container.
+
+The contention measurement in `reservation_contention_test.go` inverts that rule: it skips unless `INVENTORY_BENCH=1`, because CI runs under `-race` where a throughput number would be noise presented as evidence. Run it with `INVENTORY_BENCH=1 go test ./internal/services/ -run TestReserve(Throughput|UnderContention) -v`.
 
 On boot `main.go` runs GORM `AutoMigrate` for `TicketClass` and `Reservation`, then applies `models.PostMigrateStatements()` (`internal/models/ddl.go`) — the single source of DDL that AutoMigrate cannot express. That is the partial index `idx_reservation_active_expiry` plus three `CHECK` constraints:
 

@@ -92,10 +92,15 @@ four concurrent reservers.**
 
 ## Found, not fixed
 
-- **`confirmReservationTx` and `cancelReservationTx` still take
-  `SELECT … FOR UPDATE`** (`reservation.go:186`, `:296`). `35e864f` changed only
-  `Reserve`. Confirm runs on every successful purchase, so the same serialization
-  is still on the money path — unmeasured.
+- **Confirm also holds the hot row, and is unmeasured.** `confirmReservationTx`
+  mutates `ticket_class` with a guarded `UPDATE` (`WHERE id = ? AND reserved >= ?`)
+  and holds that row to `COMMIT`, exactly as `Reserve` does. Every successful
+  purchase pays it, so the real per-class ceiling is lower than the reserve
+  number alone suggests.
+
+  Its `SELECT … FOR UPDATE` (`reservation.go:186`, `:296`) is **not** part of
+  that: it locks `reservation` rows scoped to one `order_code`, and two buyers
+  never share an order code, so those locks do not contend across buyers.
 - **`pkg/gorm` hardcodes `LogLevel: logger.Info`**, writing a line per statement
   synchronously, in production as well as tests. The benchmark had to silence it
   to stop measuring log I/O. Nothing sets it per environment.
