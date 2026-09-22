@@ -67,9 +67,6 @@ docs/*.html
 # Root docs/ is tracked in full: the guides, design/, plans/ and diagram sources.
 # See docs/README.md for what belongs in each. The rules above ignore generated
 # API specs (docs/*.json|yaml|html) wherever they appear, including under a service.
-# The one exception is docs/interview/ below: personal study notes, not a
-# description of the platform, so they do not belong in the repository history.
-docs/interview/
 
 # --- Local data / runtime state -------------------------------------------
 *-data/
