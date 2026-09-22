@@ -146,3 +146,82 @@ func TestReserveUnderContention_SellsOutExactly(t *testing.T) {
 	t.Logf("  %d of %d attempts won, %d correctly refused, capacity landed exactly on %d",
 		r.succeeded, soldOutCapacity*3, r.soldOut, got.Total)
 }
+
+// TestReserveThroughput_SpreadAcrossClasses answers whether more rows buys more
+// throughput. Same worker count, same total ops, spread over N ticket classes
+// instead of one.
+//
+// scales with N -> the row lock is the wall, and sharding a hot class would work
+// flat in N     -> the wall is per-transaction (WAL/fsync), which every shard
+//
+//	pays too, and sharding buys nothing
+func TestReserveThroughput_SpreadAcrossClasses(t *testing.T) {
+	if os.Getenv("INVENTORY_BENCH") == "" {
+		t.Skip("set INVENTORY_BENCH=1 to run the contention measurement")
+	}
+
+	repo := newTestDB(t)
+	svc := NewReservationService(newTestLogger(), repo)
+	const workers = 16
+
+	t.Log("")
+	t.Logf("  %d workers, %d ops, spread over N ticket classes", workers, contentionOps)
+	t.Logf("  %-9s %-12s %-14s %s", "classes", "elapsed", "reserves/sec", "vs 1 class")
+	var base float64
+	for _, classes := range []int{1, 2, 4, 8} {
+		ids := make([]int64, classes)
+		for i := range ids {
+			ids[i] = seedTicketClass(t, repo, contentionCapacity, 0, 0).ID
+		}
+
+		var next, ok int64
+		var wg sync.WaitGroup
+		expires := time.Now().UTC().Add(15 * time.Minute)
+		start := time.Now()
+		for w := 0; w < workers; w++ {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for {
+					i := atomic.AddInt64(&next, 1) - 1
+					if i >= int64(contentionOps) {
+						return
+					}
+					// Worker-pinned, not per-op round robin: a shard scheme
+					// hands one buyer one row, and that is what this measures.
+					err := svc.Reserve(context.Background(), ReserveInput{
+						OrderCode: fmt.Sprintf("spread-%d-%d", classes, i),
+						ExpiresAt: expires,
+						Items:     []ReserveItem{{TicketClassID: ids[w%classes], Qty: 1}},
+					})
+					if err != nil {
+						t.Errorf("Reserve: %v", err)
+						return
+					}
+					atomic.AddInt64(&ok, 1)
+				}
+			}(w)
+		}
+		wg.Wait()
+		elapsed := time.Since(start)
+
+		var total int64
+		for _, id := range ids {
+			tc := ticketClassByID(t, repo, id)
+			if tc.Reserved+tc.Sold > tc.Total {
+				t.Fatalf("classes=%d: OVERSELL on %d", classes, id)
+			}
+			total += int64(tc.Reserved)
+		}
+		if total != ok {
+			t.Fatalf("classes=%d: rows hold %d but %d calls succeeded", classes, total, ok)
+		}
+
+		rate := float64(ok) / elapsed.Seconds()
+		if classes == 1 {
+			base = rate
+		}
+		t.Logf("  %-9d %-12s %-14.0f %.2fx", classes, elapsed.Round(time.Millisecond), rate, rate/base)
+	}
+	t.Log("")
+}
