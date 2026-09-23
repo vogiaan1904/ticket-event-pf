@@ -30,7 +30,7 @@ A LocalStack target was built and then **removed** in favour of real DynamoDB �
 
 > **The k3s box and EKS must never run at the same time.** `make eks-up` calls `eks-guard`, which refuses unless the box is stopped.
 
-> **Two scaling limits follow from the code and neither is fixed by adding replicas** — a 100-connection Postgres ceiling that four `inventory-service` replicas exhaust on their own, and a `SELECT … FOR UPDATE` row lock that caps throughput on a single hot ticket class. **Do not autoscale `inventory-service`.** Details in the EKS reference § scaling limits.
+> **Two scaling limits follow from the code and neither is fixed by adding replicas** — a 100-connection Postgres ceiling that four `inventory-service` replicas exhaust on their own, and a row lock held from the guarded `UPDATE` to `COMMIT` that serialises a single hot ticket class. **Do not autoscale `inventory-service`.** Details in the EKS reference § scaling limits.
 
 ## Pick your reference
 

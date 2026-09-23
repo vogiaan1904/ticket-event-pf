@@ -235,15 +235,22 @@ defaults `POSTGRES_MAX_OPEN_CONNS` to **25 per replica**. Four `inventory-servic
 the server on their own, and the failure lands on `user-service` / `event-service` /
 `payment-service` as `FATAL: sorry, too many clients already` — services that were never under load.
 
-**2 — the lock ceiling.** `services/inventory-svc/internal/services/reservation.go` reserves under
-`SELECT … FOR UPDATE` (with `Order("id")` for consistent lock acquisition) plus a guarded
-`WHERE reserved + sold + q <= total` update. This is *correct* — overselling is structurally
-impossible at the database layer — and it is exactly why throughput against one hot ticket class is
-bounded by lock hold time rather than replica count.
+**2 — the lock ceiling.** `services/inventory-svc/internal/services/reservation.go` reserves with a
+guarded conditional `UPDATE` per class in ascending id order — `WHERE … AND reserved + sold + q <=
+total` — and takes **no** `SELECT … FOR UPDATE` (removed in `35e864f`). This is *correct*: under
+READ COMMITTED, Postgres re-checks the predicate against the newest committed row after taking its
+own lock, so overselling is structurally impossible. The row is still held from that `UPDATE` to
+`COMMIT`, so one hot ticket class is processed serially — throughput is bounded by lock hold time,
+not replica count. Measured ~1300 reserves/sec, peaking at four concurrent reservers:
+`docs/plans/2026-09-22-inventory-contention-benchmark.md`.
 
 **Consequence: do not autoscale `inventory-service`.** Replicas cost 25 connections each and buy no
-throughput on the contended path. Lifting ceiling 2 means changing the data model, not the
-infrastructure.
+throughput on the contended path.
+
+**Ceiling 2 is not reached at the shipped configuration**, so it is not a to-do. The waitroom admits
+at `QUEUE_DEFAULT_MAX_CONCURRENT / checkout duration` — 100 slots against a 15-minute `JWT_EXPIRY`,
+i.e. under 1 admit/sec against a ~1300/sec ceiling. Lifting it is a data-model change worth making
+only if the admission rate is raised toward it.
 
 **3 — every PVC-backed pod is pinned to one availability zone.** The EBS CSI driver writes node
 affinity onto each PersistentVolume, because an EBS volume physically exists in one AZ.
