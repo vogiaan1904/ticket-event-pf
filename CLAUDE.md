@@ -26,6 +26,8 @@ describing it for a week — because the fact had been copied rather than linked
 |---|---|---|
 | How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2) built; (b)–(f) specified, unbuilt |
 | What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
+| In what order are queued buyers admitted? | `services/waitroom-svc/CLAUDE.md` | Draw before sale open, arrival after; 2026-09-23 |
+| How does a waiting client learn its position and token? | `services/waitroom-svc/CLAUDE.md` | Polling; the push stream was removed 2026-09-23 |
 | Who decides what, and what is the agent's role? | `docs/decisions/0002` | Accepted 2026-09-22 |
 | What runs where, and how does it authenticate? | `.claude/skills/deployment-architecture` | Built through the k3s and ephemeral-EKS targets |
 | How does a failure become a gRPC code, then an HTTP status? | This file, *Error taxonomy* | Binding |
@@ -37,7 +39,7 @@ describing it for a week — because the fact had been copied rather than linked
 
 | Question | Why it is open |
 |---|---|
-| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go:84` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. |
+| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. The per-event config path now exists (`internal/service/event_gate.go`), so this is a field and a knob, not a new mechanism. |
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
