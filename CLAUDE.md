@@ -36,6 +36,7 @@ describing it for a week — because the fact had been copied rather than linked
 | Which failures page, and which never do? | This file, *Alerting policy* | Binding |
 | Where does rationale live — comment, design, or plan? | This file, *Comment conventions*; `docs/README.md` | Binding |
 | Where is a decision's why recorded, and how is it reviewed? | `docs/decisions/README.md` | One record per decision, drafted when made; reviewed from the generated index |
+| Where does an agent start to learn a part of the system, and which document wins? | `.claude/skills/system-map` | A map of documents, not a copy of them; CI fails on a gone path or an uncited document; 2026-09-23 |
 
 ### Open
 
@@ -45,6 +46,8 @@ describing it for a week — because the fact had been copied rather than linked
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
+| Should the gateway rate-limit and set security headers? | Neither happens: `express-rate-limit` and `helmet` are gateway dependencies that `src/main.ts` never wires. The README claimed both until 2026-09-23. |
+| Which TS layout is the reference for new structure? | *Canonical TS layout* below calls `event-svc` the converged reference and, in the same list, forbids the `controllers/grpc/dtos` + `dtos/` split `event-svc` has. The `add-service` skill says not to copy it, and `services/api-gateway/src/CLAUDE.md` — loaded whenever gateway source is opened — prescribes `dtos/req` + `dtos/resp`. |
 | Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports
@@ -256,6 +259,9 @@ repeatedly. **`docs/plans/YYYY-MM-DD-<name>.md`** is a work order derived from a
 design, dated because it records a decision made on a day, and read once. A
 completed plan says so in its first lines. Plans address whoever does the work,
 never a tool. Full rules: `docs/README.md`.
+
+To find which document owns a question and how far to trust it, load the
+`system-map` skill. A design document added without a place on its map fails CI.
 
 When you change a system-wide rule or invariant, update this file. When a
 question above is settled, move its row from *Open* to *Decided* and name the

@@ -1,0 +1,24 @@
+name: system-map
+
+# The map cites documents and code across the repo, so a renamed file breaks it
+# as surely as a new design doc does. No path filter.
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The check's own tests
+        run: python3 .claude/skills/system-map/scripts/check_map_test.py
+
+      - name: Every cited path exists and every tracked document is on the map
+        run: python3 .claude/skills/system-map/scripts/check_map.py
