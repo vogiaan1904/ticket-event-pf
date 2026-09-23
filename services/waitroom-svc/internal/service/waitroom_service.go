@@ -29,8 +29,8 @@ func eventServiceError(err error, notFound error) error {
 
 type WaitroomService interface {
 	JoinQueue(ctx context.Context, req *JoinQueueInput) (*JoinQueueOutput, error)
-	GetQueueStatus(ctx context.Context, ssID string) (*QueueStatusOutput, error)
-	LeaveQueue(ctx context.Context, ssID string) error
+	GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error)
+	LeaveQueue(ctx context.Context, ssID, userID string) error
 	HandleCheckoutCompleted(ctx context.Context, in CheckoutCompletedInput) error
 	HandleCheckoutFailed(ctx context.Context, in CheckoutFailedInput) error
 	HandleCheckoutExpired(ctx context.Context, in CheckoutExpiredInput) error
@@ -121,10 +121,14 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 	}, nil
 }
 
-func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID string) (*QueueStatusOutput, error) {
+func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error) {
 	ss, err := s.ssSvc.ActiveSession(ctx, ssID)
 	if err != nil {
 		return nil, err
+	}
+	// Why: the response carries a checkout token, which is a bearer credential.
+	if ss.UserID != userID {
+		return nil, ErrSessionNotFound
 	}
 
 	stt, err := s.qSvc.GetQueueStatus(ctx, ssID, ss)
@@ -135,11 +139,14 @@ func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID string) (*Que
 	return stt, nil
 }
 
-func (s *waitroomService) LeaveQueue(ctx context.Context, ssID string) error {
+func (s *waitroomService) LeaveQueue(ctx context.Context, ssID, userID string) error {
 	ss, err := s.ssSvc.GetSession(ctx, ssID)
 	if err != nil {
 		s.l.Errorf(ctx, "waitroomService.LeaveQueue: %v", err)
 		return err
+	}
+	if ss.UserID != userID {
+		return ErrSessionNotFound
 	}
 
 	if err := s.qSvc.DequeueSession(ctx, ss.EventID, ssID); err != nil {

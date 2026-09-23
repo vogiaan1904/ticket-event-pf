@@ -40,17 +40,18 @@ export class WaitroomService {
     return joinQueueResp;
   }
 
-  async leaveQueue(dto: LeaveQueueDto): Promise<LeaveQueueResponse> {
+  async leaveQueue(user: RequestUser, dto: LeaveQueueDto): Promise<LeaveQueueResponse> {
     const leaveQueueResp = await firstValueFrom(
       this.waitroomService.leaveQueue({
         sessionId: dto.sessionId,
+        userId: user.id,
       }),
     );
 
     return leaveQueueResp;
   }
 
-  async getQueueStatus(sessionId: string): Promise<QueueStatusResponse> {
-    return firstValueFrom(this.waitroomService.getQueueStatus({ sessionId }));
+  async getQueueStatus(user: RequestUser, sessionId: string): Promise<QueueStatusResponse> {
+    return firstValueFrom(this.waitroomService.getQueueStatus({ sessionId, userId: user.id }));
   }
 }

@@ -235,6 +235,7 @@ func (x *JoinQueueResponse) GetExpiresAt() string {
 type GetQueueStatusRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -272,6 +273,13 @@ func (*GetQueueStatusRequest) Descriptor() ([]byte, []int) {
 func (x *GetQueueStatusRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *GetQueueStatusRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -395,6 +403,7 @@ func (x *QueueStatusResponse) GetAdmittedAt() string {
 type LeaveQueueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -432,6 +441,13 @@ func (*LeaveQueueRequest) Descriptor() ([]byte, []int) {
 func (x *LeaveQueueRequest) GetSessionId() string {
 	if x != nil {
 		return x.SessionId
+	}
+	return ""
+}
+
+func (x *LeaveQueueRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -619,10 +635,11 @@ const file_waitroom_proto_rawDesc = "" +
 	"\fqueue_length\x18\x03 \x01(\x03R\vqueueLength\x12\x1b\n" +
 	"\tqueued_at\x18\x04 \x01(\tR\bqueuedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\tR\texpiresAtJ\x04\b\x06\x10\a\"6\n" +
+	"expires_at\x18\x05 \x01(\tR\texpiresAtJ\x04\b\x06\x10\a\"O\n" +
 	"\x15GetQueueStatusRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\xfe\x02\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xfe\x02\n" +
 	"\x13QueueStatusResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x122\n" +
@@ -637,10 +654,11 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x13checkout_expires_at\x18\t \x01(\tR\x11checkoutExpiresAt\x12\x1f\n" +
 	"\vadmitted_at\x18\n" +
 	" \x01(\tR\n" +
-	"admittedAt\"2\n" +
+	"admittedAt\"K\n" +
 	"\x11LeaveQueueRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"M\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"M\n" +
 	"\x12LeaveQueueResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +

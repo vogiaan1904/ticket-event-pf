@@ -30,6 +30,7 @@ message JoinQueueResponse {
 
 message GetQueueStatusRequest {
   string session_id = 1;
+  string user_id = 2;
 }
 
 message QueueStatusResponse {
@@ -47,6 +48,7 @@ message QueueStatusResponse {
 
 message LeaveQueueRequest {
   string session_id = 1;
+  string user_id = 2;
 }
 
 message LeaveQueueResponse {

@@ -40,16 +40,16 @@ func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRe
 	}
 
 	return &waitroompb.JoinQueueResponse{
-		SessionId:    out.SessionID,
-		Position:     out.Position,
-		QueueLength:  out.QueueLength,
-		QueuedAt:     util.TimeToISO8601Str(out.QueuedAt),
-		ExpiresAt:    util.TimeToISO8601Str(out.ExpiresAt),
+		SessionId:   out.SessionID,
+		Position:    out.Position,
+		QueueLength: out.QueueLength,
+		QueuedAt:    util.TimeToISO8601Str(out.QueuedAt),
+		ExpiresAt:   util.TimeToISO8601Str(out.ExpiresAt),
 	}, nil
 }
 
 func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQueueStatusRequest) (*waitroompb.QueueStatusResponse, error) {
-	out, err := s.svc.GetQueueStatus(ctx, req.SessionId)
+	out, err := s.svc.GetQueueStatus(ctx, req.SessionId, req.UserId)
 	if err != nil {
 		s.l.Errorf(ctx, "Failed to get queue status: %v", err)
 		err = s.mapGRPCError(err)
@@ -77,9 +77,9 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 }
 
 func (s *grpcService) LeaveQueue(ctx context.Context, req *waitroompb.LeaveQueueRequest) (*waitroompb.LeaveQueueResponse, error) {
-	err := s.svc.LeaveQueue(ctx, req.SessionId)
-	if err != nil {
-		return nil, resp.ParseGRPCError(err)
+	if err := s.svc.LeaveQueue(ctx, req.SessionId, req.UserId); err != nil {
+		s.l.Errorf(ctx, "Failed to leave queue: %v", err)
+		return nil, resp.ParseGRPCError(s.mapGRPCError(err))
 	}
 
 	return &waitroompb.LeaveQueueResponse{

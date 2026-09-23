@@ -28,8 +28,11 @@ export class WaitroomController {
   @Post('leave')
   @UseGuards(AccessGuard)
   @ResponseDto(LeaveQueueRespDto)
-  async leaveQueue(@Body() dto: LeaveQueueDto): Promise<LeaveQueueRespDto> {
-    const protoResponse = await this.waitroomService.leaveQueue(dto);
+  async leaveQueue(
+    @Req() req: RequestWithUser,
+    @Body() dto: LeaveQueueDto,
+  ): Promise<LeaveQueueRespDto> {
+    const protoResponse = await this.waitroomService.leaveQueue(req.user, dto);
     return LeaveQueueMapper.toDto(protoResponse);
   }
 
@@ -38,7 +41,10 @@ export class WaitroomController {
   @Get('status/:sessionId')
   @UseGuards(AccessGuard)
   @ResponseDto(QueueStatusRespDto)
-  async getStatus(@Param('sessionId') sessionId: string): Promise<QueueStatusRespDto> {
-    return QueueStatusMapper.toDto(await this.waitroomService.getQueueStatus(sessionId));
+  async getStatus(
+    @Req() req: RequestWithUser,
+    @Param('sessionId') sessionId: string,
+  ): Promise<QueueStatusRespDto> {
+    return QueueStatusMapper.toDto(await this.waitroomService.getQueueStatus(req.user, sessionId));
   }
 }

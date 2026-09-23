@@ -40,6 +40,7 @@ export interface JoinQueueResponse {
 
 export interface GetQueueStatusRequest {
   sessionId: string;
+  userId: string;
 }
 
 export interface QueueStatusResponse {
@@ -57,6 +58,7 @@ export interface QueueStatusResponse {
 
 export interface LeaveQueueRequest {
   sessionId: string;
+  userId: string;
 }
 
 export interface LeaveQueueResponse {

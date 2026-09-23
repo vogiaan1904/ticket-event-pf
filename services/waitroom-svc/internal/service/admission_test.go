@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"testing"
@@ -20,10 +21,11 @@ import (
 // admissionRig runs the real session and queue services against a test Redis,
 // so a test can place a processor tick exactly where a race needs it.
 type admissionRig struct {
-	svc  WaitroomService
-	proc *queueProcessor
-	cli  *redis.Client
-	eID  string
+	svc    WaitroomService
+	proc   *queueProcessor
+	cli    *redis.Client
+	eID    string
+	owners map[string]string
 }
 
 // interleavingProducer runs one processor tick inside PublishQueueJoined:
@@ -92,10 +94,11 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 	})
 
 	return &admissionRig{
-		svc:  NewWaitroomService(qSvc, ssSvc, ev, prod, l, proc, time.Minute),
-		proc: proc,
-		cli:  cli,
-		eID:  eID,
+		svc:    NewWaitroomService(qSvc, ssSvc, ev, prod, l, proc, time.Minute),
+		proc:   proc,
+		cli:    cli,
+		eID:    eID,
+		owners: make(map[string]string),
 	}
 }
 
@@ -105,6 +108,7 @@ func (r *admissionRig) join(t *testing.T, userID string) string {
 	if err != nil {
 		t.Fatalf("join: %v", err)
 	}
+	r.owners[out.SessionID] = userID
 	return out.SessionID
 }
 
@@ -117,7 +121,7 @@ func (r *admissionRig) tick(t *testing.T) {
 
 func (r *admissionRig) status(t *testing.T, ssID string) *QueueStatusOutput {
 	t.Helper()
-	st, err := r.svc.GetQueueStatus(context.Background(), ssID)
+	st, err := r.svc.GetQueueStatus(context.Background(), ssID, r.owners[ssID])
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -219,5 +223,21 @@ func TestThePreOpenQueueIsOrderedByLotInRedis(t *testing.T) {
 	// A shuffle of 40 leaves about one in place; arrival order leaves all 40.
 	if inPlace == n {
 		t.Fatal("the queue is in arrival order; the draw did not reach Redis")
+	}
+}
+
+func TestOnlyTheOwnerCanReadOrLeaveASession(t *testing.T) {
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	ssID := r.join(t, "u-owner")
+	ctx := context.Background()
+
+	if _, err := r.svc.GetQueueStatus(ctx, ssID, "u-other"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("status read by a stranger: err=%v, want ErrSessionNotFound", err)
+	}
+	if err := r.svc.LeaveQueue(ctx, ssID, "u-other"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("leave by a stranger: err=%v, want ErrSessionNotFound", err)
+	}
+	if st := r.status(t, ssID); st.Status != models.SessionStatusQueued {
+		t.Fatalf("a stranger's leave removed the owner: status=%s", st.Status)
 	}
 }
