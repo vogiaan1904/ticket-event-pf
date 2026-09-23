@@ -1,7 +1,11 @@
 # Waitroom: admit the right buyer, and prove it end to end
 
-**Status: NOT STARTED.** D1 and D2 were decided on 2026-09-23: the first option in
-each.
+**Status: COMPLETE 2026-09-23.** D1 and D2 took the first option in each. On k3s at
+`719dda8`: `k3s-gate2` passed with its token taken from the status route, and
+`k3s-load` completed 310 of 310 purchases with no unexpected error. Probing the
+deployed gateway with a second user found one more gap — the owner was checked
+after the session's state, so an ended session answered a stranger with 409 —
+fixed in `719dda8`, after which it answers 404.
 
 **Goal:** Fix the admission defects found on 2026-09-23, each reproduced against
 real Redis, then run on k3s the end-to-end check the stampede work order meant to
