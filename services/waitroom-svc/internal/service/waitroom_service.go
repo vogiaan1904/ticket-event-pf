@@ -38,7 +38,6 @@ type WaitroomService interface {
 	StartQueueProcessor(ctx context.Context) error
 	StopQueueProcessor() error
 	GetProcessorStatus() ProcessorStatus
-
 }
 
 type waitroomService struct {
@@ -108,21 +107,17 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 	}
 
-	if err := s.ssSvc.UpdateSession(ctx, ss); err != nil {
-		return nil, fmt.Errorf("failed to update session: %w", err)
-	}
-
 	qInf, err := s.qSvc.GetQueueInfo(ctx, in.EventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue info: %w", err)
 	}
 
 	return &JoinQueueOutput{
-		SessionID:    ss.ID,
-		Position:     pos,
-		QueueLength:  qInf.QueueLength,
-		QueuedAt:     ss.QueuedAt,
-		ExpiresAt:    ss.ExpiresAt,
+		SessionID:   ss.ID,
+		Position:    pos,
+		QueueLength: qInf.QueueLength,
+		QueuedAt:    ss.QueuedAt,
+		ExpiresAt:   ss.ExpiresAt,
 	}, nil
 }
 
