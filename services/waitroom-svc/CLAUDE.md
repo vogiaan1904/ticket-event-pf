@@ -11,7 +11,7 @@ gRPC service (port **50056**, Redis-backed) that fairly throttles access to chec
 Key behaviors (`internal/service/queue_processor.go`):
 - Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
 - Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
-- Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting.
+- Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
 
 ## Commands (Makefile is the source of truth — `make help`)
 
@@ -72,6 +72,22 @@ next tick (`drainBufferedQueueReady`), peeked and trimmed only once settled.
 
 Note `queue.ready` currently has **no consumer** anywhere in the repo; the user-facing
 notification is the session's own state, read by polling `GetQueueStatus`.
+
+### `JoinQueue` asks event-svc at most once per event per TTL
+
+`internal/service/event_gate.go` caches an event's queueing rules
+(`QUEUE_EVENT_CACHE_TTL`, 30s). Two rules make it load-bearing rather than a
+convenience:
+
+- **Concurrent misses collapse** (`singleflight`). A plain TTL cache is cold at the
+  instant an on-sale opens, so every joiner would miss at once — the stampede it was
+  meant to prevent. `JoinQueue` used to make two synchronous calls per joiner.
+- **Verdicts are cached; dependency failures are not.** "No such event" is as cacheable
+  as a success. `ErrEventServiceUnavailable` is not: caching it would keep a queue shut
+  for the rest of the TTL after event-svc recovered.
+
+The shared fetch runs on a detached context, because every joiner collapsed behind it
+shares its result and one of them hanging up must not fail the others.
 
 ### Admission is discovered by polling, never pushed
 

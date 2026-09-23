@@ -55,7 +55,6 @@ type ProcessorConfig struct {
 	ProcessInterval       time.Duration // How often to process queues
 	MaxConcurrentPerEvent int           // Max users in checkout per event
 	BatchSize             int           // Max users to admit per batch
-	EventCacheTTL         time.Duration // How long to cache active events
 	RetryAttempts         int           // Retry attempts for failed operations
 	RetryDelay            time.Duration // Delay between retries
 	CheckoutTTL           time.Duration // How long an admitted user holds a slot
@@ -83,7 +82,6 @@ func NewQueueProcessor(
 			ProcessInterval:       cfg.ProcessInterval,
 			MaxConcurrentPerEvent: cfg.DefaultMaxConcurrent,
 			BatchSize:             cfg.DefaultReleaseRate,
-			EventCacheTTL:         5 * time.Minute,
 			RetryAttempts:         3,
 			RetryDelay:            time.Second,
 			// The slot TTL and the token lifetime must be the same window --

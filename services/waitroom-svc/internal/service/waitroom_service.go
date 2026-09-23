@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka/producer"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/models"
 	pkgLog "github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 	"github.com/vogiaan1904/ticketbottle-waitroom/protogen/event"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -44,7 +44,7 @@ type WaitroomService interface {
 type waitroomService struct {
 	qSvc  QueueService
 	ssSvc SessionService
-	eSvc  event.EventServiceClient
+	eGate *eventGate
 	prod  producer.Producer
 	l     pkgLog.Logger
 	proc  QueueProcessor
@@ -57,11 +57,12 @@ func NewWaitroomService(
 	prod producer.Producer,
 	l pkgLog.Logger,
 	proc QueueProcessor,
+	eventCacheTTL time.Duration,
 ) WaitroomService {
 	return &waitroomService{
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
-		eSvc:  eSvc,
+		eGate: newEventGate(eSvc, eventCacheTTL),
 		prod:  prod,
 		l:     l,
 		proc:  proc,
@@ -69,42 +70,13 @@ func NewWaitroomService(
 }
 
 func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*JoinQueueOutput, error) {
-	var eCfg *event.EventConfig
-	g, gCtx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		out, err := s.eSvc.FindOne(gCtx, &event.FindOneEventRequest{
-			Id: in.EventID,
-		})
-		if err != nil {
-			return eventServiceError(err, ErrEventNotFound)
-		}
-		if out.Event == nil {
-			return ErrEventNotFound
-		}
-		return nil
-	})
-
-	g.Go(func() error {
-		cfgOut, err := s.eSvc.GetConfig(gCtx, &event.GetEventConfigRequest{
-			EventId: in.EventID,
-		})
-		if err != nil {
-			return eventServiceError(err, ErrEventConfigNotFound)
-		}
-		if cfgOut.EventConfig == nil {
-			return ErrEventConfigNotFound
-		}
-		eCfg = cfgOut.EventConfig
-		return nil
-	})
-
-	if err := g.Wait(); err != nil {
+	eInfo, err := s.eGate.Get(ctx, in.EventID)
+	if err != nil {
 		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 		return nil, err
 	}
 
-	if !eCfg.AllowWaitRoom {
+	if !eInfo.AllowWaitRoom {
 		s.l.Warnf(ctx, "service.waitroomService.JoinQueue: %v", ErrWaitRoomNotAllowed)
 		return nil, ErrWaitRoomNotAllowed
 	}

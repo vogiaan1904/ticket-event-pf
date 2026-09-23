@@ -46,6 +46,10 @@ type QueueConfig struct {
 	DefaultReleaseRate     int
 	ProcessInterval        time.Duration
 	SessionTTL             time.Duration
+	// EventCacheTTL bounds how stale an event's queueing rules may be. Longer
+	// blunts an on-sale stampede against event-svc; shorter propagates a config
+	// change sooner. Concurrent misses collapse, so the stampede is bounded either way.
+	EventCacheTTL time.Duration
 }
 
 type KafkaConfig struct {
@@ -103,6 +107,7 @@ func Load() (*Config, error) {
 			DefaultReleaseRate:     getEnvAsInt("QUEUE_DEFAULT_RELEASE_RATE", 10),
 			ProcessInterval:        getEnvAsDuration("QUEUE_PROCESS_INTERVAL", 1*time.Second),
 			SessionTTL:             getEnvAsDuration("QUEUE_SESSION_TTL", 2*time.Hour),
+			EventCacheTTL:          getEnvAsDuration("QUEUE_EVENT_CACHE_TTL", 30*time.Second),
 		},
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "jwt-secret"),
