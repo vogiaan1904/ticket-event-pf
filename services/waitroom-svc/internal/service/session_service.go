@@ -16,7 +16,7 @@ import (
 )
 
 type SessionService interface {
-	CreateSession(ctx context.Context, uID, eID string, userAgent, ipAddr string) (*models.Session, error)
+	CreateSession(ctx context.Context, uID, eID string, userAgent, ipAddr string, saleStartAt time.Time) (*models.Session, error)
 	UpdateSession(ctx context.Context, ss *models.Session) error
 	UpdateSessionStatus(ctx context.Context, sessionID string, status models.SessionStatus) error
 	GetSession(ctx context.Context, ssID string) (*models.Session, error)
@@ -45,7 +45,7 @@ func NewSessionService(
 	}
 }
 
-func (s *sessionService) CreateSession(ctx context.Context, uID, eID string, userAgent, ipAddr string) (*models.Session, error) {
+func (s *sessionService) CreateSession(ctx context.Context, uID, eID string, userAgent, ipAddr string, saleStartAt time.Time) (*models.Session, error) {
 	now := time.Now()
 	ssID := uuid.New().String()
 
@@ -63,6 +63,8 @@ func (s *sessionService) CreateSession(ctx context.Context, uID, eID string, use
 		AttemptCount:    1,
 		CreatedAt:       now,
 		UpdatedAt:       now,
+		// Drawn here so it is written once, with the session it belongs to.
+		QueueScore: models.DrawQueueScore(now, saleStartAt),
 	}
 
 	if err := s.repo.Create(ctx, ss); err != nil {

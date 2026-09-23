@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"math/rand/v2"
+	"time"
+)
 
 type Session struct {
 	ID                      string        `json:"id"`
@@ -22,6 +25,7 @@ type Session struct {
 	IPAddress               string        `json:"ip_address,omitempty"`
 	LastHeartbeatAt         time.Time     `json:"last_heartbeat_at"`
 	AttemptCount            int           `json:"attempt_count"`
+	QueueScore              float64       `json:"queue_score,omitempty"`
 	CreatedAt               time.Time     `json:"created_at"`
 	UpdatedAt               time.Time     `json:"updated_at"`
 }
@@ -65,7 +69,30 @@ func (s *Session) HasCheckoutExpired() bool {
 	return time.Now().After(*s.CheckoutExpiresAt)
 }
 
+// GetQueueScore returns the session's fixed place in the queue's ordering.
+//
+// The score is drawn once, at join, and carried on the session: re-deriving it
+// would move someone already standing in line. A zero score is a session stored
+// before the draw existed, which orders by arrival as it always did.
 func (s *Session) GetQueueScore() float64 {
-	priorityOffset := float64(0) * -3600.0
-	return float64(s.QueuedAt.Unix()) + priorityOffset
+	if s.QueueScore != 0 {
+		return s.QueueScore
+	}
+	return float64(s.QueuedAt.Unix())
+}
+
+// DrawQueueScore fixes where a joiner stands, once.
+//
+//	before the sale opens -> a random point in the second before it
+//	at or after           -> arrival time
+//
+// Ordering everyone who gathered before the doors by arrival makes an on-sale a
+// race on round-trip time, which is the one race a bot always wins.
+func DrawQueueScore(queuedAt, saleStartAt time.Time) float64 {
+	if saleStartAt.IsZero() || !queuedAt.Before(saleStartAt) {
+		return float64(queuedAt.Unix())
+	}
+	// [saleStart-1, saleStart): every pre-open entrant sorts ahead of every
+	// latecomer, and among themselves by lot.
+	return float64(saleStartAt.Unix()-1) + rand.Float64()
 }

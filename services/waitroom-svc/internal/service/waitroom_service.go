@@ -87,6 +87,7 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		in.EventID,
 		in.UserAgent,
 		in.IPAddress,
+		eInfo.SaleStartAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)

@@ -153,7 +153,7 @@ func (f *fakeSessions) UpdateSessionStatus(_ context.Context, ssID string, st mo
 	return nil
 }
 
-func (f *fakeSessions) CreateSession(context.Context, string, string, string, string) (*models.Session, error) {
+func (f *fakeSessions) CreateSession(context.Context, string, string, string, string, time.Time) (*models.Session, error) {
 	return nil, nil
 }
 func (f *fakeSessions) UpdateSession(context.Context, *models.Session) error          { return nil }

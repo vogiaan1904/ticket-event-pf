@@ -6,7 +6,7 @@ This is the **Waitroom** (virtual queue) service for TicketBottle V2. For the sy
 
 ## Role
 
-gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a FIFO **queue** (Redis sorted set); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `queue.ready` event to Kafka. It also consumes downstream events (e.g. `checkout.completed`) to release slots and admit the next user.
+gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a **queue** (Redis sorted set; see the draw below); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `queue.ready` event to Kafka. It also consumes downstream events (e.g. `checkout.completed`) to release slots and admit the next user.
 
 Key behaviors (`internal/service/queue_processor.go`):
 - Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
@@ -72,6 +72,30 @@ next tick (`drainBufferedQueueReady`), peeked and trimmed only once settled.
 
 Note `queue.ready` currently has **no consumer** anywhere in the repo; the user-facing
 notification is the session's own state, read by polling `GetQueueStatus`.
+
+### Order is a draw before the sale opens, arrival order after
+
+`models.DrawQueueScore` sets a session's sorted-set score once, at join:
+
+```
+joined before ticket_sale_start_date -> a random point in [saleStart-1, saleStart)
+joined at or after it                -> QueuedAt.Unix()
+```
+
+The band is closed on purpose: no pre-open draw can reach the first post-open
+score, so gathering early buys a place in the lottery rather than a place at the
+front of it. Ordering everyone who waited for the doors by arrival makes an
+on-sale a race on round-trip time, which is the one race a bot always wins.
+
+The score is **stored on the session** (`queue_score`) and `GetQueueScore` returns
+it rather than re-deriving: a second derivation would move someone already
+standing in line. A zero score is a session written before the draw existed and
+falls back to arrival order.
+
+Two things this replaced, both accidents rather than decisions: a
+`priorityOffset` multiplied by a hardcoded zero, and second-granularity scores
+whose ties Redis broke by session UUID — so ordering *within* a second was
+already random, undocumented and unintended.
 
 ### `JoinQueue` asks event-svc at most once per event per TTL
 
