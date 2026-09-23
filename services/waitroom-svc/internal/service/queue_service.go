@@ -158,7 +158,10 @@ func (s *queueService) PeekQueue(ctx context.Context, eventID string, count int)
 		return nil, nil
 	}
 
-	sessionIDs, err := s.repo.GetQueueMembers(ctx, eventID, 0, int64(count-1))
+	// Due once its whole second has passed. Pre-open draws sit in
+	// [saleStart-1, saleStart), so none is due before the doors open.
+	due := float64(time.Now().Unix())
+	sessionIDs, err := s.repo.GetQueueMembers(ctx, eventID, due, int64(count))
 	if err != nil {
 		return nil, fmt.Errorf("failed to peek queue: %w", err)
 	}

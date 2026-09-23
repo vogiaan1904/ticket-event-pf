@@ -82,6 +82,10 @@ joined before ticket_sale_start_date -> a random point in [saleStart-1, saleStar
 joined at or after it                -> QueuedAt.Unix()
 ```
 
+Nothing is admitted before its score comes due: `PeekQueue` reads only scores below
+the current whole second, so the pre-open band waits for the doors without the
+processor asking event-svc anything.
+
 The band is closed on purpose: no pre-open draw can reach the first post-open
 score, so gathering early buys a place in the lottery rather than a place at the
 front of it. Ordering everyone who waited for the doors by arrival makes an
@@ -156,7 +160,7 @@ each other. Add DLQ-depth alerting before relying on either alone.
 The admission loop is **not safe above `replicas: 1`** (which is what
 `deploy/helm/ticketbottle/templates/apps/_appservice.tpl` sets). Two known races:
 
-- `PeekQueue` is a plain `ZRANGE`, so every replica would peek the same head and admit
+- `PeekQueue` is a plain read, so every replica would peek the same head and admit
   the same users concurrently. (The `GetProcessingCount` → admit sequence was already
   check-then-act, so replicas could over-admit even before the claim/ack change; the
   change additionally lost the atomicity that stopped *the same session* being claimed

@@ -152,3 +152,36 @@ func TestAnAdmissionDuringTheJoinIsNotUndone(t *testing.T) {
 		t.Fatalf("admitted during the join, then reverted: status=%s token=%q", st.Status, st.CheckoutToken)
 	}
 }
+
+func TestNobodyIsAdmittedBeforeTheSaleOpens(t *testing.T) {
+	r := newAdmissionRig(t, time.Now().Add(time.Hour), 10, &interleavingProducer{})
+
+	ssID := r.join(t, "u-1")
+	sleepPastSecond()
+	r.tick(t)
+
+	if st := r.status(t, ssID); st.Status != models.SessionStatusQueued {
+		t.Fatalf("admitted an hour before the sale opens: status=%s", st.Status)
+	}
+}
+
+func TestPreOpenJoinersAreAdmittedOnceTheSaleOpens(t *testing.T) {
+	saleStart := time.Now().Truncate(time.Second).Add(2 * time.Second)
+	r := newAdmissionRig(t, saleStart, 10, &interleavingProducer{})
+	ids := []string{r.join(t, "u-1"), r.join(t, "u-2"), r.join(t, "u-3")}
+
+	r.tick(t)
+	for _, id := range ids {
+		if st := r.status(t, id); st.Status != models.SessionStatusQueued {
+			t.Fatalf("admitted before the sale opened: status=%s", st.Status)
+		}
+	}
+
+	time.Sleep(time.Until(saleStart.Add(20 * time.Millisecond)))
+	r.tick(t)
+	for _, id := range ids {
+		if st := r.status(t, id); st.Status != models.SessionStatusAdmitted {
+			t.Fatalf("still waiting after the sale opened: status=%s", st.Status)
+		}
+	}
+}

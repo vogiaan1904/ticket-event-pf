@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"math"
 	"os"
 	"slices"
 	"testing"
@@ -195,7 +196,7 @@ func TestGetQueueMembersIsNonDestructiveAndOrdered(t *testing.T) {
 	}
 
 	for range 2 {
-		got, err := repo.GetQueueMembers(ctx, eID, 0, 1)
+		got, err := repo.GetQueueMembers(ctx, eID, math.Inf(1), 2)
 		if err != nil {
 			t.Fatalf("peek: %v", err)
 		}
@@ -231,7 +232,7 @@ func TestRemoveFromQueueDropsExactlyTheGivenMembers(t *testing.T) {
 		t.Fatalf("remove: %v", err)
 	}
 
-	got, err := repo.GetQueueMembers(ctx, eID, 0, -1)
+	got, err := repo.GetQueueMembers(ctx, eID, math.Inf(1), -1)
 	if err != nil {
 		t.Fatalf("members: %v", err)
 	}

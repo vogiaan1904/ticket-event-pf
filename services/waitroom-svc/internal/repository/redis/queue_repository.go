@@ -17,7 +17,7 @@ type QueueRepository interface {
 	GetQueueLength(ctx context.Context, eID string) (int64, error)
 	GetQueuePosition(ctx context.Context, eID, ssID string) (int64, error)
 	GetQueuePositionAndLength(ctx context.Context, eID, ssID string) (int64, int64, error)
-	GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error)
+	GetQueueMembers(ctx context.Context, eID string, before float64, count int64) ([]string, error)
 	AddToProcessing(ctx context.Context, eID, ssID string, ttl time.Duration) error
 	RemoveFromProcessing(ctx context.Context, eID, ssID string) error
 	GetProcessingCount(ctx context.Context, eID string) (int64, error)
@@ -144,10 +144,11 @@ func (r *redisQueueRepository) GetQueuePositionAndLength(ctx context.Context, eI
 	return rank.Val() + 1, length, nil
 }
 
-func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error) {
+// GetQueueMembers returns up to count members scored below `before`, head first.
+func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, before float64, count int64) ([]string, error) {
 	qKey := r.queueKey(eID)
 
-	mems, err := r.cli.ZRange(ctx, qKey, start, stop)
+	mems, err := r.cli.ZRangeBelow(ctx, qKey, before, count)
 	if err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.GetQueueMembers: %v", err)
 		return nil, err
