@@ -67,15 +67,3 @@ type QueueInfoOutput struct {
 	QueueLength     int64
 	ProcessingCount int64
 }
-
-// PositionStreamUpdate represents a real-time position update sent via stream
-type PositionStreamUpdate struct {
-	SessionID         string
-	Status            models.SessionStatus
-	Position          int64
-	QueueLength       int64
-	UpdatedAt         time.Time
-	CheckoutToken     string
-	CheckoutURL       string
-	CheckoutExpiresAt *time.Time
-}

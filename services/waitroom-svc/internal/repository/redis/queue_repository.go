@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -23,8 +22,6 @@ type QueueRepository interface {
 	GetProcessingCount(ctx context.Context, eID string) (int64, error)
 	IsProcessing(ctx context.Context, eID, ssID string) (bool, error)
 	// Pub/Sub methods for real-time position updates
-	PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error
-	SubscribeToPositionUpdates(ctx context.Context, eID string) (*redis.PubSub, error)
 	// Buffered QUEUE_READY publishes awaiting retry
 	BufferQueueReady(ctx context.Context, payload []byte) error
 	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
@@ -193,37 +190,6 @@ func (r *redisQueueRepository) IsProcessing(ctx context.Context, eID, ssID strin
 	return int64(expiresAt) > time.Now().UnixMilli(), nil
 }
 
-func (r *redisQueueRepository) PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error {
-	channel := r.positionUpdateChannel(update.EventID)
-
-	payload, err := json.Marshal(update)
-	if err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.PublishPositionUpdate: failed to marshal update: %v", err)
-		return fmt.Errorf("failed to marshal position update: %w", err)
-	}
-
-	if err := r.cli.Publish(ctx, channel, payload); err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.PublishPositionUpdate: %v", err)
-		return fmt.Errorf("failed to publish position update: %w", err)
-	}
-
-	return nil
-}
-
-func (r *redisQueueRepository) SubscribeToPositionUpdates(ctx context.Context, eID string) (*redis.PubSub, error) {
-	channel := r.positionUpdateChannel(eID)
-
-	pubsub := r.cli.Subscribe(ctx, channel)
-
-	_, err := pubsub.Receive(ctx)
-	if err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.SubscribeToPositionUpdates: %v", err)
-		return nil, fmt.Errorf("failed to subscribe to position updates: %w", err)
-	}
-
-	return pubsub, nil
-}
-
 func (r *redisQueueRepository) queueKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:queue", eID)
 }
@@ -236,18 +202,12 @@ func (r *redisQueueRepository) processingKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:checkouts", eID)
 }
 
-func (r *redisQueueRepository) positionUpdateChannel(eID string) string {
-	return fmt.Sprintf("queue:updates:%s", eID)
-}
-
 // ============= Buffered QUEUE_READY Publishes =============
 
 // maxBufferedQueueReady caps the retry buffer; the oldest entries are shed past it.
 // Why: it only grows while Kafka is down, but an unbounded list is its own outage.
 const maxBufferedQueueReady = 10000
 
-// BufferQueueReady parks a QUEUE_READY payload whose publish failed. The list is
-// FIFO: appended at the tail, drained from the head, so ordering survives.
 func (r *redisQueueRepository) BufferQueueReady(ctx context.Context, payload []byte) error {
 	key := r.bufferedQueueReadyKey()
 

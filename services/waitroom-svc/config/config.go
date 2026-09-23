@@ -46,7 +46,6 @@ type QueueConfig struct {
 	DefaultReleaseRate     int
 	ProcessInterval        time.Duration
 	SessionTTL             time.Duration
-	PositionUpdateInterval time.Duration
 }
 
 type KafkaConfig struct {
@@ -104,7 +103,6 @@ func Load() (*Config, error) {
 			DefaultReleaseRate:     getEnvAsInt("QUEUE_DEFAULT_RELEASE_RATE", 10),
 			ProcessInterval:        getEnvAsDuration("QUEUE_PROCESS_INTERVAL", 1*time.Second),
 			SessionTTL:             getEnvAsDuration("QUEUE_SESSION_TTL", 2*time.Hour),
-			PositionUpdateInterval: getEnvAsDuration("QUEUE_POSITION_UPDATE_INTERVAL", 5*time.Second),
 		},
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "jwt-secret"),

@@ -19,11 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WaitroomService_JoinQueue_FullMethodName           = "/waitroom.v1.WaitroomService/JoinQueue"
-	WaitroomService_GetQueueStatus_FullMethodName      = "/waitroom.v1.WaitroomService/GetQueueStatus"
-	WaitroomService_LeaveQueue_FullMethodName          = "/waitroom.v1.WaitroomService/LeaveQueue"
-	WaitroomService_StreamQueuePosition_FullMethodName = "/waitroom.v1.WaitroomService/StreamQueuePosition"
-	WaitroomService_HealthCheck_FullMethodName         = "/waitroom.v1.WaitroomService/HealthCheck"
+	WaitroomService_JoinQueue_FullMethodName      = "/waitroom.v1.WaitroomService/JoinQueue"
+	WaitroomService_GetQueueStatus_FullMethodName = "/waitroom.v1.WaitroomService/GetQueueStatus"
+	WaitroomService_LeaveQueue_FullMethodName     = "/waitroom.v1.WaitroomService/LeaveQueue"
+	WaitroomService_HealthCheck_FullMethodName    = "/waitroom.v1.WaitroomService/HealthCheck"
 )
 
 // WaitroomServiceClient is the client API for WaitroomService service.
@@ -33,7 +32,6 @@ type WaitroomServiceClient interface {
 	JoinQueue(ctx context.Context, in *JoinQueueRequest, opts ...grpc.CallOption) (*JoinQueueResponse, error)
 	GetQueueStatus(ctx context.Context, in *GetQueueStatusRequest, opts ...grpc.CallOption) (*QueueStatusResponse, error)
 	LeaveQueue(ctx context.Context, in *LeaveQueueRequest, opts ...grpc.CallOption) (*LeaveQueueResponse, error)
-	StreamQueuePosition(ctx context.Context, in *StreamPositionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PositionUpdate], error)
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
@@ -75,25 +73,6 @@ func (c *waitroomServiceClient) LeaveQueue(ctx context.Context, in *LeaveQueueRe
 	return out, nil
 }
 
-func (c *waitroomServiceClient) StreamQueuePosition(ctx context.Context, in *StreamPositionRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PositionUpdate], error) {
-	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &WaitroomService_ServiceDesc.Streams[0], WaitroomService_StreamQueuePosition_FullMethodName, cOpts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &grpc.GenericClientStream[StreamPositionRequest, PositionUpdate]{ClientStream: stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type WaitroomService_StreamQueuePositionClient = grpc.ServerStreamingClient[PositionUpdate]
-
 func (c *waitroomServiceClient) HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthCheckResponse)
@@ -111,7 +90,6 @@ type WaitroomServiceServer interface {
 	JoinQueue(context.Context, *JoinQueueRequest) (*JoinQueueResponse, error)
 	GetQueueStatus(context.Context, *GetQueueStatusRequest) (*QueueStatusResponse, error)
 	LeaveQueue(context.Context, *LeaveQueueRequest) (*LeaveQueueResponse, error)
-	StreamQueuePosition(*StreamPositionRequest, grpc.ServerStreamingServer[PositionUpdate]) error
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedWaitroomServiceServer()
 }
@@ -131,9 +109,6 @@ func (UnimplementedWaitroomServiceServer) GetQueueStatus(context.Context, *GetQu
 }
 func (UnimplementedWaitroomServiceServer) LeaveQueue(context.Context, *LeaveQueueRequest) (*LeaveQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LeaveQueue not implemented")
-}
-func (UnimplementedWaitroomServiceServer) StreamQueuePosition(*StreamPositionRequest, grpc.ServerStreamingServer[PositionUpdate]) error {
-	return status.Errorf(codes.Unimplemented, "method StreamQueuePosition not implemented")
 }
 func (UnimplementedWaitroomServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
@@ -213,17 +188,6 @@ func _WaitroomService_LeaveQueue_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _WaitroomService_StreamQueuePosition_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamPositionRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(WaitroomServiceServer).StreamQueuePosition(m, &grpc.GenericServerStream[StreamPositionRequest, PositionUpdate]{ServerStream: stream})
-}
-
-// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type WaitroomService_StreamQueuePositionServer = grpc.ServerStreamingServer[PositionUpdate]
-
 func _WaitroomService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(HealthCheckRequest)
 	if err := dec(in); err != nil {
@@ -266,12 +230,6 @@ var WaitroomService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _WaitroomService_HealthCheck_Handler,
 		},
 	},
-	Streams: []grpc.StreamDesc{
-		{
-			StreamName:    "StreamQueuePosition",
-			Handler:       _WaitroomService_StreamQueuePosition_Handler,
-			ServerStreams: true,
-		},
-	},
+	Streams:  []grpc.StreamDesc{},
 	Metadata: "waitroom.proto",
 }

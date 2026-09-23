@@ -2,7 +2,7 @@
 
 ## System Overview
 
-The waitroom service implements a **virtual queue system** for high-demand ticket sales using **Redis for queue management**, **Kafka for event streaming**, and **Redis Pub/Sub for real-time position updates**.
+The waitroom service implements a **virtual queue system** for high-demand ticket sales using **Redis for queue management** and **Kafka for event streaming**. Clients discover their position, and their checkout token, by polling `GetQueueStatus`.
 
 ## System Architecture
 
@@ -19,7 +19,7 @@ The waitroom service implements a **virtual queue system** for high-demand ticke
 │  │ - JoinQueue  │    │ Publishes:   │    │ Consumes:    │           │
 │  │ - GetStatus  │    │ - JOINED      │    │ - COMPLETED   │           │
 │  │ - LeaveQueue │    │ - LEFT        │    │ - FAILED      │           │
-│  │ - StreamPos  │    │ - READY       │    │ - EXPIRED     │           │
+│  │ - GetStatus  │    │ - READY       │    │ - EXPIRED     │           │
 │  │              │    │              │    │              │           │
 │  └───────┬──────┘    └──────┬───────┘    └──────┬───────┘           │
 │          │                  │                   │                    │
@@ -40,11 +40,10 @@ The waitroom service implements a **virtual queue system** for high-demand ticke
 │                    │  - Sessions     │                               │
 │                    │  - Queues       │                               │
 │                    │  - Processing   │                               │
-│                    │  - Pub/Sub       │                               │
 │                    └─────────────────┘                               │
 │                                                                        │
 │     Queue Processor: Running in background (every 1s)                │
-│     Real-time Streaming: gRPC + Redis Pub/Sub                        │
+│     Position discovery: clients poll GetQueueStatus                  │
 │                                                                        │
 └──────────────────────────────────────────────────────────────────────┘
 ```
@@ -57,9 +56,8 @@ The waitroom service implements a **virtual queue system** for high-demand ticke
 User → gRPC → WaitroomService.JoinQueue()
   ├─ SessionService.CreateSession() → Redis
   ├─ QueueService.EnqueueSession() → Redis Sorted Set
-  ├─ Redis Pub/Sub: Publish position update (INTERNAL)
   ├─ Kafka Producer: PublishQueueJoined() (EXTERNAL)
-  └─ Return: position, session_id, websocket_url
+  └─ Return: position, session_id, queue_length
 ```
 
 **Files:**
@@ -67,27 +65,22 @@ User → gRPC → WaitroomService.JoinQueue()
 - [internal/service/queue_service.go:40-66](../internal/service/queue_service.go#L40-L66) - EnqueueSession()
 - [internal/repository/redis/queue_repository.go](../internal/repository/redis/queue_repository.go) - Redis operations
 
-### 2. Real-Time Position Streaming
+### 2. Position Discovery
 
 ```
-User → gRPC → StreamQueuePosition(session_id)
-  ├─ Validate session
-  ├─ Send initial position immediately
-  ├─ Subscribe to Redis Pub/Sub channel: queue:updates:{eventID}
-  └─ Stream position updates in real-time
-      ├─ On user join/leave → Position update
-      ├─ On admission → Checkout token + URL
-      └─ Auto-close when admitted/expired/completed
+User → gRPC → GetQueueStatus(session_id)
+  ├─ Read the session
+  ├─ queued   → ZRANK for position, plus queue length
+  └─ admitted → checkout token, URL and expiry
 ```
+
+A push-based stream was removed: it held an SSE connection, a gRPC stream and a
+Redis Pub/Sub subscription per waiter, and every admission cost three Redis
+operations per waiter. See `../CLAUDE.md`, "Admission is discovered by polling".
 
 **Files:**
-- [internal/delivery/grpc/service.go:78-170](../internal/delivery/grpc/service.go#L78-L170) - StreamQueuePosition()
-- [internal/service/waitroom_service.go:290-418](../internal/service/waitroom_service.go#L290-L418) - StreamSessionPosition()
-- [internal/models/position_update.go](../internal/models/position_update.go) - Position update events
-
-**Redis Channels:**
-- Pattern: `queue:updates:{eventID}`
-- Example: `queue:updates:concert-2024`
+- [internal/delivery/grpc/service.go](../internal/delivery/grpc/service.go) - GetQueueStatus()
+- [internal/service/queue_service.go](../internal/service/queue_service.go) - GetQueueStatus()
 
 ### 3. Queue Processing
 
@@ -102,7 +95,6 @@ Background Goroutine (Every 1 second):
   │   │   ├─ Generate JWT checkout token
   │   │   ├─ Update session status to "admitted"
   │   │   ├─ Add to processing set (15min TTL)
-  │   │   ├─ Redis Pub/Sub: Publish admitted update (INTERNAL)
   │   │   └─ Kafka: PublishQueueReady() (EXTERNAL)
   │   └─ Release batch (default: 10 users per batch)
   └─ Repeat
@@ -121,15 +113,9 @@ Background Goroutine (Every 1 second):
 ### 4. User Gets Checkout Access
 
 ```
-Option 1: Polling
-  User polls GetQueueStatus():
-    ├─ If status = "queued" → Show position
-    └─ If status = "admitted" → Show checkout token + URL
-
-Option 2: Streaming (Recommended)
-  User streams StreamQueuePosition():
-    ├─ Receives real-time position updates
-    └─ Receives admission notification with token
+User polls GetQueueStatus():
+  ├─ If status = "queued"   → Show position
+  └─ If status = "admitted" → Show checkout token + URL
 ```
 
 ### 5. Checkout Process
@@ -209,13 +195,13 @@ ZRANGE waitroom:concert-2024:checkouts 0 -1
 # Max 100 concurrent users (configurable)
 ```
 
-### 4. Pub/Sub Channels (Ephemeral)
+### 4. Buffered `queue.ready` Retries
 
 ```redis
-# Channel: queue:updates:{event_id}
-# Messages: PositionUpdateEvent (JSON)
+# List: waitroom:queue_ready:pending
+# Holds payloads whose Kafka publish failed; drained at the head of the next tick.
 
-SUBSCRIBE queue:updates:concert-2024
+LRANGE waitroom:queue_ready:pending 0 -1
 
 # Receives real-time updates when:
 # - User joins queue (user_joined)
@@ -245,17 +231,10 @@ SUBSCRIBE queue:updates:concert-2024
 
 **File:** [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go)
 
-## Redis Pub/Sub vs Kafka
+## Kafka
 
-Both are used but serve **different purposes**:
-
-### Redis Pub/Sub (Internal Real-Time)
-- **Scope:** Internal (within waitroom service)
-- **Purpose:** Real-time client streaming
-- **Consumers:** Active gRPC streams
-- **Latency:** ~1ms (instant)
-- **Durability:** ephemeral — nothing is stored
-- **Use case:** Stream position updates to connected clients
+Redis Pub/Sub was used for client streaming and is gone with it. Redis now holds
+queue state only; Kafka carries everything that crosses a service boundary.
 
 ### Kafka Events (External Service-to-Service)
 - **Scope:** External (between microservices)
@@ -277,9 +256,6 @@ QUEUE_DEFAULT_MAX_CONCURRENT=100   # Max users in checkout per event
 QUEUE_DEFAULT_RELEASE_RATE=10      # Users admitted per batch
 QUEUE_PROCESS_INTERVAL=1s          # How often processor runs
 QUEUE_SESSION_TTL=7200s            # Session expiry (2 hours)
-
-# Real-Time Streaming
-QUEUE_POSITION_UPDATE_INTERVAL=5s  # Update broadcast frequency
 
 # Redis
 REDIS_ADDR=localhost:6379
@@ -339,36 +315,31 @@ grpcurl -plaintext -d '{
 # After processor runs: status = "admitted", checkout_token populated
 ```
 
-### Test 2: Real-Time Position Streaming
+### Test 2: Position Discovery
 
 ```bash
-# Start streaming (keeps connection open)
 grpcurl -plaintext -d '{
   "session_id": "session-abc-123"
-}' localhost:50056 waitroom.v1.WaitroomService/StreamQueuePosition
+}' localhost:50056 waitroom.v1.WaitroomService/GetQueueStatus
 
-# Receives:
-# 1. Initial position update
-# 2. Updates when other users join/leave
-# 3. Admission notification with checkout token
-# 4. Stream closes automatically
+# queued   -> position and queue_length
+# admitted -> checkout token, URL and expiry
 ```
 
 ### Test 3: Multiple Users
 
 ```bash
-# Terminal 1: User 1 joins and streams
+# User 1 joins
 grpcurl -plaintext -d '{"user_id":"user1","event_id":"concert1"}' \
   localhost:50056 waitroom.v1.WaitroomService/JoinQueue
 
-grpcurl -plaintext -d '{"session_id":"session-1"}' \
-  localhost:50056 waitroom.v1.WaitroomService/StreamQueuePosition
-
-# Terminal 2: User 2 joins
+# User 2 joins
 grpcurl -plaintext -d '{"user_id":"user2","event_id":"concert1"}' \
   localhost:50056 waitroom.v1.WaitroomService/JoinQueue
 
-# Terminal 1 should receive position update showing queue_length = 2
+# User 1 polls; queue_length should read 2
+grpcurl -plaintext -d '{"session_id":"session-1"}' \
+  localhost:50056 waitroom.v1.WaitroomService/GetQueueStatus
 ```
 
 ### Test 4: Verify Redis Data
@@ -379,9 +350,6 @@ redis-cli ZRANGE waitroom:concert-2024:queue 0 -1 WITHSCORES
 
 # Check processing set
 redis-cli ZRANGE waitroom:concert-2024:checkouts 0 -1
-
-# Monitor pub/sub
-redis-cli PSUBSCRIBE 'queue:updates:*'
 
 # Check session
 redis-cli GET session:abc-123
@@ -429,7 +397,7 @@ docker logs waitroom-service | grep -i "queue processor"
 ```bash
 redis-cli PING  # Should return PONG
 redis-cli INFO stats
-redis-cli PUBSUB CHANNELS 'queue:updates:*'
+redis-cli LLEN waitroom:queue_ready:pending  # 0 unless Kafka is failing
 ```
 
 ### Check Kafka Health
@@ -453,12 +421,11 @@ kafka-topics --bootstrap-server localhost:9092 --list
 - [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go) - Kafka consumer
 
 ### Repository Layer
-- [internal/repository/redis/queue_repository.go](../internal/repository/redis/queue_repository.go) - Redis queue ops + Pub/Sub
+- [internal/repository/redis/queue_repository.go](../internal/repository/redis/queue_repository.go) - Redis queue ops
 - [internal/repository/redis/session_repository.go](../internal/repository/redis/session_repository.go) - Redis session ops
 
 ### Models
 - [internal/models/session.go](../internal/models/session.go) - Session model
-- [internal/models/position_update.go](../internal/models/position_update.go) - Position update events
 
 ### Main Entry Point
 - [cmd/api/main.go](../cmd/api/main.go) - Server initialization
@@ -467,7 +434,7 @@ kafka-topics --bootstrap-server localhost:9092 --list
 
 1. Queue management (join, leave, position tracking)
 2. Background queue processor (automatic admission)
-3. Real-time position streaming (gRPC + Redis Pub/Sub)
+3. Position discovery by polling `GetQueueStatus`
 4. Kafka event streaming (service-to-service)
 5. Checkout token generation and validation
 6. Graceful shutdown and error handling
@@ -479,6 +446,5 @@ consumes the `.dlq` topics yet.
 
 ---
 
-For detailed real-time streaming implementation, see [STREAMING_IMPLEMENTATION_GUIDE.md](STREAMING_IMPLEMENTATION_GUIDE.md)
 
 For queue processor details, see [QUEUE_PROCESSOR_GUIDE.md](QUEUE_PROCESSOR_GUIDE.md)

@@ -27,8 +27,6 @@ type fakeQueue struct {
 
 	removeCalls [][]string
 
-	// session IDs announced via the position broadcast (the SSE channel)
-	broadcast []string
 
 	// buffered QUEUE_READY payloads awaiting republish
 	buffered        []string
@@ -105,13 +103,6 @@ func (f *fakeQueue) GetQueueStatus(context.Context, string, *models.Session) (*Q
 func (f *fakeQueue) GetQueueInfo(context.Context, string) (*QueueInfoOutput, error) { return nil, nil }
 func (f *fakeQueue) RemoveFromProcessing(context.Context, string, string) error     { return nil }
 func (f *fakeQueue) GetActiveEvents(context.Context) ([]string, error)              { return nil, nil }
-func (f *fakeQueue) PublishPositionUpdate(_ context.Context, u *models.PositionUpdateEvent) error {
-	f.broadcast = append(f.broadcast, u.AffectedSessionIDs...)
-	return nil
-}
-func (f *fakeQueue) SubscribeToPositionUpdates(context.Context, string) (PositionUpdateSubscription, error) {
-	return nil, nil
-}
 
 type fakeSessions struct {
 	sessions map[string]*models.Session
@@ -411,8 +402,8 @@ func (f *failingPublishProducer) PublishQueueReady(ctx context.Context, e kafka.
 }
 
 // A failed publish must not un-report an admission that happened: returning the
-// error sends the caller down the not-admittable path, dropping the user out of
-// the position broadcast that carries their checkout token.
+// error sends the caller down the not-admittable path, leaving the session
+// without the checkout token a status poll is supposed to hand back.
 func TestPublishFailureStillCountsAsAdmitted(t *testing.T) {
 	q := newFakeQueue("ss-1")
 	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
@@ -434,10 +425,10 @@ func TestPublishFailureStillCountsAsAdmitted(t *testing.T) {
 	if slices.Contains(q.queued, "ss-1") {
 		t.Error("an admitted session must leave the queue even if its publish failed")
 	}
-	// The decisive assertion: the position broadcast is how the user receives
-	// their token, so a publish error must not exclude them from it.
-	if !slices.Contains(q.broadcast, "ss-1") {
-		t.Error("an admitted user must still be announced on the position broadcast")
+	// The decisive assertion: polling GetQueueStatus is how the user receives
+	// their token, so a publish error must not leave the session without one.
+	if s.sessions["ss-1"].CheckoutToken == "" {
+		t.Error("an admitted user must still hold a token a status poll can return")
 	}
 
 	if len(q.buffered) != 1 {
@@ -567,8 +558,8 @@ func TestHalfFinishedAdmissionIsResumedNotDropped(t *testing.T) {
 	if !slices.Contains(p.published, "ss-1") {
 		t.Error("the resumed admission should have published QUEUE_READY")
 	}
-	if !slices.Contains(q.broadcast, "ss-1") {
-		t.Error("the resumed admission should be announced on the position broadcast")
+	if s.sessions["ss-1"].CheckoutToken == "" {
+		t.Error("the resumed admission should leave a token a status poll can return")
 	}
 }
 

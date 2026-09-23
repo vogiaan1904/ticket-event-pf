@@ -278,18 +278,6 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	qp.totalAdmitted += int64(admittedCount)
 	qp.mu.Unlock()
 
-	if len(admittedSsIDs) > 0 {
-		if err := qp.qSvc.PublishPositionUpdate(processingCtx, &models.PositionUpdateEvent{
-			EventID:            eventID,
-			UpdateType:         models.UpdateTypeUserAdmitted,
-			AffectedSessionIDs: admittedSsIDs,
-			Timestamp:          time.Now(),
-		}); err != nil {
-			qp.l.Warnf(processingCtx, "Failed to publish position update after batch admission - event_id: %s, admitted_count: %d, error: %v",
-				eventID, len(admittedSsIDs), err)
-		}
-	}
-
 	qp.l.Infof(processingCtx, "Batch processing completed - event_id: %s, attempted: %d, admitted: %d",
 		eventID, len(ssIDs), admittedCount)
 

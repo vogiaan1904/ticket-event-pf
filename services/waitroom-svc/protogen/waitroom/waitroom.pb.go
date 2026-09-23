@@ -496,142 +496,6 @@ func (x *LeaveQueueResponse) GetMessage() string {
 	return ""
 }
 
-type StreamPositionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StreamPositionRequest) Reset() {
-	*x = StreamPositionRequest{}
-	mi := &file_waitroom_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StreamPositionRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StreamPositionRequest) ProtoMessage() {}
-
-func (x *StreamPositionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StreamPositionRequest.ProtoReflect.Descriptor instead.
-func (*StreamPositionRequest) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *StreamPositionRequest) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-type PositionUpdate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	Position      int64                  `protobuf:"varint,2,opt,name=position,proto3" json:"position,omitempty"`
-	QueueLength   int64                  `protobuf:"varint,3,opt,name=queue_length,json=queueLength,proto3" json:"queue_length,omitempty"`
-	Status        SessionStatus          `protobuf:"varint,4,opt,name=status,proto3,enum=waitroom.v1.SessionStatus" json:"status,omitempty"`
-	UpdatedAt     string                 `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	CheckoutToken string                 `protobuf:"bytes,6,opt,name=checkout_token,json=checkoutToken,proto3" json:"checkout_token,omitempty"`
-	CheckoutUrl   string                 `protobuf:"bytes,7,opt,name=checkout_url,json=checkoutUrl,proto3" json:"checkout_url,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *PositionUpdate) Reset() {
-	*x = PositionUpdate{}
-	mi := &file_waitroom_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *PositionUpdate) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PositionUpdate) ProtoMessage() {}
-
-func (x *PositionUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PositionUpdate.ProtoReflect.Descriptor instead.
-func (*PositionUpdate) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *PositionUpdate) GetSessionId() string {
-	if x != nil {
-		return x.SessionId
-	}
-	return ""
-}
-
-func (x *PositionUpdate) GetPosition() int64 {
-	if x != nil {
-		return x.Position
-	}
-	return 0
-}
-
-func (x *PositionUpdate) GetQueueLength() int64 {
-	if x != nil {
-		return x.QueueLength
-	}
-	return 0
-}
-
-func (x *PositionUpdate) GetStatus() SessionStatus {
-	if x != nil {
-		return x.Status
-	}
-	return SessionStatus_SESSION_STATUS_UNSPECIFIED
-}
-
-func (x *PositionUpdate) GetUpdatedAt() string {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return ""
-}
-
-func (x *PositionUpdate) GetCheckoutToken() string {
-	if x != nil {
-		return x.CheckoutToken
-	}
-	return ""
-}
-
-func (x *PositionUpdate) GetCheckoutUrl() string {
-	if x != nil {
-		return x.CheckoutUrl
-	}
-	return ""
-}
-
 type HealthCheckRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -640,7 +504,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_waitroom_proto_msgTypes[8]
+	mi := &file_waitroom_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -652,7 +516,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[8]
+	mi := &file_waitroom_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -665,7 +529,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{8}
+	return file_waitroom_proto_rawDescGZIP(), []int{6}
 }
 
 type HealthCheckResponse struct {
@@ -681,7 +545,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_waitroom_proto_msgTypes[9]
+	mi := &file_waitroom_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -693,7 +557,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[9]
+	mi := &file_waitroom_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -706,7 +570,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{9}
+	return file_waitroom_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -789,20 +653,7 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x12LeaveQueueResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"6\n" +
-	"\x15StreamPositionRequest\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\"\x8b\x02\n" +
-	"\x0ePositionUpdate\x12\x1d\n" +
-	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
-	"\bposition\x18\x02 \x01(\x03R\bposition\x12!\n" +
-	"\fqueue_length\x18\x03 \x01(\x03R\vqueueLength\x122\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x1a.waitroom.v1.SessionStatusR\x06status\x12\x1d\n" +
-	"\n" +
-	"updated_at\x18\x05 \x01(\tR\tupdatedAt\x12%\n" +
-	"\x0echeckout_token\x18\x06 \x01(\tR\rcheckoutToken\x12!\n" +
-	"\fcheckout_url\x18\a \x01(\tR\vcheckoutUrl\"\x14\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x14\n" +
 	"\x12HealthCheckRequest\"\x97\x02\n" +
 	"\x13HealthCheckResponse\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x18\n" +
@@ -824,13 +675,12 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x18SESSION_STATUS_COMPLETED\x10\x05\x12\x19\n" +
 	"\x15SESSION_STATUS_FAILED\x10\x06\x12\x1a\n" +
 	"\x16SESSION_STATUS_EXPIRED\x10\a\x12\x1c\n" +
-	"\x18SESSION_STATUS_CANCELLED\x10\b2\xb0\x03\n" +
+	"\x18SESSION_STATUS_CANCELLED\x10\b2\xd6\x02\n" +
 	"\x0fWaitroomService\x12J\n" +
 	"\tJoinQueue\x12\x1d.waitroom.v1.JoinQueueRequest\x1a\x1e.waitroom.v1.JoinQueueResponse\x12V\n" +
 	"\x0eGetQueueStatus\x12\".waitroom.v1.GetQueueStatusRequest\x1a .waitroom.v1.QueueStatusResponse\x12M\n" +
 	"\n" +
-	"LeaveQueue\x12\x1e.waitroom.v1.LeaveQueueRequest\x1a\x1f.waitroom.v1.LeaveQueueResponse\x12X\n" +
-	"\x13StreamQueuePosition\x12\".waitroom.v1.StreamPositionRequest\x1a\x1b.waitroom.v1.PositionUpdate0\x01\x12P\n" +
+	"LeaveQueue\x12\x1e.waitroom.v1.LeaveQueueRequest\x1a\x1f.waitroom.v1.LeaveQueueResponse\x12P\n" +
 	"\vHealthCheck\x12\x1f.waitroom.v1.HealthCheckRequest\x1a .waitroom.v1.HealthCheckResponseB:Z8github.com/vogiaan1904/ticketbottle-proto/proto/waitroomb\x06proto3"
 
 var (
@@ -846,7 +696,7 @@ func file_waitroom_proto_rawDescGZIP() []byte {
 }
 
 var file_waitroom_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_waitroom_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_waitroom_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_waitroom_proto_goTypes = []any{
 	(SessionStatus)(0),            // 0: waitroom.v1.SessionStatus
 	(*JoinQueueRequest)(nil),      // 1: waitroom.v1.JoinQueueRequest
@@ -855,31 +705,26 @@ var file_waitroom_proto_goTypes = []any{
 	(*QueueStatusResponse)(nil),   // 4: waitroom.v1.QueueStatusResponse
 	(*LeaveQueueRequest)(nil),     // 5: waitroom.v1.LeaveQueueRequest
 	(*LeaveQueueResponse)(nil),    // 6: waitroom.v1.LeaveQueueResponse
-	(*StreamPositionRequest)(nil), // 7: waitroom.v1.StreamPositionRequest
-	(*PositionUpdate)(nil),        // 8: waitroom.v1.PositionUpdate
-	(*HealthCheckRequest)(nil),    // 9: waitroom.v1.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 10: waitroom.v1.HealthCheckResponse
-	nil,                           // 11: waitroom.v1.HealthCheckResponse.ComponentsEntry
+	(*HealthCheckRequest)(nil),    // 7: waitroom.v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil),   // 8: waitroom.v1.HealthCheckResponse
+	nil,                           // 9: waitroom.v1.HealthCheckResponse.ComponentsEntry
 }
 var file_waitroom_proto_depIdxs = []int32{
-	0,  // 0: waitroom.v1.QueueStatusResponse.status:type_name -> waitroom.v1.SessionStatus
-	0,  // 1: waitroom.v1.PositionUpdate.status:type_name -> waitroom.v1.SessionStatus
-	11, // 2: waitroom.v1.HealthCheckResponse.components:type_name -> waitroom.v1.HealthCheckResponse.ComponentsEntry
-	1,  // 3: waitroom.v1.WaitroomService.JoinQueue:input_type -> waitroom.v1.JoinQueueRequest
-	3,  // 4: waitroom.v1.WaitroomService.GetQueueStatus:input_type -> waitroom.v1.GetQueueStatusRequest
-	5,  // 5: waitroom.v1.WaitroomService.LeaveQueue:input_type -> waitroom.v1.LeaveQueueRequest
-	7,  // 6: waitroom.v1.WaitroomService.StreamQueuePosition:input_type -> waitroom.v1.StreamPositionRequest
-	9,  // 7: waitroom.v1.WaitroomService.HealthCheck:input_type -> waitroom.v1.HealthCheckRequest
-	2,  // 8: waitroom.v1.WaitroomService.JoinQueue:output_type -> waitroom.v1.JoinQueueResponse
-	4,  // 9: waitroom.v1.WaitroomService.GetQueueStatus:output_type -> waitroom.v1.QueueStatusResponse
-	6,  // 10: waitroom.v1.WaitroomService.LeaveQueue:output_type -> waitroom.v1.LeaveQueueResponse
-	8,  // 11: waitroom.v1.WaitroomService.StreamQueuePosition:output_type -> waitroom.v1.PositionUpdate
-	10, // 12: waitroom.v1.WaitroomService.HealthCheck:output_type -> waitroom.v1.HealthCheckResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	0, // 0: waitroom.v1.QueueStatusResponse.status:type_name -> waitroom.v1.SessionStatus
+	9, // 1: waitroom.v1.HealthCheckResponse.components:type_name -> waitroom.v1.HealthCheckResponse.ComponentsEntry
+	1, // 2: waitroom.v1.WaitroomService.JoinQueue:input_type -> waitroom.v1.JoinQueueRequest
+	3, // 3: waitroom.v1.WaitroomService.GetQueueStatus:input_type -> waitroom.v1.GetQueueStatusRequest
+	5, // 4: waitroom.v1.WaitroomService.LeaveQueue:input_type -> waitroom.v1.LeaveQueueRequest
+	7, // 5: waitroom.v1.WaitroomService.HealthCheck:input_type -> waitroom.v1.HealthCheckRequest
+	2, // 6: waitroom.v1.WaitroomService.JoinQueue:output_type -> waitroom.v1.JoinQueueResponse
+	4, // 7: waitroom.v1.WaitroomService.GetQueueStatus:output_type -> waitroom.v1.QueueStatusResponse
+	6, // 8: waitroom.v1.WaitroomService.LeaveQueue:output_type -> waitroom.v1.LeaveQueueResponse
+	8, // 9: waitroom.v1.WaitroomService.HealthCheck:output_type -> waitroom.v1.HealthCheckResponse
+	6, // [6:10] is the sub-list for method output_type
+	2, // [2:6] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_waitroom_proto_init() }
@@ -893,7 +738,7 @@ func file_waitroom_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_waitroom_proto_rawDesc), len(file_waitroom_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

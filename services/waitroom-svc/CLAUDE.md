@@ -10,7 +10,7 @@ gRPC service (port **50056**, Redis-backed) that fairly throttles access to chec
 
 Key behaviors (`internal/service/queue_processor.go`):
 - Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
-- Checkout tokens are JWTs with ~15-min expiry; positions update in real time.
+- Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting.
 
 ## Commands (Makefile is the source of truth — `make help`)
@@ -65,13 +65,21 @@ both calls hit Redis, so the one failure mode that mattered took out both.
 
 A failed `queue.ready` publish must **not** fail the admission. By that point the
 session is already admitted and holds a slot, and reporting failure sends the caller
-down the `ErrSessionNotAdmittable` path — which would drop the user out of the position
-broadcast, the channel they actually receive their checkout token on. Instead the event
+down the `ErrSessionNotAdmittable` path — which would leave the session without the
+checkout token a status poll is supposed to hand back. Instead the event
 is parked on the `waitroom:queue_ready:pending` list and republished at the head of the
 next tick (`drainBufferedQueueReady`), peeked and trimmed only once settled.
 
 Note `queue.ready` currently has **no consumer** anywhere in the repo; the user-facing
-notification is the Redis pub/sub position update consumed over SSE.
+notification is the session's own state, read by polling `GetQueueStatus`.
+
+### Admission is discovered by polling, never pushed
+
+There is deliberately no position stream. A per-waiter push meant one SSE connection,
+one gRPC stream and one Redis Pub/Sub subscription each, and every admission batch then
+cost `GET session` + `ZRANK` + `ZCARD` **per waiter** — with `EnqueueSession` publishing
+on every join, a stampede was quadratic in queue depth. `GetQueueStatus` answers the same
+question for the cost of one poll.
 
 ## Kafka consumer delivery semantics
 
@@ -132,4 +140,4 @@ period.
 ## Notes
 
 - Logging uses the zap wrapper with ctx-first `f`-suffixed methods (`l.Errorf(ctx, ...)`).
-- The repo carries several design docs worth reading before changing the admission logic, under `docs/`: `docs/QUEUE_PROCESSOR_GUIDE.md`, `docs/STREAMING_IMPLEMENTATION_GUIDE.md`, `docs/SYSTEM_FLOW_README.md`. (Trust this file and the configs for ports/behaviour — the design docs are background, not the source of truth.)
+- The repo carries several design docs worth reading before changing the admission logic, under `docs/`: `docs/QUEUE_PROCESSOR_GUIDE.md`, `docs/SYSTEM_FLOW_README.md`. (Trust this file and the configs for ports/behaviour — the design docs are background, not the source of truth.)

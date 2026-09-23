@@ -1,12 +1,11 @@
 import { AccessGuard } from '@/common/guards/access.guard';
 import { ResponseDto } from '@/common/interceptors/transfrom.interceptor';
 import { RequestWithUser } from '@/shared/types/request-user.type';
-import { Body, Controller, Get, Param, Post, Req, Sse, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
 import { JoinQueueDto, LeaveQueueDto } from './dtos/req';
 import { JoinQueueRespDto, LeaveQueueRespDto, QueueStatusRespDto } from './dtos/resp';
-import { JoinQueueMapper, LeaveQueueMapper, QueueStatusMapper, StreamPositionMapper } from './mappers';
+import { JoinQueueMapper, LeaveQueueMapper, QueueStatusMapper } from './mappers';
 import { WaitroomService } from './waitroom.service';
-import { from, map, Observable } from 'rxjs';
 
 @Controller('waitroom')
 export class WaitroomController {
@@ -34,20 +33,12 @@ export class WaitroomController {
     return LeaveQueueMapper.toDto(protoResponse);
   }
 
-  // Pollable counterpart to the SSE stream below, for clients that cannot hold
-  // an open connection.
+  // How a waiting user learns their position and, once admitted, their checkout
+  // token. Polled: a held connection per waiter does not survive an on-sale.
   @Get('status/:sessionId')
   @UseGuards(AccessGuard)
   @ResponseDto(QueueStatusRespDto)
   async getStatus(@Param('sessionId') sessionId: string): Promise<QueueStatusRespDto> {
     return QueueStatusMapper.toDto(await this.waitroomService.getQueueStatus(sessionId));
-  }
-
-  @Get('position/:sessionId')
-  @Sse()
-  streamPosition(@Param('sessionId') sessionId: string): Observable<any> {
-    return from(this.waitroomService.streamQueuePosition(sessionId)).pipe(
-      map((update) => StreamPositionMapper.toDto(update)),
-    );
   }
 }
