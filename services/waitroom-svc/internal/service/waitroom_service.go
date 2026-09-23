@@ -155,11 +155,7 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 }
 
 func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID string) (*QueueStatusOutput, error) {
-	if err := s.ssSvc.ValidateSession(ctx, ssID); err != nil {
-		return nil, err
-	}
-
-	ss, err := s.ssSvc.GetSession(ctx, ssID)
+	ss, err := s.ssSvc.ActiveSession(ctx, ssID)
 	if err != nil {
 		return nil, err
 	}

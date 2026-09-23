@@ -16,12 +16,12 @@ type QueueRepository interface {
 	RemoveFromQueue(ctx context.Context, eID string, ssIDs ...string) error
 	GetQueueLength(ctx context.Context, eID string) (int64, error)
 	GetQueuePosition(ctx context.Context, eID, ssID string) (int64, error)
+	GetQueuePositionAndLength(ctx context.Context, eID, ssID string) (int64, int64, error)
 	GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error)
 	AddToProcessing(ctx context.Context, eID, ssID string, ttl time.Duration) error
 	RemoveFromProcessing(ctx context.Context, eID, ssID string) error
 	GetProcessingCount(ctx context.Context, eID string) (int64, error)
 	IsProcessing(ctx context.Context, eID, ssID string) (bool, error)
-	// Pub/Sub methods for real-time position updates
 	// Buffered QUEUE_READY publishes awaiting retry
 	BufferQueueReady(ctx context.Context, payload []byte) error
 	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
@@ -106,6 +106,42 @@ func (r *redisQueueRepository) GetQueuePosition(ctx context.Context, eID, ssID s
 	}
 
 	return rank + 1, nil
+}
+
+// GetQueuePositionAndLength reads a session's rank and the queue's size together.
+// Every waiting client polls for both, so the pair is this service's hot read and
+// costs one round trip rather than two.
+func (r *redisQueueRepository) GetQueuePositionAndLength(ctx context.Context, eID, ssID string) (int64, int64, error) {
+	qKey := r.queueKey(eID)
+
+	pipe := r.cli.GetClient().Pipeline()
+	rank := pipe.ZRank(ctx, qKey, ssID)
+	card := pipe.ZCard(ctx, qKey)
+	_, execErr := pipe.Exec(ctx)
+
+	// go-redis stamps a sibling's redis.Nil onto every command in the batch, so a
+	// member that is absent marks ZCard failed while its value is still correct.
+	// Read the values; only a non-Nil error is a real one.
+	if execErr != nil && !errors.Is(execErr, redis.Nil) {
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", execErr)
+		return 0, 0, execErr
+	}
+	if err := card.Err(); err != nil && !errors.Is(err, redis.Nil) {
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", err)
+		return 0, 0, err
+	}
+	length := card.Val()
+
+	if err := rank.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			// Not in the sorted set: -1, as GetQueuePosition reports.
+			return -1, length, nil
+		}
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", err)
+		return 0, 0, err
+	}
+
+	return rank.Val() + 1, length, nil
 }
 
 func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error) {

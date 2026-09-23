@@ -157,7 +157,9 @@ func (f *fakeSessions) CreateSession(context.Context, string, string, string, st
 	return nil, nil
 }
 func (f *fakeSessions) UpdateSession(context.Context, *models.Session) error          { return nil }
-func (f *fakeSessions) ValidateSession(context.Context, string) error                 { return nil }
+func (f *fakeSessions) ActiveSession(c context.Context, id string) (*models.Session, error) {
+	return f.GetSession(c, id)
+}
 func (f *fakeSessions) InvalidateCheckoutToken(context.Context, string, string) error { return nil }
 func (f *fakeSessions) ValidateCheckoutToken(context.Context, string) error           { return nil }
 

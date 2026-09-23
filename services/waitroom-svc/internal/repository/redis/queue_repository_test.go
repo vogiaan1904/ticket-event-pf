@@ -320,3 +320,47 @@ func TestPeekBufferedQueueReadyOnEmptyBuffer(t *testing.T) {
 		t.Errorf("got %v, want empty", got)
 	}
 }
+
+// The combined read is what every waiting client polls, so it must agree with
+// the two single reads it replaces -- including for a session that is not in the
+// sorted set, where ZRank answers redis.Nil and the pipeline surfaces that as its
+// own error even though ZCard succeeded.
+func TestGetQueuePositionAndLengthMatchesTheSingleReads(t *testing.T) {
+	repo, cli := newTestRepo(t)
+	ctx := context.Background()
+	eID := "evt-combined-read"
+	defer cli.Del(ctx, "waitroom:"+eID+":queue")
+
+	base := time.Now()
+	for i, id := range []string{"ss-1", "ss-2", "ss-3"} {
+		ss := &models.Session{ID: id, EventID: eID, QueuedAt: base.Add(time.Duration(i) * time.Second)}
+		if err := repo.AddToQueue(ctx, eID, ss); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+
+	for _, id := range []string{"ss-1", "ss-2", "ss-3", "ss-absent"} {
+		wantPos, err := repo.GetQueuePosition(ctx, eID, id)
+		if err != nil {
+			t.Fatalf("GetQueuePosition(%s): %v", id, err)
+		}
+		wantLen, err := repo.GetQueueLength(ctx, eID)
+		if err != nil {
+			t.Fatalf("GetQueueLength: %v", err)
+		}
+
+		gotPos, gotLen, err := repo.GetQueuePositionAndLength(ctx, eID, id)
+		if err != nil {
+			t.Fatalf("GetQueuePositionAndLength(%s): %v", id, err)
+		}
+
+		if gotPos != wantPos {
+			t.Errorf("%s: position %d, want %d", id, gotPos, wantPos)
+		}
+		// The length must survive the absent-member case: a client who left the
+		// queue still gets told how long it is.
+		if gotLen != wantLen {
+			t.Errorf("%s: length %d, want %d", id, gotLen, wantLen)
+		}
+	}
+}

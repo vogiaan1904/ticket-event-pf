@@ -21,7 +21,7 @@ type SessionService interface {
 	UpdateSessionStatus(ctx context.Context, sessionID string, status models.SessionStatus) error
 	GetSession(ctx context.Context, ssID string) (*models.Session, error)
 	GenerateCheckoutToken(ctx context.Context, ss *models.Session) (string, error)
-	ValidateSession(ctx context.Context, ssID string) error
+	ActiveSession(ctx context.Context, ssID string) (*models.Session, error)
 	UpdateCheckoutToken(ctx context.Context, sessionID string, token string, expAt time.Time) error
 	InvalidateCheckoutToken(ctx context.Context, sessionID string, reason string) error
 	ValidateCheckoutToken(ctx context.Context, token string) error
@@ -123,23 +123,26 @@ func (s *sessionService) GenerateCheckoutToken(ctx context.Context, ss *models.S
 	return tokenStr, nil
 }
 
-func (s *sessionService) ValidateSession(ctx context.Context, ssID string) error {
+// ActiveSession returns the session only if it is usable.
+// It returns the value rather than validating in isolation: every caller needs
+// the session too, and a separate Validate call read it a second time.
+func (s *sessionService) ActiveSession(ctx context.Context, ssID string) (*models.Session, error) {
 	// Via GetSession, not repo.Get: the repo answers a missing key with redis.Nil,
 	// which the delivery layer has no sentinel for and renders 500, not 404.
 	ss, err := s.GetSession(ctx, ssID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if ss.IsExpired() {
-		return ErrSessionExpired
+		return nil, ErrSessionExpired
 	}
 
 	if !ss.IsActive() {
-		return ErrInvalidSessionStatus
+		return nil, ErrInvalidSessionStatus
 	}
 
-	return nil
+	return ss, nil
 }
 
 func (s *sessionService) UpdateCheckoutToken(ctx context.Context, sessionID string, token string, expAt time.Time) error {

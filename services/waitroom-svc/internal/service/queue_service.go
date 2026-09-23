@@ -97,14 +97,9 @@ func (s *queueService) GetQueueStatus(ctx context.Context, sessionID string, ses
 	}
 
 	if session.Status == models.SessionStatusQueued {
-		position, err := s.repo.GetQueuePosition(ctx, session.EventID, session.ID)
+		position, queueLength, err := s.repo.GetQueuePositionAndLength(ctx, session.EventID, session.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get queue position: %w", err)
-		}
-
-		queueLength, err := s.repo.GetQueueLength(ctx, session.EventID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get queue length: %w", err)
 		}
 
 		out.Position = position
