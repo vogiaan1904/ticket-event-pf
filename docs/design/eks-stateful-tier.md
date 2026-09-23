@@ -3,7 +3,7 @@
 **Status:** phases (a) and (a2) built and proven; **phases (b)–(f) deferred
 2026-09-19** — see *Relationship to the scope pivot*.
 Phase (a)'s work order: `docs/plans/2026-09-19-eks-stateful-tier-phase-a.md`.
-**Target:** the `values-eks.yaml` deploy target only. kind and k3s are unchanged.
+**Target:** the `values-eks.yaml` deploy target only. k3s is unchanged.
 
 ## The problem
 
@@ -98,11 +98,11 @@ inside `DATABASE_URL` leave the ConfigMap entirely.
 
 > The password is in a **ConfigMap** today (`config.yaml:12`, `:27`, `:97`) —
 > the shape `deploy/Makefile` warns about for the chart's other secrets. Moving
-> to Secrets Manager fixes it as a side effect, and it must be fixed for k3s and
-> kind too, where the value moves into the existing per-service Secret.
+> to Secrets Manager fixes it as a side effect, and it must be fixed for k3s
+> too, where the value moves into the existing per-service Secret.
 
-**`values-local.yaml` / `values-k3s.yaml`** — unchanged. All three hosts default
-to `postgres`, so both render byte-identical to today. This is the acceptance
+**`values-k3s.yaml`** — unchanged. All three hosts default to `postgres`, so it
+renders byte-identical to today. This is the acceptance
 test for the chart phase.
 
 **`values-eks.yaml`** — `postgres.enabled: false`, three hosts set from Terraform
@@ -193,7 +193,7 @@ infra side of the project. Reconciled 2026-09-19:
 - **(a2) stands.** A half-migrated node placement is worse than either end state,
   and Gate 3a is green against it.
 - **(a) stands, for its credential fix.** The Postgres password is in a ConfigMap
-  on *every* target including kind, where `kubectl describe` prints it in full.
+  on *every* target, where `kubectl describe` prints it in full.
   That is a defect independent of whether RDS is ever built. **Task 5 — the
   `values-eks.yaml` placeholder hosts — is out of scope**: unresolvable hostnames
   for instances nobody is building are not worth committing.
@@ -219,9 +219,9 @@ StatefulSet holding six databases is the coupling the saga exists to avoid.
 
 ## Success criteria
 
-- [ ] `helm template -f values-local.yaml` and `-f values-k3s.yaml` render
-      byte-identical to the current output.
-- [ ] `make gate1` passes on kind with no RDS in the picture.
+- [ ] `helm template -f values-k3s.yaml` renders byte-identical to the current
+      output.
+- [ ] `make -C deploy k3s-gate2` passes with no RDS in the picture.
 - [ ] On EKS, the purchase flow completes with three RDS instances behind it.
 - [ ] `payment`'s RDS instance reboots with `inventory` unaffected and the queue
       still admitting.

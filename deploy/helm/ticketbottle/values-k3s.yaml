@@ -7,17 +7,7 @@ image:
   tag: dev
   pullPolicy: Always
 
-# Use REAL AWS DynamoDB (no in-cluster dynamodb-local pod).
-dynamodb:
-  enabled: false
-
-order:
-  dynamodbEndpoint: ""     # empty -> default AWS endpoint
-  awsRegion: us-east-1
-  awsAccessKeyId: ""       # empty -> config.yaml omits creds -> instance-profile chain
-  awsSecretAccessKey: ""
-
-# In-cluster payment path (simulated webhook + relay), same as the kind target.
+# In-cluster payment path (simulated webhook + relay), same as EKS.
 paymentEvents:
   enabled: true
 outboxRelay:

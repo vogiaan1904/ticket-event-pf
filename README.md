@@ -157,23 +157,21 @@ Each service carries its own `CLAUDE.md` with service-specific conventions.
 
 ---
 
-## Running it locally
+## Running it
 
-The full stack runs on a local [kind](https://kind.sigs.k8s.io/) cluster via the same Helm chart used in the cloud.
+**A single service** runs natively against its own `docker-compose.dev.yml`, which starts only that service's datastore, so the service can run with hot reload. This needs Docker plus Go 1.25+ or Node.js 20+.
 
-**Prerequisites:** Docker, `kubectl`, `helm`, `kind`, and `make`. Working on a service directly also needs Go 1.25+ or Node.js 20+.
+**The full stack** runs on k3s on a single EC2 instance, from the same Helm chart that deploys to EKS. It needs `kubectl`, `helm`, the AWS CLI and `make`; the images come from ECR, built by CI.
 
 ```bash
-make -C deploy cluster-up    # create the kind cluster
-make -C deploy infra-up      # PostgreSQL, Redis, Redpanda, DynamoDB-local, Temporal
-make -C deploy apps-up       # build the images and deploy the app tier
-make -C deploy gate1         # end-to-end purchase-flow acceptance test
-make -C deploy cluster-down  # tear it all down
+make -C deploy start-ec2-k3s   # start the instance; prints the SSH tunnel to open
+make -C deploy k3s-kubeconfig
+make -C deploy k3s-deploy      # deploy the chart from ECR
+make -C deploy k3s-gate2       # end-to-end purchase-flow acceptance test
+make -C deploy stop-ec2-k3s    # stop compute; data survives on EBS
 ```
 
-The gateway is then reachable at `http://localhost:3000/api`, with Swagger UI at `http://localhost:3000/api/docs` in development.
-
-Per-service configuration lives in the chart's ConfigMaps, not in `.env` files. For inner-loop work on a single service, each service ships a `docker-compose.dev.yml` that starts only its datastore, so the service itself can run natively with hot reload.
+Through the tunnel the gateway is reachable at `http://localhost:3000/api`, with Swagger UI at `http://localhost:3000/api/docs` in development. Per-service configuration lives in the chart's ConfigMaps, not in `.env` files.
 
 ---
 
@@ -197,7 +195,6 @@ One Helm chart deploys the platform to every target. The workload topology never
 
 | Target | Overlay | Images | Orders store | Ingress |
 |--------|---------|--------|--------------|---------|
-| Local `kind` | `values.yaml` | built locally | DynamoDB-local | NodePort |
 | k3s on a single instance | `values-k3s.yaml` | ECR | DynamoDB | NodePort |
 | Amazon EKS | `values-eks.yaml` | ECR | DynamoDB | ALB |
 

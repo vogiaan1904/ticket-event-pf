@@ -87,7 +87,7 @@ helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-eks
 diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
 ```
 
-- `storageClass: gp3` — empty on kind/k3s, so the key is omitted entirely and they keep their default provisioner.
+- `storageClass: gp3` — empty on k3s, so the key is omitted entirely and it keeps its default provisioner.
 - `gateway.nodePort: null` — `null` (not omitted, not `0`) removes the key from merged values, the
   `{{- if .nodePort }}` guard goes false, and the Service falls back to `ClusterIP` behind the ALB.
 - `ingress.enabled: true` + ALB annotations — `target-type: ip` (pod IPs direct via the VPC CNI),
@@ -95,10 +95,10 @@ diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
   target into unhealthy), and `inbound-cidrs` locked to your `/32` because the stack ships dev secrets.
 - `serviceAccount.order.*` — creates the SA and stamps the `eks.amazonaws.com/role-arn` annotation.
 
-`dynamodb.enabled: false` and `order.dynamodbEndpoint: ""` are **identical to k3s**. The difference
-is *where the credentials come from*, not any app config: empty env creds fall through the SDK chain
-to the web-identity step instead of IMDS. This is why `config.yaml` must **omit** the AWS env vars
-rather than blank them — an empty-string env var still wins over IMDS.
+The DynamoDB config is **identical to k3s** — both take the chart default, an empty
+`order.dynamodbEndpoint`. The difference is *where the credentials come from*, not any app config:
+with no env creds the SDK chain reaches the web-identity step instead of IMDS. This is why
+`config.yaml` renders **no** AWS key env vars — an empty-string one would still win over IMDS.
 
 ---
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gate-1: full purchase flow on kind.
+# Gate-1: full purchase flow, run on k3s by `make -C deploy k3s-gate2`.
 # register -> create event -> create event config -> publish event -> seed ticket class
 #   -> join waitroom -> (admission) read checkout token from Redis -> create order
 #   -> trigger payment webhook -> poll order until COMPLETED.

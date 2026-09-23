@@ -17,7 +17,7 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.
 
-For local DynamoDB, run `docker compose -f docker-compose.dev.yml up -d` — this brings up `amazon/dynamodb-local` (container `ticketbottle-order-dynamodb`, port 8000), the same image the Helm chart uses for the same job. The repository and activity integration tests (`internal/order/repository`, `internal/activities`) create the table on first use via `internal/testutil/dynamotest`, skip locally when the datastore is unreachable, and **fail** when `CI` is set — a suite that skips itself reports PASS having asserted nothing.
+For local DynamoDB, run `docker compose -f docker-compose.dev.yml up -d` — this brings up `amazon/dynamodb-local` (container `ticketbottle-order-dynamodb`, port 8000). The repository and activity integration tests (`internal/order/repository`, `internal/activities`) create the table on first use via `internal/testutil/dynamotest`, skip locally when the datastore is unreachable, and **fail** when `CI` is set — a suite that skips itself reports PASS having asserted nothing.
 
 ## Commands
 

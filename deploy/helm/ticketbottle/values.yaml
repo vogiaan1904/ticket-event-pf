@@ -1,9 +1,9 @@
-# Shared defaults. Overlays (values-local/-k3s/-eks) override per target.
+# Shared defaults. Overlays (values-k3s/-eks) override per target.
 namespace: ticketbottle
 
 image:
-  registry: ""          # "" for kind; "<account>.dkr.ecr.us-east-1.amazonaws.com/" for k3s (set via --set)
-  tag: local            # "local" for kind; "latest"/"sha-..." for k3s
+  registry: ""          # "<account>.dkr.ecr.us-east-1.amazonaws.com/", set via --set at deploy
+  tag: dev              # the branch tag CI moves; EKS deploys an immutable "sha-..."
   pullPolicy: IfNotPresent
 
 apps:
@@ -11,7 +11,7 @@ apps:
   # locally against in-cluster Postgres/Kafka/Temporal instead of in-pod.
   enabled: true
 
-# "" -> the cluster's default StorageClass (kind: standard, k3s: local-path).
+# "" -> the cluster's default StorageClass (k3s: local-path).
 # EKS names "gp3" explicitly; see deploy/k8s/eks/storageclass-gp3.yaml.
 storageClass: ""
 
@@ -60,17 +60,6 @@ redis:
 redpanda:
   image: redpandadata/redpanda:v24.2.7
   storage: 2Gi
-  external:
-    enabled: false
-    advertisedHost: ticketbottle-control-plane
-    nodePort: 31094
-
-dynamodb:
-  enabled: true
-  image: amazon/dynamodb-local:2.5.2
-  awsCliImage: amazon/aws-cli:2.17.0
-  tableName: ticketbottle-orders
-  region: us-east-1
 
 paymentEvents:
   enabled: true
@@ -81,10 +70,10 @@ outboxRelay:
 
 order:
   createTimeout: 60s
-  dynamodbEndpoint: http://dynamodb:8000
+  # Real DynamoDB on every target. Empty -> the AWS default endpoint, and no
+  # static key, so the SDK reaches the instance profile (k3s) or IRSA (EKS).
+  dynamodbEndpoint: ""
   awsRegion: us-east-1
-  awsAccessKeyId: local
-  awsSecretAccessKey: local
 
 temporal:
   image: temporalio/auto-setup:1.27.2
@@ -99,7 +88,7 @@ gateway:
   # JSON array of allowed browser origins. "*" is right for a local cluster with
   # no browser client; a target that serves one should name its origins.
   corsOrigins: '["*"]'
-  # NodePort for kind/k3s (reached through the SSH tunnel on the k3s target).
+  # NodePort for k3s, reached through the SSH tunnel.
   # Set to null on EKS, where the Service becomes ClusterIP behind an ALB Ingress.
   nodePort: 30000
 
@@ -113,7 +102,7 @@ ingress:
 serviceAccount:
   order:
     # On EKS, order-api + order-consumer run under a dedicated ServiceAccount
-    # annotated with an IRSA role. On kind/k3s they use the namespace default SA.
+    # annotated with an IRSA role. On k3s they use the namespace default SA.
     create: false
     name: order-service
     roleArn: ""     # injected at deploy time from `terraform output order_role_arn`
@@ -155,18 +144,13 @@ resources:
   temporal:           { requests: { cpu: 100m, memory: 192Mi },  limits: { cpu: "1",  memory: 768Mi } }  #  59m / 103Mi
   temporal-ui:        { requests: { cpu: 25m,  memory: 32Mi },   limits: { cpu: 250m, memory: 128Mi } }  # read-only console
   redis:              { requests: { cpu: 50m,  memory: 64Mi },   limits: { cpu: 250m, memory: 256Mi } }  #  13m /   7Mi
-  # kind/k3s only — `dynamodb.enabled: false` on EKS, where the real service
-  # replaces it. The limit is 768Mi rather than 512Mi because the JVM sizes its
-  # default heap from the cgroup limit; too snug and it OOMs before it can GC.
-  dynamodb:           { requests: { cpu: 50m,  memory: 256Mi },  limits: { cpu: 500m, memory: 768Mi } }  #  13m / 197Mi
 
 # Static replica counts. A workload with autoscaling enabled omits `replicas`
 # from its manifest entirely — see the note in _appservice.tpl.
 replicas: {}
 
 # Off everywhere by default; values-eks.yaml opts app-gateway in.
-# Requires metrics-server (bundled in k3s, installed by eks-bootstrap.sh on EKS,
-# absent from kind until you add it).
+# Requires metrics-server (bundled in k3s, installed by eks-bootstrap.sh on EKS).
 autoscaling:
   app-gateway:
     enabled: false

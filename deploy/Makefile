@@ -1,54 +1,7 @@
 # TicketBottle — cluster operations for every deploy target.
-CLUSTER := ticketbottle
-CTX     := kind-$(CLUSTER)
 NS      := ticketbottle
-
-.PHONY: cluster-up cluster-down cluster-status
-
-cluster-up:            ## Create the local kind cluster
-	kind create cluster --config kind/cluster.yaml
-	kubectl --context $(CTX) create namespace $(NS) --dry-run=client -o yaml | kubectl --context $(CTX) apply -f -
-
-cluster-down:          ## Delete the local kind cluster
-	kind delete cluster --name $(CLUSTER)
-
-cluster-status:        ## Show nodes and namespaces
-	kubectl --context $(CTX) get nodes
-	kubectl --context $(CTX) get ns $(NS)
-
-CHART := helm/ticketbottle
+CHART   := helm/ticketbottle
 RELEASE := tb
-LOCAL_VALUES := $(CHART)/values-local.yaml
-
-.PHONY: infra-up infra-down smoke
-
-infra-up:              ## Install/upgrade the infra tier on the local cluster (no app pods)
-	./scripts/build-migrate-images.sh
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --set apps.enabled=false --wait --timeout 6m
-
-infra-down:            ## Uninstall the chart (keeps the cluster)
-	helm uninstall $(RELEASE) -n $(NS) || true
-
-smoke:                 ## Verify every infra component end-to-end
-	./scripts/smoke-infra.sh
-
-.PHONY: apps-up apps-build apps-deploy smoke-apps
-
-apps-build:            ## Build the app images and load them into kind
-	./scripts/build-images.sh
-
-apps-deploy: secrets-check  ## Deploy/upgrade the chart only (no image build)
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) -f $(SECRETS_FILE) --wait --timeout 8m
-
-apps-up: apps-build apps-deploy   ## Build+load images and deploy the app tier
-
-smoke-apps:            ## Verify the app tier (pods Ready + signup)
-	./scripts/smoke-apps.sh
-
-.PHONY: gate1
-
-gate1:                 ## Run the full purchase-flow acceptance test
-	./scripts/gate1-purchase-flow.sh
 
 # --- observability ----------------------------------------------------
 # Cluster-agnostic: acts on whatever the current KUBECONFIG points at.
@@ -66,8 +19,6 @@ obs-grafana:           ## Port-forward Grafana on :3001 (admin password below)
 temporal-ui:           ## Port-forward the Temporal web UI on :8233
 	@echo "http://localhost:8233"
 	kubectl -n $(NS) port-forward svc/temporal-ui 8233:8080
-
-
 
 # --- k3s on EC2 -------------------------------------------------------
 K3S_ENV := terraform/envs/k3s

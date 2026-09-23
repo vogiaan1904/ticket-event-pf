@@ -14,7 +14,7 @@ spec:
       labels: { app: redpanda }
     spec:
       # A dynamically provisioned EBS volume arrives root:root; the redpanda image runs
-      # as non-root and cannot write its data dir. kind/k3s local-path happened to create
+      # as non-root and cannot write its data dir. k3s local-path happened to create
       # world-writable directories, which hid this. fsGroup makes the chart portable.
       securityContext:
         fsGroup: 101
@@ -32,18 +32,10 @@ spec:
             - --mode=dev-container
             - --smp=1
             # advertise the in-cluster service name so clients reach the broker
-            {{- if .Values.redpanda.external.enabled }}
-            - --kafka-addr=PLAINTEXT://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
-            - --advertise-kafka-addr=PLAINTEXT://redpanda:9093,EXTERNAL://{{ .Values.redpanda.external.advertisedHost }}:{{ .Values.redpanda.external.nodePort }}
-            {{- else }}
             - --kafka-addr=PLAINTEXT://0.0.0.0:9093
             - --advertise-kafka-addr=PLAINTEXT://redpanda:9093
-            {{- end }}
           ports:
             - { containerPort: 9093 }   # Kafka API
-            {{- if .Values.redpanda.external.enabled }}
-            - { containerPort: 9094 }   # Kafka external listener, off unless redpanda.external.enabled
-            {{- end }}
             - { containerPort: 9644 }   # Admin API (health)
           volumeMounts: [{ name: data, mountPath: /var/lib/redpanda/data }]
           readinessProbe:
@@ -70,20 +62,3 @@ spec:
   ports:
     - { name: kafka, port: 9093, targetPort: 9093 }
     - { name: admin, port: 9644, targetPort: 9644 }
-{{- if .Values.redpanda.external.enabled }}
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: redpanda-ext
-  namespace: {{ include "tb.namespace" . }}
-  labels: {{- include "tb.labels" . | nindent 4 }}
-spec:
-  type: NodePort
-  selector: { app: redpanda }
-  ports:
-    - name: kafka-ext
-      port: 9094
-      targetPort: 9094
-      nodePort: {{ .Values.redpanda.external.nodePort }}
-{{- end }}

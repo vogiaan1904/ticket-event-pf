@@ -1,25 +1,28 @@
 ---
 name: deployment-architecture
-description: Use when working on, explaining, or extending how TicketBottle is deployed to AWS — the local kind / k3s-on-EC2 / EKS targets, the Terraform under deploy/terraform, the Helm values overlays, the GitHub-OIDC→ECR pipeline, instance-profile/IRSA credentials, or the cost guardrails. Also use when asked "how is this deployed", "what runs where", "what changes for EKS", or when drawing/updating an infrastructure diagram.
+description: Use when working on, explaining, or extending how TicketBottle is deployed to AWS — the k3s-on-EC2 and EKS targets, the Terraform under deploy/terraform, the Helm values overlays, the GitHub-OIDC→ECR pipeline, instance-profile/IRSA credentials, or the cost guardrails. Also use when asked "how is this deployed", "what runs where", "what changes for EKS", or when drawing/updating an infrastructure diagram.
 ---
 
 # How TicketBottle is deployed
 
-One Helm chart, three targets. The **application topology never changes** — the deploy target is chosen by a values overlay plus a Terraform delta. That portability is the point: the manifests authored on a laptop are the ones that run on real AWS.
+One Helm chart, two targets. The **application topology never changes** — the deploy target is chosen by a values overlay plus a Terraform delta. That portability is the point: the manifests authored on a laptop are the ones that run on real AWS.
 
 ```
-                    deploy/helm/ticketbottle/   (one chart, one app topology)
-                                  |
-      +---------------------------+---------------------------+
-      |                           |                           |
- values-local.yaml          values-k3s.yaml            values-eks.yaml
- kind                       k3s on one EC2             Amazon EKS
- $0, offline                ~$8/mo, stoppable          hourly, ephemeral
- local images               ECR images                 ECR images
- dynamodb pod               real DynamoDB              real DynamoDB
- NodePort 30000             NodePort + SSH tunnel      ALB ingress
- static dummy creds         EC2 instance profile       IRSA
+          deploy/helm/ticketbottle/   (one chart, one app topology)
+                        |
+          +-------------+-------------+
+          |                           |
+   values-k3s.yaml            values-eks.yaml
+   k3s on one EC2             Amazon EKS
+   ~$8/mo, stoppable          hourly, ephemeral
+   ECR images                 ECR images
+   real DynamoDB              real DynamoDB
+   NodePort + SSH tunnel      ALB ingress
+   EC2 instance profile       IRSA
 ```
+
+There is no local cluster. kind was removed for disk; single-service work runs
+against each service's `docker-compose.dev.yml`.
 
 **k3s on EC2 is the everyday environment**: it runs the full purchase flow, and a stop/start cycle preserves data on EBS. **EKS is ephemeral** — created for a session and destroyed after, never left standing. The teardown path is real tooling, not a manual checklist: `eks-teardown.sh`, `eks-leak-check.sh`, `eks-sweep-orphans.sh`, and the EKS section of `deploy/Makefile`.
 

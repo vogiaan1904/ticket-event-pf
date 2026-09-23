@@ -72,22 +72,27 @@ The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. 
 - **Asynchronous Kafka** — event notifications / eventual consistency (Payment→Order, Order→Waitroom).
 - **Temporal workflows** (Order service only) — long-running, stateful, auto-compensating saga steps.
 
-## Local development
+## Development and deployment
 
-Local **full-stack** dev runs on **kind + Helm** (the `deploy/` tree). The old *full-stack* Docker Compose setup under `development/` was **retired** — `kind` is the single **full-stack** local path. For **single-service inner-loop** work, use the per-service `docker-compose.dev.yml` (spins up only that service's datastore; run the service natively with hot-reload, then `docker compose down -v`) — this is the sanctioned, disk-light inner-loop tool. Full-stack operations live in `deploy/Makefile`:
+**Single-service** work runs the service natively against its own
+`docker-compose.dev.yml`, which starts only that service's datastore (`docker compose
+down -v` when done). There is no local full-stack cluster: kind was removed for disk,
+and the Docker Compose stack under `development/` before it.
+
+The **full stack** runs on **k3s on one EC2 instance**, from the same Helm chart that
+deploys to EKS; the target is a values overlay (`values-k3s.yaml`, `values-eks.yaml`)
+plus the Terraform under `deploy/terraform/`. Images are built only by CI and pushed to
+ECR. Operations live in `deploy/Makefile`:
 
 ```bash
-make -C deploy cluster-up   # create the kind cluster
-make -C deploy infra-up     # infra tier (Postgres / Redis / Redpanda / Temporal / DynamoDB-local)
-make -C deploy apps-up      # build + kind-load the app images, deploy the app tier
-make -C deploy apps-deploy  # chart-only change: helm upgrade, no image rebuild
-make -C deploy gate1        # full purchase-flow acceptance test
-make -C deploy cluster-down # tear it all down
+make -C deploy start-ec2-k3s   # start the box; prints the SSH tunnel to open
+make -C deploy k3s-kubeconfig
+make -C deploy k3s-deploy      # helm upgrade from the :dev images in ECR
+make -C deploy k3s-gate2       # full purchase-flow acceptance test
+make -C deploy stop-ec2-k3s    # the cost switch
 ```
 
-Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` (kind NodePort → 30000).
-
-**Cloud targets.** The same chart deploys to AWS through values overlays (`values-k3s.yaml`, `values-eks.yaml`) plus the Terraform under `deploy/terraform/`; images are built in CI and pushed to ECR.
+Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` through the tunnel (NodePort 30000).
 
 ## Branches
 

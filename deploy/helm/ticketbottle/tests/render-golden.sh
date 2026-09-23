@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 CHART="$HERE/.."
 SECRETS="$HERE/fixture-secrets.yaml"
 mkdir -p "$HERE/golden"
-for overlay in local k3s; do
+for overlay in k3s; do
   helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" \
     > "$HERE/golden/values-$overlay.yaml"
   echo "wrote golden/values-$overlay.yaml"

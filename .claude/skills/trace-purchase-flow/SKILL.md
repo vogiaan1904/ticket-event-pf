@@ -21,6 +21,6 @@ The canonical chain (synchronous gRPC unless noted; Kafka hops marked):
 - **Oversold / reservation issues?** The invariant lives in `inventory-svc/internal/services/reservation.go` (`FOR UPDATE` inside a tx) + the `ReservationExpiryWorker` that auto-releases expired holds.
 - **Payment not advancing?** The gRPC service only *writes* the outbox row (`payment-svc/src/modules/outbox/outbox.service.ts`) and carries no Kafka client at all. Publishing runs entirely in the `outbox-relay` workload (`kubectl -n ticketbottle logs deploy/outbox-relay`).
 - **Paid order never completes?** Check its status for `REFUND_REQUIRED` before assuming the payment event was lost — see step 7.
-- **Datastore:** Order is DynamoDB-only. Locally that is the `dynamodb` pod in the chart (image `amazon/dynamodb-local`); on the k3s and EKS targets it is the real table provisioned by `envs/foundation`.
+- **Datastore:** Order is DynamoDB-only. Locally that is `amazon/dynamodb-local` from `services/order-svc/docker-compose.dev.yml`; on the k3s and EKS targets it is the real table provisioned by `envs/foundation`.
 
 Topics: `queue.ready`, `checkout.completed`, `checkout.failed`, `checkout.expired`, `payment.completed`, `payment.failed`, `payment.cancelled`, `order.refund_required`. Contracts: root `proto/`.

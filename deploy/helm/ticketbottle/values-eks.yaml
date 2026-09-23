@@ -13,16 +13,6 @@ image:
 # creates this one (EBS CSI, WaitForFirstConsumer, Delete).
 storageClass: gp3
 
-# Real AWS DynamoDB — no in-cluster dynamodb-local pod.
-dynamodb:
-  enabled: false
-
-order:
-  dynamodbEndpoint: ""     # empty -> default AWS endpoint
-  awsRegion: us-east-1
-  awsAccessKeyId: ""       # empty -> config.yaml omits creds -> web-identity (IRSA)
-  awsSecretAccessKey: ""
-
 serviceAccount:
   order:
     create: true
@@ -49,7 +39,7 @@ ingress:
   subnets: ""              # injected at deploy time
   inboundCidrs: ""         # injected at deploy time — the ALB is NOT world-open
 
-# In-cluster payment path (simulated webhook + relay), same as the kind and k3s targets.
+# In-cluster payment path (simulated webhook + relay), same as k3s.
 paymentEvents:
   enabled: true
 outboxRelay:

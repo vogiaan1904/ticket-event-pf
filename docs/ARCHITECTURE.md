@@ -82,7 +82,7 @@ This is the hardest part: a purchase spans services **and** databases, so a sing
 **Every service is a container Kubernetes runs.** Each service ships as an *image*; Kubernetes runs, heals, and scales them the same way regardless of language. Stateful stores use *StatefulSets* with persistent volumes; stateless services use *Deployments*; *Services* handle discovery; config comes from ConfigMaps/Secrets.
 - **Trade-off:** Kubernetes is a large surface to operate — but it's the industry lingua franca for exactly this.
 
-**One chart, several targets, all of it in code.** The same Helm chart deploys to a local *kind* cluster, to *k3s* on a single EC2 instance, and to *Amazon EKS* — the target is chosen by a values overlay plus a Terraform delta, never by forking a manifest. Terraform makes every environment reproducible and destroyable, and no workload ever holds a long-lived AWS key: CI authenticates by GitHub OIDC, nodes by instance profile, pods by IRSA.
+**One chart, several targets, all of it in code.** The same Helm chart deploys to *k3s* on a single EC2 instance and to *Amazon EKS* — the target is chosen by a values overlay plus a Terraform delta, never by forking a manifest. Terraform makes every environment reproducible and destroyable, and no workload ever holds a long-lived AWS key: CI authenticates by GitHub OIDC, nodes by instance profile, pods by IRSA.
 - **Trade-off:** several targets to keep working, and three distinct identity mechanisms to keep correct.
 
 ---

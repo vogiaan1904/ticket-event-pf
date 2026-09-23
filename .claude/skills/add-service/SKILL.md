@@ -38,7 +38,7 @@ Don't scaffold empty layers; right-size folder depth to the service.
 ## 3. Wire it up
 - **Port:** assign the next free port; record it in root `CLAUDE.md`'s authoritative port table (the README table is stale).
 - **Config:** add a `<name>-config` ConfigMap block to `deploy/helm/ticketbottle/templates/apps/config.yaml`.
-- **Chart:** add the image build to `deploy/scripts/build-images.sh` and a Deployment via the `tb.appService` template (`deploy/helm/ticketbottle/templates/apps/`). Build contexts point at `services/<name>-svc` — never `../ticketbottle-*`.
+- **Chart:** add the image to the matrix in `.github/workflows/build-push-ecr.yml` (and its ECR repository to `deploy/terraform/envs/foundation/main.tf`) and a Deployment via the `tb.appService` template (`deploy/helm/ticketbottle/templates/apps/`). Build contexts point at `services/<name>-svc` — never `../ticketbottle-*`.
 - **Proto regen:** add the new consumer to the root `Makefile` `proto-go`/`proto-ts` target.
 - **Clients:** if the gateway exposes it, register a gRPC client in `api-gateway/src/shared/microservices` and add a feature module.
 
