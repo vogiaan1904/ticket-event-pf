@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
 # Gate-1: full purchase flow, run on k3s by `make -C deploy k3s-gate2`.
 # register -> create event -> create event config -> publish event -> seed ticket class
-#   -> join waitroom -> (admission) read checkout token from Redis -> create order
+#   -> join waitroom -> poll status until admitted -> create order
 #   -> trigger payment webhook -> poll order until COMPLETED.
 #
 # Field names below are pinned from the gateway DTOs/mappers and the Go services.
-# Two hops bypass missing HTTP surface and seed directly:
-#   - event publish: no gateway route exists; order-svc requires EventStatus=PUBLISHED,
-#     so we set it directly in the event DB.
-#   - checkout token: waitroom admits the session (see its logs), but a write-write race
-#     in JoinQueue (its final UpdateSession clobbers the processor's UpdateCheckoutToken)
-#     makes the stored/streamed token unreliable. order-svc only cryptographically
-#     verifies the token (HS256 + shared JWT_SECRET, claims session_id/user_id/event_id;
-#     no waitroom callback), so we mint the exact token waitroom would sign. It is
-#     byte-for-byte equivalent; this only sidesteps the race, not the validation.
+# One hop bypasses missing HTTP surface: order-svc requires EventStatus=PUBLISHED and
+# no gateway route publishes an event, so it is set directly in the event DB.
 set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
@@ -81,31 +74,19 @@ SESSION=$(echo "$JOIN" | getval data.sessionId)
 [ -n "$SESSION" ] || fail "waitroom join returned no sessionId: $JOIN"
 echo "  sessionId=$SESSION"
 
-echo "== 7. wait for admission, then mint the checkout token =="
-# Read user_id from the real session (present from CreateSession) and give the 1s
-# processor tick a moment to admit (visible in waitroom logs).
-USER_ID=""
-for i in $(seq 1 10); do
-  SS=$(kubectl -n $NS exec statefulset/redis -- redis-cli GET "waitroom:session:$SESSION" 2>/dev/null || true)
-  USER_ID=$(echo "$SS" | getval user_id)
-  [ -n "$USER_ID" ] && break
+echo "== 7. poll status until admitted, as a client does =="
+CHECKOUT=""
+for i in $(seq 1 30); do
+  ST=$(curl -s "$GW/waitroom/status/$SESSION" -H "$AUTH")
+  CHECKOUT=$(echo "$ST" | getval data.checkoutToken)
+  [ -n "$CHECKOUT" ] && break
+  case "$(echo "$ST" | getval data.status)" in
+    EXPIRED|CANCELLED|FAILED) fail "session ended before admission: $ST" ;;
+  esac
   sleep 1
 done
-[ -n "$USER_ID" ] || fail "waitroom session not found in Redis: $SS"
-# Signing keys live in per-service Secrets, not the ConfigMap; order-config
-# keeps only JWT_EXPIRY.
-JWT_SECRET=$(kubectl -n $NS get secret order-secrets -o jsonpath='{.data.JWT_SECRET}' | base64 -d)
-[ -n "$JWT_SECRET" ] || fail "could not read JWT_SECRET from secret/order-secrets"
-CHECKOUT=$(python3 -c "import hmac,hashlib,base64,json,time,sys
-secret,sid,uid,eid=sys.argv[1:5]
-b64=lambda b: base64.urlsafe_b64encode(b).rstrip(b'=')
-now=int(time.time())
-h=b64(json.dumps({'alg':'HS256','typ':'JWT'},separators=(',',':')).encode())
-p=b64(json.dumps({'session_id':sid,'user_id':uid,'event_id':eid,'iat':now-10,'exp':now+900},separators=(',',':')).encode())
-sig=b64(hmac.new(secret.encode(),h+b'.'+p,hashlib.sha256).digest())
-print((h+b'.'+p+b'.'+sig).decode())" "$JWT_SECRET" "$SESSION" "$USER_ID" "$EVENT_ID")
-[ -n "$CHECKOUT" ] || fail "failed to mint checkout token"
-echo "  checkoutToken=${CHECKOUT:0:16}... (minted for session $SESSION)"
+[ -n "$CHECKOUT" ] || fail "not admitted within 30s: $ST"
+echo "  checkoutToken=${CHECKOUT:0:16}... (from GET /waitroom/status)"
 
 echo "== 8. create order =="
 ORD=$(curl -s -X POST "$GW/orders" -H "$AUTH" -H 'Content-Type: application/json' -d "{
