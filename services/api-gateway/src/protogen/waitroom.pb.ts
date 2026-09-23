@@ -36,7 +36,6 @@ export interface JoinQueueResponse {
   queueLength: number;
   queuedAt: string;
   expiresAt: string;
-  websocketUrl: string;
 }
 
 export interface GetQueueStatusRequest {

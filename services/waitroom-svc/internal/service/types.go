@@ -19,7 +19,6 @@ type JoinQueueOutput struct {
 	QueueLength  int64
 	QueuedAt     time.Time
 	ExpiresAt    time.Time
-	WebSocketURL string
 }
 
 type QueueStatusOutput struct {

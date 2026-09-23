@@ -122,7 +122,6 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		QueueLength:  qInf.QueueLength,
 		QueuedAt:     ss.QueuedAt,
 		ExpiresAt:    ss.ExpiresAt,
-		WebSocketURL: fmt.Sprintf("/api/v1/waitroom/stream/%s", ss.ID),
 	}, nil
 }
 

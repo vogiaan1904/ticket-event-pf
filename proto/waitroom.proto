@@ -24,7 +24,8 @@ message JoinQueueResponse {
   int64 queue_length = 3;
   string queued_at = 4;
   string expires_at = 5;
-  string websocket_url = 6;
+  // 6 held a websocket_url for a position stream that no longer exists.
+  reserved 6;
 }
 
 message GetQueueStatusRequest {

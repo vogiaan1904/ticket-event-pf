@@ -45,7 +45,6 @@ func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRe
 		QueueLength:  out.QueueLength,
 		QueuedAt:     util.TimeToISO8601Str(out.QueuedAt),
 		ExpiresAt:    util.TimeToISO8601Str(out.ExpiresAt),
-		WebsocketUrl: out.WebSocketURL,
 	}, nil
 }
 

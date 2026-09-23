@@ -4,5 +4,4 @@ export class JoinQueueRespDto {
   queueLength: number;
   queuedAt: Date;
   expiresAt: Date;
-  websocketUrl: string;
 }

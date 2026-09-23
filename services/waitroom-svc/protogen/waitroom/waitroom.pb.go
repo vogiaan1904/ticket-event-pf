@@ -163,7 +163,6 @@ type JoinQueueResponse struct {
 	QueueLength   int64                  `protobuf:"varint,3,opt,name=queue_length,json=queueLength,proto3" json:"queue_length,omitempty"`
 	QueuedAt      string                 `protobuf:"bytes,4,opt,name=queued_at,json=queuedAt,proto3" json:"queued_at,omitempty"`
 	ExpiresAt     string                 `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	WebsocketUrl  string                 `protobuf:"bytes,6,opt,name=websocket_url,json=websocketUrl,proto3" json:"websocket_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -229,13 +228,6 @@ func (x *JoinQueueResponse) GetQueuedAt() string {
 func (x *JoinQueueResponse) GetExpiresAt() string {
 	if x != nil {
 		return x.ExpiresAt
-	}
-	return ""
-}
-
-func (x *JoinQueueResponse) GetWebsocketUrl() string {
-	if x != nil {
-		return x.WebsocketUrl
 	}
 	return ""
 }
@@ -619,7 +611,7 @@ const file_waitroom_proto_rawDesc = "" +
 	"\n" +
 	"user_agent\x18\x03 \x01(\tR\tuserAgent\x12\x1d\n" +
 	"\n" +
-	"ip_address\x18\x04 \x01(\tR\tipAddress\"\xd2\x01\n" +
+	"ip_address\x18\x04 \x01(\tR\tipAddress\"\xb3\x01\n" +
 	"\x11JoinQueueResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
@@ -627,8 +619,7 @@ const file_waitroom_proto_rawDesc = "" +
 	"\fqueue_length\x18\x03 \x01(\x03R\vqueueLength\x12\x1b\n" +
 	"\tqueued_at\x18\x04 \x01(\tR\bqueuedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\tR\texpiresAt\x12#\n" +
-	"\rwebsocket_url\x18\x06 \x01(\tR\fwebsocketUrl\"6\n" +
+	"expires_at\x18\x05 \x01(\tR\texpiresAtJ\x04\b\x06\x10\a\"6\n" +
 	"\x15GetQueueStatusRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"\xfe\x02\n" +
