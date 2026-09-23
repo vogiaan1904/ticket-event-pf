@@ -113,4 +113,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0010](0010-kind-is-removed.md) | Where does the full stack run? | k3s on one EC2 instance, from images CI pushes to ECR | A local kind cluster | No free local full stack; every full-stack run needs the box started, billed by the hour | accepted |
+
+### system-map
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0012](0012-agents-learn-the-system-from-a-map-of-documents.md) | How does an agent find the right source for a part of the system? | One routing skill that holds facts about documents only, with CI failing on a gone path or an uncited document | A skill per service, or a consolidated architecture reference | A map to keep current; the check cannot see a document whose content drifted | proposed |
 <!-- decisions:index:end -->
