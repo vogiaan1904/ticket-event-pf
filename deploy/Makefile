@@ -63,14 +63,22 @@ k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
 	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
-# HELM_EXTRA passes extra flags through, e.g. deploying a branch build:
-#   make k3s-deploy HELM_EXTRA="--set image.tag=my-branch"
+# REF is the moving tag CI pushes per branch (slashes as dashes), e.g. REF=my-branch.
+# k3s-deploy deploys the immutable sha- build it points at: the moving tag itself
+# leaves the pod spec unchanged, so helm rolls nothing and old pods keep running.
+# HELM_EXTRA passes any other helm flags through.
+REF ?= dev
 HELM_EXTRA ?=
 
-k3s-deploy: secrets-check  ## Deploy the chart to k3s from ECR (tunnel must be open)
-	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
+k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel must be open)
+	@tags=$$(aws ecr describe-images --region us-east-1 --repository-name ticketbottle/gateway \
+	    --image-ids imageTag=$(REF) --query 'imageDetails[0].imageTags' --output text | tr '\t' '\n' | grep '^sha-'); \
+	 [ "$$(echo "$$tags" | grep -c .)" = 1 ] || { echo "REFUSING: :$(REF) must name exactly one sha- build, found: $$(echo $${tags:-none})"; exit 1; }; \
+	 echo "deploying $$tags (:$(REF))"; \
+	 KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
 	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
+	  --set image.tag=$$tags \
 	  $(HELM_EXTRA) \
 	  --wait --timeout 10m
 

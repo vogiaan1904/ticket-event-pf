@@ -109,7 +109,7 @@ PVCs are backed by k3s's `local-path` provisioner writing to the **gp3 root volu
 
 ```yaml
 target: k3s
-image: { tag: dev, pullPolicy: Always }      # registry injected at deploy via --set
+image: { tag: dev, pullPolicy: Always }      # registry and tag set at deploy by `make k3s-deploy`
 paymentEvents: { enabled: true }             # in-cluster payment path, same as EKS
 outboxRelay:   { enabled: true }
 postgres: { storage: 5Gi }                   # PVCs sized for the real box
@@ -122,15 +122,16 @@ temporal: { ui: { enabled: true } }
 Real DynamoDB is the chart's default — `order.dynamodbEndpoint` is empty in
 `values.yaml` — so no overlay mentions it.
 
-The **registry is deliberately not in git** (it contains the account id) — it's passed at deploy time:
+The **registry is deliberately not in git** (it contains the account id); `make k3s-deploy` passes it, and the tag, at deploy time:
 
 ```bash
 helm upgrade --install tb deploy/helm/ticketbottle -n ticketbottle --create-namespace \
-  -f deploy/helm/ticketbottle/values-k3s.yaml \
-  --set image.registry="${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/" --wait --timeout 10m
+  -f deploy/helm/ticketbottle/values-k3s.yaml -f deploy/secrets.values.yaml \
+  --set image.registry="${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/" \
+  --set image.tag="sha-${COMMIT}" --wait --timeout 10m
 ```
 
-`pullPolicy: Always` matters: the branch tag is mutable (`:dev` moves), so `IfNotPresent` would silently keep a stale image after CI pushes a new one.
+**Deploy the sha, not the branch tag.** `:dev` moves, but a helm upgrade that sets `:dev` again leaves the pod spec unchanged, so nothing rolls and the old pods keep serving the old build — `pullPolicy: Always` only acts when a pod is created. `make k3s-deploy` therefore resolves `:dev` (or `REF=<branch>`) to the immutable `sha-<commit>` tag CI pushed beside it and deploys that; it refuses if the tag names no single build. To confirm what runs, compare a pod's `imageID` digest with ECR.
 
 ---
 
