@@ -185,3 +185,39 @@ func TestPreOpenJoinersAreAdmittedOnceTheSaleOpens(t *testing.T) {
 		}
 	}
 }
+
+// The draw must survive a real sorted set: every pre-open score inside
+// [saleStart-1, saleStart), and the resulting order not arrival's.
+func TestThePreOpenQueueIsOrderedByLotInRedis(t *testing.T) {
+	saleStart := time.Now().Add(time.Hour).Truncate(time.Second)
+	r := newAdmissionRig(t, saleStart, 0, &interleavingProducer{})
+
+	const n = 40
+	arrival := make([]string, n)
+	for i := range n {
+		arrival[i] = r.join(t, fmt.Sprintf("u-%d", i))
+	}
+
+	zs, err := r.cli.GetClient().ZRangeWithScores(context.Background(), "waitroom:"+r.eID+":queue", 0, -1).Result()
+	if err != nil {
+		t.Fatalf("read queue: %v", err)
+	}
+	if len(zs) != n {
+		t.Fatalf("queue holds %d, want %d", len(zs), n)
+	}
+
+	lo, hi := float64(saleStart.Unix()-1), float64(saleStart.Unix())
+	inPlace := 0
+	for i, z := range zs {
+		if z.Score < lo || z.Score >= hi {
+			t.Fatalf("score %v outside the pre-open band [%v, %v)", z.Score, lo, hi)
+		}
+		if z.Member == arrival[i] {
+			inPlace++
+		}
+	}
+	// A shuffle of 40 leaves about one in place; arrival order leaves all 40.
+	if inPlace == n {
+		t.Fatal("the queue is in arrival order; the draw did not reach Redis")
+	}
+}
