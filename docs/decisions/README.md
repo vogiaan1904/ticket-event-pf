@@ -90,4 +90,27 @@ the records, never the block.
 | [0001](0001-decisions-are-surfaced-then-owned.md) | How are decisions made between the architect and the agent? | Options, then the architect restates the reasoning before any work (teach-back) | Options with no recommendation, or with the agent's lean marked | A stop on every trade-off; abandoned the same day | superseded by 0002 |
 | [0002](0002-the-agent-is-a-mentor-not-a-gate.md) | What is the agent's role in a decision? | A mentor: research, verify, explain briefly, name every trade-off; no gate | Enforcing 0001 harder, or dropping the protocol | Ownership rests on explanations good enough to argue with, not on a check | accepted |
 | [0011](0011-decisions-are-recorded-when-made.md) | How does a decision reach a reviewable record? | The agent drafts it when the call is made and confirms it when the work lands; a review table is generated from the records | Recording when an arc closes, or only on request | One record per decision to write and keep current | proposed |
+
+### waitroom-stampede
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0003](0003-a-waiting-buyer-polls-for-admission.md) | How does a waiting buyer learn they are admitted? | The client polls `GetQueueStatus` | A push stream: SSE, a gRPC stream and a Redis subscription per waiter | Admission is seen on the next poll, seconds into a 15-minute token | accepted |
+| [0004](0004-event-rules-are-cached-per-event.md) | What does a join ask event-svc? | A per-event cache (30s); concurrent misses share one call; verdicts cached, dependency failures not | Two event-svc calls per joiner | Event rules can be up to 30s stale | accepted |
+| [0005](0005-waiting-buyers-are-ordered-by-lot.md) | Who goes first? | A random draw in the second before the sale for pre-open joiners, drawn once and stored; arrival order after | Arrival order (`QueuedAt.Unix()`) | Joining early buys a place in the draw, not at the front | accepted |
+
+### waitroom-admission
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0006](0006-admission-waits-on-the-queues-own-scores.md) | When may admission start? | Nothing is admitted until its score's second has passed | The processor asks event-svc for the sale time each tick | Up to 1s extra wait after opening; a sale time moved after people joined is not honoured for them | accepted |
+| [0007](0007-the-join-race-is-fixed-by-deleting-the-write.md) | How is the join race fixed? | Delete `JoinQueue`'s final full-session write | Make every session write atomic (`WATCH` or a Lua script) | The session stays one JSON blob; other read-then-write paths stay unguarded | accepted |
+| [0008](0008-the-waitroom-enforces-session-ownership.md) | Who may read or leave a session? | The waitroom checks the owner; the gateway passes `user_id` in the contract | A gateway-only check, or none | A contract change across five services | accepted |
+| [0009](0009-a-strangers-request-reads-as-not-found.md) | What does a stranger see? | `NOT_FOUND`, with the owner checked before the session's state | `PERMISSION_DENIED` | Bends the error taxonomy's wording so a session id cannot be probed | accepted |
+
+### deploy-targets
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0010](0010-kind-is-removed.md) | Where does the full stack run? | k3s on one EC2 instance, from images CI pushes to ECR | A local kind cluster | No free local full stack; every full-stack run needs the box started, billed by the hour | accepted |
 <!-- decisions:index:end -->
