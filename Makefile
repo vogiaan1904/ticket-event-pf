@@ -14,7 +14,7 @@ help:
 
 # ---- Proto: edit contracts in proto/, then regenerate every consumer ----
 # There is ONE source of truth: the root proto/ directory. Do not reintroduce
-# per-service .proto copies (protos/, src/protos/, protos-submodule/).
+# protos/ or protos-submodule/; each TS service's src/protos/ is synced from here.
 proto: proto-go proto-ts
 
 proto-go:

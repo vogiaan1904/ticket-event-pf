@@ -118,5 +118,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0012](0012-agents-learn-the-system-from-a-map-of-documents.md) | How does an agent find the right source for a part of the system? | One routing skill that holds facts about documents only, with CI failing on a gone path or an uncited document | A skill per service, or a consolidated architecture reference | A map to keep current; the check cannot see a document whose content drifted | proposed |
+| [0012](0012-agents-learn-the-system-from-a-map-of-documents.md) | How does an agent find the right source for a part of the system? | One routing skill that holds facts about documents only, with CI failing on a gone path or an uncited document | A skill per service, or a consolidated architecture reference | A map to keep current; the check cannot see a document whose content drifted | accepted |
 <!-- decisions:index:end -->

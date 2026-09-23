@@ -1,5 +1,9 @@
 # System map: one place an agent learns where each part of the system is written down
 
+**Status: COMPLETE 2026-09-23.** Recorded as [0012](../decisions/0012-agents-learn-the-system-from-a-map-of-documents.md).
+The map check runs in CI; two evaluation rounds are under *Evaluation*, and what the
+work found but did not fix is under *Found, not fixed*.
+
 **Goal:** An agent — or the architect briefing one — can find the document that owns
 any design question about the platform or one of its services, know how far to trust
 it, and verify it in the code; and the map cannot go stale without CI failing.
@@ -103,35 +107,35 @@ problem. A *required* document is a git-tracked `.md` file outside `node_modules
 `vendor/`, `docs/plans/`, `docs/decisions/NNNN-*`, `.claude/hooks/`, other skills'
 `references/`, and the map itself.
 
-- [ ] Write `check_map_test.py` (unittest, temp git repo per test): clean map passes;
+- [x] Write `check_map_test.py` (unittest, temp git repo per test): clean map passes;
       missing path reported; uncited doc reported; untracked doc not required;
       `:123` and `#anchor` stripped; placeholders skipped; excluded kinds not required.
-- [ ] Run it — red: module not found.
-- [ ] Write `check_map.py`.
-- [ ] Run it — green.
+- [x] Run it — red: module not found.
+- [x] Write `check_map.py`.
+- [x] Run it — green.
 
 ## Task 2: The map
 
 **Files:** create `.claude/skills/system-map/SKILL.md` and
 `references/{api-gateway,user,event,order,payment,inventory,waitroom}.md`.
 
-- [ ] `SKILL.md`: what is already in context; trust by kind of document; route by
+- [x] `SKILL.md`: what is already in context; trust by kind of document; route by
       question; route by service; the procedure (owner → read → verify in code →
       report drift); how to brief a subagent; keeping the map true.
-- [ ] Each guide: read-in-this-order with what each document owns and its trust; by
+- [x] Each guide: read-in-this-order with what each document owns and its trust; by
       question; code entry points; edges (contracts, topics, store, chart); decisions
       and plans; documents not to trust for current behaviour.
-- [ ] `python3 .claude/skills/system-map/scripts/check_map.py` — green on the repo.
+- [x] `python3 .claude/skills/system-map/scripts/check_map.py` — green on the repo.
 
 ## Task 3: Correct the drift the map would route into
 
 **Files:** `README.md`, `docs/ARCHITECTURE.md`, `.claude/skills/trace-purchase-flow/SKILL.md`,
 `services/waitroom-svc/docs/SYSTEM_FLOW_README.md`, root `CLAUDE.md`.
 
-- [ ] Verify each row of the drift table against the code before editing it.
-- [ ] Replace each wrong claim with the correct one or a pointer to its owner — no new
+- [x] Verify each row of the drift table against the code before editing it.
+- [x] Replace each wrong claim with the correct one or a pointer to its owner — no new
       copies of numbers that live elsewhere.
-- [ ] `grep -rn "FOR UPDATE" README.md docs/ARCHITECTURE.md .claude/skills` shows only
+- [x] `grep -rn "FOR UPDATE" README.md docs/ARCHITECTURE.md .claude/skills` shows only
       correct uses.
 
 ## Task 4: Wiring
@@ -139,23 +143,66 @@ problem. A *required* document is a git-tracked `.md` file outside `node_modules
 **Files:** root `CLAUDE.md`, `.claude/settings.json`, create `.claude/hooks/after-compact.md`,
 `.github/workflows/system-map.yml`.
 
-- [ ] Register row: *Where does an agent start to learn a part of the system?* → the
+- [x] Register row: *Where does an agent start to learn a part of the system?* → the
       skill. One pointer line under *Documentation layout*.
-- [ ] `SessionStart` hook, matcher `compact`, prints `after-compact.md`.
-- [ ] Workflow on push to `main`/`dev` and on PRs, no path filter (a renamed code
+- [x] `SessionStart` hook, matcher `compact`, prints `after-compact.md`.
+- [x] Workflow on push to `main`/`dev` and on PRs, no path filter (a renamed code
       file breaks a guide as surely as a new doc): run the tests, then the check.
-- [ ] Mutation: remove one citation → red naming it; cite a missing file → red; restore → green.
+- [x] Mutation: remove one citation → red naming it; cite a missing file → red; restore → green.
 
 ## Task 5: Evaluate with `skill-creator`
 
-- [ ] `evals/evals.json`: three prompts where the right answer depends on reading the
+- [x] `evals/evals.json`: three prompts where the right answer depends on reading the
       owning document — the reserve mechanism, a paid order in `REFUND_REQUIRED`, and
       raising the waitroom's concurrency cap.
-- [ ] Run each with the skill and without it; grade against assertions; aggregate a
+- [x] Run each with the skill and without it; grade against assertions; aggregate a
       benchmark; write the static review page.
-- [ ] Revise the skill on what the transcripts show; record the result in 0012's Outcome.
+- [x] Revise the skill on what the transcripts show; record the result in 0012's Outcome.
 
 ## Task 6: Record
 
-- [ ] Draft 0012 `proposed` with the delegation quoted; regenerate the index.
-- [ ] On landing: accept 0012 with its Outcome; mark this plan complete.
+- [x] Draft 0012 `proposed` with the delegation quoted; regenerate the index.
+- [x] On landing: accept 0012 with its Outcome; mark this plan complete.
+
+---
+
+## Evaluation
+
+Each prompt ran once with the skill and once without, on the same working tree;
+answers were graded against the assertions in `.claude/skills/system-map/evals/evals.json`.
+
+| Round | Prompts | Model | Pass rate with / without | Mean tokens with / without | Mean time with / without |
+|---|---|---|---|---|---|
+| 1 | reserve path, `REFUND_REQUIRED`, a new gateway route — narrow, named | Opus | 100% / 100% | 133k / 133k | 270s / 254s |
+| 2 | onboarding reading list, a subagent brief — broad | Sonnet | 100% / 92% | 89k / 103k | 117s / 195s |
+
+- On a narrow question a capable model finds the owner without the map: the root
+  `CLAUDE.md` register plus grep is enough. The map changed nothing measurable.
+- On a broad question the map cut time by about 40% and tokens by about 14%. With
+  one run per arm this is a direction, not a measurement.
+- The with-skill runs found three errors in the map itself, all fixed in `b093948`:
+  a webhook the map described as idempotent is not, a stale document labelled
+  trustworthy, and an error-mapping pointer one file off. Every arm, with or
+  without the map, also found drift in documents the survey had missed.
+
+## Found, not fixed
+
+Verified against the code; each needs a decision or work beyond this plan.
+
+- **`OrdersNeedingRefund` can never fire.** Its expression reads
+  `tb_order_workflow_duration_seconds_count{workflow="ConfirmOrder",outcome="refund_required"}`;
+  the only observation is `services/order-svc/internal/order/service/order.go:228`,
+  which hard-codes `workflow="CreateOrder"`. Its runbook section greps
+  `deploy/order-service` where the refund runs in `order-consumer`, and reads
+  `tb_inventory_reserve_total`, which counts `Reserve` only.
+- **The cluster's `payment-webhook` has no `PENDING` guard** — a late or repeated
+  `/complete/<code>` produces `REFUND_REQUIRED` by construction on k3s and EKS.
+- **`services/inventory-svc/docs/MODELS.md`** is stale beyond repair by edit: column
+  types, repository layer and examples. Deleting it is the likely call.
+- **`services/payment-svc/lambdas/README.md`** still describes the retired
+  `outbox-processor` and a Prisma layer.
+- **`services/order-svc/docs/SYSTEM.md`** says a confirm that fails after retries
+  becomes `REFUND_REQUIRED`; infrastructure failures leave the order `PENDING`.
+  `TIMEOUT` is handled but never written.
+- **The gateway neither rate-limits nor sets security headers**, and the TS layout
+  reference contradicts itself — both now rows in the register's *Open* table.

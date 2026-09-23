@@ -31,7 +31,7 @@ There is **one source of truth**: the root `proto/` directory (`user`, `event`, 
 | inventory | order-svc, inventory-svc | api-gateway |
 | order | order-svc | api-gateway |
 | payment | order-svc | payment-svc |
-| waitroom | — | api-gateway |
+| waitroom | waitroom-svc | api-gateway; event, user and payment carry synced copies |
 
 After regenerating, update the **server implementation** (the service that owns the RPC) and every **client** call site. For a new RPC end-to-end, use the `add-grpc-endpoint` skill.
 

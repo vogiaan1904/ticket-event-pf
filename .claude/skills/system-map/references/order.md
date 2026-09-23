@@ -13,7 +13,8 @@ inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in Dyna
 2. `.claude/skills/trace-purchase-flow/SKILL.md` — the whole purchase hop by hop,
    with the file and topic for each; where to look when an order is stuck.
 3. `services/order-svc/docs/PURCHASE_SLOT.md` — **current**: one in-flight purchase
-   per buyer; key, lifecycle, settle window, release.
+   per buyer; key, lifecycle, settle window, and the release every failed or
+   finished `CreateOrder` must reach — read it before changing any failure path.
 4. `services/order-svc/docs/RESERVATION_HOLD.md` — **current**: why the inventory
    hold outlives the payment window.
 5. `services/order-svc/docs/SYSTEM.md` — background: activities, event schemas,
@@ -27,7 +28,7 @@ inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in Dyna
 | The steps of a purchase and their compensation | service `CLAUDE.md`, *Temporal workflows* | `services/order-svc/internal/workflows/create_order.go`, `services/order-svc/internal/workflows/steps.go` |
 | What happens after payment succeeds | same | `services/order-svc/internal/workflows/confirm_order.go` |
 | Paid but not fulfillable — `REFUND_REQUIRED` | trace-purchase-flow skill, step 7; `docs/RUNBOOK.md`, *OrdersNeedingRefund* | `services/order-svc/internal/workflows/confirm_order.go` |
-| A double-click or retry of `CreateOrder` | `services/order-svc/docs/PURCHASE_SLOT.md` | `services/order-svc/internal/order/purchase_slot.go`, `services/order-svc/internal/order/service/order.go` |
+| The buyer's purchase slot: a retried `CreateOrder`, and its release when one fails | `services/order-svc/docs/PURCHASE_SLOT.md` | `services/order-svc/internal/order/purchase_slot.go`, `services/order-svc/internal/order/service/order.go` |
 | Timeouts, hold length, retry policy | `services/order-svc/docs/RESERVATION_HOLD.md` | `services/order-svc/internal/workflows/shared.go`, `services/order-svc/internal/workflows/options.go` |
 | How a domain error becomes a gRPC code | root `CLAUDE.md`, *Error taxonomy* | `services/order-svc/internal/order/delivery/grpc/errors.go` |
 | What fails first as checkouts rise | root `CLAUDE.md`, register — **open** (Temporal shares the app's Postgres) | `deploy/helm/ticketbottle/templates/infra/temporal.yaml` |

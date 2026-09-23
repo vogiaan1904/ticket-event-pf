@@ -111,3 +111,5 @@ and plans that shaped the service, and what not to trust.
   drifted — that is step 4.
 - Plans and decision records are reached through `docs/plans/` and the decisions
   index, not listed one by one here.
+- `evals/evals.json` holds the prompts the map was evaluated on. After a large
+  change, rerun them with and without the skill (`skill-creator`) before trusting it.
