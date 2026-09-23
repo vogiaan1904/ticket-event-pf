@@ -2,6 +2,11 @@
 
 **Date:** 2026-09-22
 **Status:** superseded by [0002](0002-the-agent-is-a-mentor-not-a-gate.md) on 2026-09-22
+**Arc:** working-agreement
+
+| Question | Chose | Instead of | Cost |
+|---|---|---|---|
+| How are decisions made between the architect and the agent? | Options, then the architect restates the reasoning before any work (teach-back) | Options with no recommendation, or with the agent's lean marked | A stop on every trade-off; abandoned the same day |
 
 ## Context
 

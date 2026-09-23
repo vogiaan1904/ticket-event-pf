@@ -8,7 +8,7 @@ have different lifespans.
 | `ARCHITECTURE.md`, `METRICS.md`, `RUNBOOK.md` | How the platform works now | Named | Whenever the platform does |
 | `design/` | A target state and the reasoning for it | Named, no date | Until the target is reached or abandoned |
 | `plans/` | A work order derived from a design | `YYYY-MM-DD-<name>.md` | Never, once executed — it records what was decided |
-| `decisions/` | Why a choice was made, and by whom | `NNNN-<slug>.md` | Never — superseded records stay and gain a pointer |
+| `decisions/` | Why a choice was made, and by whom | `NNNN-<slug>.md` | Once, to gain an Outcome when the work lands; after that only a superseded-by pointer |
 | `diagrams/` | Diagram sources, hand-edited | Named | With the architecture |
 
 **A decision record answers what neither of them does: why this and not the

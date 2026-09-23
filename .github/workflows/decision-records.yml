@@ -1,0 +1,30 @@
+name: decision-records
+
+# The review index in docs/decisions/README.md is generated from the records, so
+# a record edited without regenerating it fails here, as a stale golden would.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "docs/decisions/**"
+      - ".github/workflows/decision-records.yml"
+  pull_request:
+    paths:
+      - "docs/decisions/**"
+      - ".github/workflows/decision-records.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  index:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The index's own tests
+        run: python3 -m unittest docs/decisions/index_test.py
+
+      - name: The records are valid and the index matches them
+        run: python3 docs/decisions/index.py --check

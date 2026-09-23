@@ -35,6 +35,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What does every workload publish, and how is it queried? | `docs/METRICS.md` | Binding |
 | Which failures page, and which never do? | This file, *Alerting policy* | Binding |
 | Where does rationale live — comment, design, or plan? | This file, *Comment conventions*; `docs/README.md` | Binding |
+| Where is a decision's why recorded, and how is it reviewed? | `docs/decisions/README.md` | One record per decision, drafted when made; reviewed from the generated index |
 
 ### Open
 

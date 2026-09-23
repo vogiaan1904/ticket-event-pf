@@ -2,6 +2,12 @@
 
 **Date:** 2026-09-22
 **Status:** accepted. Supersedes [0001](0001-decisions-are-surfaced-then-owned.md).
+**Arc:** working-agreement
+**Where it lives:** `.claude/hooks/working-stance.md`
+
+| Question | Chose | Instead of | Cost |
+|---|---|---|---|
+| What is the agent's role in a decision? | A mentor: research, verify, explain briefly, name every trade-off; no gate | Enforcing 0001 harder, or dropping the protocol | Ownership rests on explanations good enough to argue with, not on a check |
 
 ## Context
 
