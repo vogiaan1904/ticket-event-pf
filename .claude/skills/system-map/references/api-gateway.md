@@ -1,5 +1,7 @@
 # API Gateway — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For the HTTP edge: REST routes, auth, validation, the gRPC-to-HTTP error mapping,
 the gateway's gRPC clients, and its request metrics.
 
@@ -21,7 +23,7 @@ the gateway's gRPC clients, and its request metrics.
 
 | Question | Owner | Verify in |
 |---|---|---|
-| Which HTTP status a failure becomes | root `CLAUDE.md`, *Error taxonomy* | `services/api-gateway/src/common/filters/global-exception.filter.ts` |
+| Which HTTP status a failure becomes | root `CLAUDE.md`, *Error taxonomy* | `services/api-gateway/src/shared/metrics/code.ts`, applied by `services/api-gateway/src/common/filters/global-exception.filter.ts` |
 | Sign-up, sign-in, tokens, password hashing | service `CLAUDE.md` | `services/api-gateway/src/modules/auth/auth.service.ts`, `services/api-gateway/src/modules/auth/strategies/jwt.strategy.ts` |
 | Which routes need which role | service `CLAUDE.md` | `services/api-gateway/src/common/guards/access.guard.ts` |
 | Rate limiting, CORS, security headers | service `CLAUDE.md`, *Role* | `services/api-gateway/src/main.ts` |

@@ -40,7 +40,7 @@ func (r *Repository) FindByID(ctx context.Context, model interface{}, id interfa
 //
 // Deprecated: Save(model) writes every column, so a stale in-memory row wipes
 // a concurrent writer's counters and oversells the event. Use a targeted
-// Updates(map) inside SELECT ... FOR UPDATE (internal/services/reservation.go).
+// Updates(map) under a FOR UPDATE row lock, or a guarded UPDATE (internal/services).
 func (r *Repository) Update(ctx context.Context, model interface{}) error {
 	return r.WithContext(ctx).Save(model).Error
 }

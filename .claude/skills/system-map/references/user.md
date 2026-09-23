@@ -1,5 +1,7 @@
 # User — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For accounts, profiles, stored credentials and email verification. Authentication
 itself — hashing, verifying, issuing tokens — is the gateway's, not this service's.
 

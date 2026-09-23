@@ -35,4 +35,4 @@ Runs on port **3000**. Swagger is served at `/<globalPrefix>/<swaggerPath>` only
 ## Notes
 
 - gRPC client targets come from config/env (one address per downstream service) — update those, not hardcoded ports, when wiring a new service.
-- This service translates gRPC errors into HTTP responses in `common/filters`; add new error mappings there rather than in controllers.
+- gRPC errors become HTTP responses only in `common/filters/global-exception.filter.ts`, from the `GRPC_TO_HTTP` table in `src/shared/metrics/code.ts`. A new code gets a row in that table, never a mapping in a controller.

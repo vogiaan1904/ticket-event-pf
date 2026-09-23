@@ -1,5 +1,7 @@
 # Event — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For events, organisers, event configuration, the lifecycle state machine, and the
 rules the waitroom and the saga read from an event.
 

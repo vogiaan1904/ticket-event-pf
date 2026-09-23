@@ -20,7 +20,7 @@ Keyed by **order code**. A background `ReservationExpiryWorker` (`internal/worke
 
 **Eligibility and availability live in that `UPDATE`'s predicate** — `status = ACTIVE`, `now` within `[sale_start_at, sale_end_at]` (either bound may be null), and `reserved + sold + qty <= total`. Under READ COMMITTED Postgres re-checks the predicate against the newest committed row after taking its own lock, so `RowsAffected == 0` is a correct verdict without a prior read. `explainReserveMiss` then reads the row *unlocked* to name which of the three reasons it was: `ErrNotFound`, `ErrSaleClosed` → gRPC `FailedPrecondition`, or `ErrInsufficientStock`. `CheckAvailability` applies the same eligibility rule.
 
-**The row is still held from that `UPDATE` to `COMMIT`**, so one hot ticket class is processed serially. Measured: ~1300 reserves/sec, peaking at four concurrent reservers and declining above that. Numbers and method in `docs/plans/2026-09-22-inventory-contention-benchmark.md`. Do not autoscale this service expecting a hot class to go faster.
+**The row is still held from that `UPDATE` to `COMMIT`**, so one hot ticket class is processed serially. Measured: ~1300 reserves/sec, peaking at four concurrent reservers and declining above that. Numbers and method in `docs/plans/2026-09-22-inventory-contention-benchmark.md`. Spreading the same concurrency over eight rows gave about 2×, not 8×, and disabling `synchronous_commit` about a tenth more (`b22d268`, `TestReserveThroughput_SpreadAcrossClasses`): the row lock is a wall, not the only one. Do not autoscale this service expecting a hot class to go faster.
 
 ## Commands
 
@@ -77,5 +77,5 @@ Order-svc sets the hold to `PaymentTimeout + ReservationHoldGrace` (`internal/wo
 Rationale that does not fit a comment lives here, and comments point at it
 (see the root `CLAUDE.md`, "Comment conventions"):
 
-- `docs/MODELS.md` — tables, GORM models, repository usage.
+- `docs/MODELS.md` — stale: its column types, repository layer and examples no longer match `internal/models/`, which owns the schema.
 - `docs/POST_MIGRATE_DDL.md` — the post-`AutoMigrate` statements: why every constraint is `NOT VALID`, and the guarded `fk_ticket_class_reservations` repair.

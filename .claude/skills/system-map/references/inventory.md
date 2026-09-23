@@ -1,5 +1,7 @@
 # Inventory — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For ticket classes, `Reserve` / `Confirm` / `Release`, the expiry worker, the schema
 constraints, and the throughput of one hot ticket class.
 
@@ -15,22 +17,22 @@ constraints, and the throughput of one hot ticket class.
    constraint is added `NOT VALID`, and the guarded foreign-key repair.
 4. `services/order-svc/docs/RESERVATION_HOLD.md` — the hold's length is set by
    order-svc, not here.
-5. `services/inventory-svc/docs/MODELS.md` — background: the two tables and their
-   columns. Its repository layer and usage examples describe code that is gone —
-   there is no `internal/repository/`; `services/inventory-svc/internal/models/` wins.
+
+The schema is owned by `services/inventory-svc/internal/models/` and
+`services/inventory-svc/internal/models/ddl.go`, not by any document.
 
 ## By question
 
 | Question | Owner | Verify in |
 |---|---|---|
-| How a sale can never exceed capacity | service `CLAUDE.md`, *Three-step reservation flow* and *Conventions* | `services/inventory-svc/internal/services/reservation.go` |
+| What keeps a sale within capacity | service `CLAUDE.md`, *Three-step reservation flow* and *Conventions* | `services/inventory-svc/internal/services/reservation.go` |
 | What bounds throughput on one class | service `CLAUDE.md`; the benchmark plan | `services/inventory-svc/internal/services/reservation_contention_test.go` |
 | Whether `Confirm` contends enough to matter | root `CLAUDE.md`, register — **open** | `services/inventory-svc/internal/services/reservation.go` |
 | A retried `Reserve`, `Confirm` or `Release` | service `CLAUDE.md`, *Idempotency* | `services/inventory-svc/internal/services/reservation.go` |
-| Why expired holds are released, and when drift stops it | service `CLAUDE.md`, *Conventions* | `services/inventory-svc/internal/workers/reservation_exp_worker.go` |
+| When expired holds are released, and what stops it | service `CLAUDE.md`, *Conventions* | `services/inventory-svc/internal/workers/reservation_exp_worker.go` |
 | Which domain error becomes which gRPC code | service `CLAUDE.md`, *Conventions* | `services/inventory-svc/internal/services/errors.go`, `services/inventory-svc/internal/delivery/grpc/errors.go` |
 | Schema, indexes, CHECK constraints | `services/inventory-svc/docs/POST_MIGRATE_DDL.md` | `services/inventory-svc/internal/models/ddl.go` |
-| Why not autoscale it | `.claude/skills/deployment-architecture/SKILL.md`, and its EKS reference, *scaling limits* | `deploy/helm/ticketbottle/templates/apps/inventory.yaml` |
+| Whether to autoscale it | `.claude/skills/deployment-architecture/SKILL.md`, and its EKS reference, *scaling limits* | `deploy/helm/ticketbottle/templates/apps/inventory.yaml` |
 
 ## Code entry points
 
@@ -53,5 +55,5 @@ constraints, and the throughput of one hot ticket class.
 
 ## Don't trust for current behaviour
 
-- `services/inventory-svc/docs/MODELS.md` beyond its table columns — its repository
-  and usage sections, above all its reserve example, describe code that is gone.
+- `services/inventory-svc/docs/MODELS.md` — its column types, repository layer and
+  usage examples no longer match the code.

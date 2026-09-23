@@ -122,7 +122,8 @@ Do **not** reintroduce the old redundant copies (`protos/`, `protos-submodule/`)
 
 A failure crosses two boundaries: domain error → gRPC code → HTTP status. The
 gRPC code is the contract; the API Gateway maps it to HTTP in
-`common/filters/global-exception.filter.ts` and nowhere else.
+`common/filters/global-exception.filter.ts`, from the one table in
+`shared/metrics/code.ts`, and nowhere else.
 
 | gRPC code | HTTP | Means | Client should |
 |---|---|---|---|

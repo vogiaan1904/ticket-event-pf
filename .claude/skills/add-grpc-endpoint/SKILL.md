@@ -22,7 +22,7 @@ Add the RPC + request/response messages to `proto/<owner>.proto`, then regenerat
 ## 3. Expose via the API Gateway (if the endpoint is client-facing)
 - In `services/api-gateway/src/modules/<service>/`: add a REST controller method, a request/response DTO, and call the downstream service through its **gRPC client** (registered with `ClientsModule` in that feature's `<feature>.module.ts`).
 - gRPC client addresses come from config/env (one address per downstream service) — never hardcode ports.
-- Map gRPC errors to HTTP in `src/common/filters` (add a mapping there, not in the controller).
+- gRPC codes become HTTP statuses only through `GRPC_TO_HTTP` in `src/shared/metrics/code.ts`, applied by the global filter in `src/common/filters` — never in the controller.
 
 ## 4. Verify
 - Rebuild the owner (`go build ./...` or `npm run build`) and the gateway (`npm run build`).

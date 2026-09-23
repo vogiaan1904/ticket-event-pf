@@ -167,9 +167,9 @@ Delete(ctx, id) error
 ## Usage Examples
 
 These show the models and repositories in isolation. They are **not** the live reservation path:
-`internal/services/reservation.go` locks every target row with `SELECT … FOR UPDATE` before it
-touches a counter, and a check-then-act sequence like the one in example 2 is exactly what that
-lock exists to replace. See `POST_MIGRATE_DDL.md` and the service `CLAUDE.md` for the invariant.
+`internal/services/reservation.go` makes every counter write a guarded `UPDATE` whose `WHERE`
+clause carries the capacity check, and a check-then-act sequence like the one in example 2 is
+exactly what that replaces. See `POST_MIGRATE_DDL.md` and the service `CLAUDE.md` for the invariant.
 
 ### 1. Create Ticket Class
 

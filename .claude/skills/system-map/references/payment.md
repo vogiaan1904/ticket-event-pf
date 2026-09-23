@@ -1,5 +1,7 @@
 # Payment — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For payment intents and providers, the outbox, and the two workloads that carry a
 completed payment to Kafka: `payment-webhook` and `outbox-relay`.
 
@@ -23,9 +25,9 @@ completed payment to Kafka: `payment-webhook` and `outbox-relay`.
 
 | Question | Owner | Verify in |
 |---|---|---|
-| Why a payment and its event are one write | outbox-relay skill, *The core pattern* | `services/payment-svc/src/modules/outbox/outbox.service.ts` |
+| Are a payment and its event one write? | outbox-relay skill, *The core pattern* | `services/payment-svc/src/modules/outbox/outbox.service.ts` |
 | How an outbox row reaches Kafka, and on which topic | outbox-relay skill | `services/payment-svc/outbox-relay/src/relay.ts`, `services/payment-svc/outbox-relay/src/kafka.ts` |
-| Why a duplicate webhook is harmless | outbox-relay skill, pattern 4 | `services/payment-svc/lambdas/payment-webhook-handler/handlers/webhook.handler.ts`, `deploy/adapters/payment-events/webhook.js` |
+| What a duplicate provider webhook does | outbox-relay skill, pattern 4, for the Lambda; service `CLAUDE.md`, *The Lambdas*, for the cluster | `services/payment-svc/lambdas/payment-webhook-handler/handlers/webhook.handler.ts`, `deploy/adapters/payment-events/webhook.js` |
 | What happens to an event that never publishes | outbox-relay skill, pattern 5 | `services/payment-svc/lambdas/outbox-cleanup/handlers/cleanup.handler.ts` |
 | Adding a provider | service `CLAUDE.md` | `services/payment-svc/src/modules/payment/gateways/gateway.factory.ts` |
 | The outbox is backing up | `docs/RUNBOOK.md`, *OutboxBacklogGrowing* | `deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` |
@@ -54,5 +56,7 @@ completed payment to Kafka: `payment-webhook` and `outbox-relay`.
 ## Don't trust for current behaviour
 
 - `services/payment-svc/lambdas/README.md` on the outbox processor or on Prisma.
+- The outbox-relay skill's idempotency pattern as a description of the cluster's
+  `payment-webhook` — it describes the Lambda.
 - `services/payment-svc/src/modules/payment/controllers/http/payment.controller.ts` —
   an empty shell; no provider callback reaches the gRPC service.

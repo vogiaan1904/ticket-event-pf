@@ -1,5 +1,7 @@
 # Order — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For the saga: `CreateOrder` and `ConfirmOrder`, compensation, the purchase slot, the
 inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in DynamoDB.
 

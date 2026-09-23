@@ -55,8 +55,8 @@ redis:
 # The gateway is the only autoscaled workload: stateless, HTTP-bound, no
 # database lock contention.
 #
-# inventory-service is deliberately not autoscaled. Its reserve path holds
-# `SELECT ... FOR UPDATE` on the ticket-class row, so throughput against one hot
+# inventory-service is deliberately not autoscaled. Its reserve path holds the
+# ticket-class row lock from its guarded UPDATE to COMMIT, so throughput on one hot
 # ticket class is bounded by lock hold time rather than replica count, while
 # each extra replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the
 # stock max_connections=100. Scaling it costs connections and buys nothing.

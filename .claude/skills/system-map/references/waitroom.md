@@ -1,5 +1,7 @@
 # Waitroom — reading guide
 
+*Trust labels checked against the code on 2026-09-23.*
+
 For anything touching the queue, admission, sessions, checkout tokens, the draw, or
 the waitroom's Kafka consumer.
 
@@ -24,7 +26,7 @@ the waitroom's Kafka consumer.
 | Question | Owner | Verify in |
 |---|---|---|
 | Who is admitted next, and when | service `CLAUDE.md`, *Order is a draw…* | `services/waitroom-svc/internal/models/session.go`, `services/waitroom-svc/internal/repository/redis/queue_repository.go` |
-| What admission does, and what it never drops | service `CLAUDE.md`, *Admission is claim/ack* | `services/waitroom-svc/internal/service/queue_processor.go` |
+| What admission does to a queue entry | service `CLAUDE.md`, *Admission is claim/ack* | `services/waitroom-svc/internal/service/queue_processor.go` |
 | How many buyers may check out at once | root `CLAUDE.md`, register — **open** | `services/waitroom-svc/internal/service/queue_processor.go`, `services/waitroom-svc/config/config.go` |
 | What a join asks event-svc | service `CLAUDE.md`, *JoinQueue asks event-svc…* | `services/waitroom-svc/internal/service/event_gate.go` |
 | How a client learns its position and token | service `CLAUDE.md`, *Admission is discovered by polling* | `services/waitroom-svc/internal/service/waitroom_service.go` |

@@ -55,7 +55,7 @@ does not.
 | A gRPC contract, and who consumes it | `proto/`, then `.claude/skills/proto-change/SKILL.md` |
 | A new RPC, end to end | `.claude/skills/add-grpc-endpoint/SKILL.md` |
 | A new service | `.claude/skills/add-service/SKILL.md` |
-| Which gRPC code, which HTTP status | root `CLAUDE.md`, *Error taxonomy*; mapped in `services/api-gateway/src/common/filters/global-exception.filter.ts` |
+| Which gRPC code, which HTTP status | root `CLAUDE.md`, *Error taxonomy*; the table is `services/api-gateway/src/shared/metrics/code.ts`, applied by `services/api-gateway/src/common/filters/global-exception.filter.ts` |
 | A Kafka topic's producer and consumer | the names in `services/order-svc/internal/order/delivery/kafka/constants.go`, `services/waitroom-svc/internal/delivery/kafka/constants.go`, `services/payment-svc/outbox-relay/src/kafka.ts` |
 | Metrics, dashboards, alerts, PromQL | `.claude/skills/observability/SKILL.md`; the contract is `docs/METRICS.md` |
 | An alert fired | `docs/RUNBOOK.md`, one section per alert |
