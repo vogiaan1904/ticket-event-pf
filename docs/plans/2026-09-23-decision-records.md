@@ -1,6 +1,8 @@
 # Decision records: written when a call is made, reviewed from one table
 
-**Status: NOT STARTED.**
+**Status: COMPLETE 2026-09-23.** Recorded as [0011](../decisions/0011-decisions-are-recorded-when-made.md).
+The `decision-records` workflow passed on its first run (`602ab7e`); records
+0003–0010 backfill the day's calls.
 
 **Goal:** Every architectural decision gets a record in `docs/decisions/` when it is
 made, is confirmed with evidence when the work lands, and can be reviewed as a

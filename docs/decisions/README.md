@@ -89,7 +89,7 @@ the records, never the block.
 |---|---|---|---|---|---|
 | [0001](0001-decisions-are-surfaced-then-owned.md) | How are decisions made between the architect and the agent? | Options, then the architect restates the reasoning before any work (teach-back) | Options with no recommendation, or with the agent's lean marked | A stop on every trade-off; abandoned the same day | superseded by 0002 |
 | [0002](0002-the-agent-is-a-mentor-not-a-gate.md) | What is the agent's role in a decision? | A mentor: research, verify, explain briefly, name every trade-off; no gate | Enforcing 0001 harder, or dropping the protocol | Ownership rests on explanations good enough to argue with, not on a check | accepted |
-| [0011](0011-decisions-are-recorded-when-made.md) | How does a decision reach a reviewable record? | The agent drafts it when the call is made and confirms it when the work lands; a review table is generated from the records | Recording when an arc closes, or only on request | One record per decision to write and keep current | proposed |
+| [0011](0011-decisions-are-recorded-when-made.md) | How does a decision reach a reviewable record? | The agent drafts it when the call is made and confirms it when the work lands; a review table is generated from the records | Recording when an arc closes, or only on request | One record per decision to write and keep current | accepted |
 
 ### waitroom-stampede
 
