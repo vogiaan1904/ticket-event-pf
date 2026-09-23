@@ -43,6 +43,8 @@ describing it for a week — because the fact had been copied rather than linked
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
+| Do the waitroom's stampede changes survive an end-to-end run? | `docs/plans/2026-09-23-waitroom-join-stampede.md` landed phases 1–4, but `make -C deploy gate1` has not run against them — it needs the k3s box, and kind was retired for disk. |
+| Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports
 
