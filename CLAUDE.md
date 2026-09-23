@@ -10,6 +10,38 @@ Each service has its own `CLAUDE.md` with service-specific detail — read that 
 
 See `README.md` for the architecture overview and the end-to-end purchase data flow, and `docs/ARCHITECTURE.md` for the longer design walkthrough of each decision. `deploy/README.md` covers the Helm chart, its per-target values overlays, and the Terraform under `deploy/terraform/`.
 
+## Decision register
+
+Before proposing an architectural change, find the question here. If a row owns
+it, read that document and work from its decision instead of deriving a new one.
+If the question is open, it is yours to decide.
+
+**A fact has exactly one home; everywhere else points at it.** `35e864f` removed
+`SELECT … FOR UPDATE` from the reserve path, and three documents went on
+describing it for a week — because the fact had been copied rather than linked.
+
+### Decided
+
+| Question | Owned by | State |
+|---|---|---|
+| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2) built; (b)–(f) specified, unbuilt |
+| What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
+| Who decides what, and what is the agent's role? | `docs/decisions/0002` | Accepted 2026-09-22 |
+| What runs where, and how does it authenticate? | `.claude/skills/deployment-architecture` | Built through the k3s and ephemeral-EKS targets |
+| How does a failure become a gRPC code, then an HTTP status? | This file, *Error taxonomy* | Binding |
+| What does every workload publish, and how is it queried? | `docs/METRICS.md` | Binding |
+| Which failures page, and which never do? | This file, *Alerting policy* | Binding |
+| Where does rationale live — comment, design, or plan? | This file, *Comment conventions*; `docs/README.md` | Binding |
+
+### Open
+
+| Question | Why it is open |
+|---|---|
+| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go:84` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. |
+| What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
+| Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
+| Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
+
 ## Services & ports
 
 Ports below are the **authoritative** values (from each service's config/`main`). The port table in the root `README.md` is stale — do not trust it.
@@ -215,4 +247,8 @@ design, dated because it records a decision made on a day, and read once. A
 completed plan says so in its first lines. Plans address whoever does the work,
 never a tool. Full rules: `docs/README.md`.
 
-When you change a system-wide rule or invariant, update this file.
+When you change a system-wide rule or invariant, update this file. When a
+question above is settled, move its row from *Open* to *Decided* and name the
+document that now owns it; when a new design doc is written, give it a row. A
+register that lags is worse than none, because its silence reads as "nobody has
+decided this."
