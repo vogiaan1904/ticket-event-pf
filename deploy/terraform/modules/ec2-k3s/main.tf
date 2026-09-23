@@ -119,11 +119,12 @@ resource "aws_instance" "k3s" {
 
   tags = merge(var.tags, { Name = "ticketbottle-k3s" })
 
-  # al2023.value is the "latest" SSM alias, not a pin -- AWS republishing it
-  # forces a replace (ami is a ForceNew attribute) on the next unrelated
-  # apply, e.g. an SSH-only IP change. Ignored here; take a new AMI only via
-  # a deliberate `terraform taint`.
+  # ForceNew attributes that drift with nobody changing them. Unignored, an
+  # unrelated apply (an SSH-only IP change) replaces the box and its data:
+  #   ami                         -> the "latest" SSM alias is republished
+  #   associate_public_ip_address -> reads false while the box is stopped
+  # Take a new AMI deliberately: `terraform apply -replace=module.ec2_k3s.aws_instance.k3s`.
   lifecycle {
-    ignore_changes = [ami]
+    ignore_changes = [ami, associate_public_ip_address]
   }
 }
