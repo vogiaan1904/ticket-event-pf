@@ -241,3 +241,17 @@ func TestOnlyTheOwnerCanReadOrLeaveASession(t *testing.T) {
 		t.Fatalf("a stranger's leave removed the owner: status=%s", st.Status)
 	}
 }
+
+// A stranger learns nothing about a session, not even that it has ended.
+func TestAStrangerCannotTellAnEndedSessionExists(t *testing.T) {
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	ssID := r.join(t, "u-owner")
+	ctx := context.Background()
+	if err := r.svc.LeaveQueue(ctx, ssID, "u-owner"); err != nil {
+		t.Fatalf("owner leave: %v", err)
+	}
+
+	if _, err := r.svc.GetQueueStatus(ctx, ssID, "u-other"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("an ended session read by a stranger: err=%v, want ErrSessionNotFound", err)
+	}
+}

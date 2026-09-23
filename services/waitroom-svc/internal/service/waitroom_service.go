@@ -122,13 +122,9 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 }
 
 func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error) {
-	ss, err := s.ssSvc.ActiveSession(ctx, ssID)
+	ss, err := s.ssSvc.ActiveSession(ctx, ssID, userID)
 	if err != nil {
 		return nil, err
-	}
-	// Why: the response carries a checkout token, which is a bearer credential.
-	if ss.UserID != userID {
-		return nil, ErrSessionNotFound
 	}
 
 	stt, err := s.qSvc.GetQueueStatus(ctx, ssID, ss)
