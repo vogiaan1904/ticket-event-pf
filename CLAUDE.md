@@ -49,7 +49,7 @@ describing it for a week — because the fact had been copied rather than linked
 
 ## Services & ports
 
-Ports below are the **authoritative** values (from each service's config/`main`). The port table in the root `README.md` is stale — do not trust it.
+Ports below are the **authoritative** values (from each service's config/`main`); the root `README.md` repeats them for human readers.
 
 | Service | Dir | Lang/Framework | Port | Protocol | Datastore |
 |---------|-----|----------------|------|----------|-----------|

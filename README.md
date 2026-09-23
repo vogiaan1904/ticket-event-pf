@@ -70,7 +70,7 @@ Seven services plus two workloads that carry the payment event path.
 | Waitroom | `services/waitroom-svc` | Go | 50056 | gRPC | Redis |
 | Inventory | `services/inventory-svc` | Go / GORM | 50057 | gRPC | PostgreSQL |
 
-**API Gateway** terminates HTTP, validates requests, enforces JWT authentication and rate limits, maps gRPC status codes onto HTTP responses, and translates REST into internal gRPC calls. It owns no database.
+**API Gateway** terminates HTTP, validates requests, enforces JWT authentication, maps gRPC status codes onto HTTP responses, and translates REST into internal gRPC calls. It owns no database.
 
 **User** handles registration, authentication, profiles, and email verification.
 
@@ -78,11 +78,11 @@ Seven services plus two workloads that carry the payment event path.
 
 **Order** is the saga orchestrator. Temporal workflows (`CreateOrder`, `ConfirmOrder`) coordinate Event, Inventory, and Payment, and compensate automatically at whatever point a purchase fails. It runs as two workloads — an API server and a Kafka consumer — against a single-table DynamoDB design.
 
-**Payment** integrates ZaloPay, PayOS, and VNPay behind one interface, handles provider webhooks idempotently, and records outgoing events in an outbox table written in the same transaction as the payment update.
+**Payment** integrates ZaloPay and PayOS behind one interface, with VNPay planned, handles provider webhooks idempotently, and records outgoing events in an outbox table written in the same transaction as the payment update.
 
 **Waitroom** implements the virtual queue on Redis sorted sets. A background processor admits users as checkout slots free up and issues short-lived checkout tokens.
 
-**Inventory** holds ticket classes and quantities. Its three-step `Reserve → Confirm | Release` flow runs under `SELECT … FOR UPDATE`, with a sweeper that expires stale holds.
+**Inventory** holds ticket classes and quantities. Its three-step `Reserve → Confirm | Release` flow never lets a counter pass capacity: `Reserve` is a guarded conditional `UPDATE`, and a sweeper expires stale holds.
 
 ---
 
@@ -93,7 +93,7 @@ Seven services plus two workloads that carry the payment event path.
 | 1 | Join the queue | Buyer enters the waiting room and receives a fair position | Waitroom, Redis sorted set |
 | 2 | Get admitted | A background loop admits N buyers and issues a checkout token | Waitroom, `queue.ready` |
 | 3 | Create order | Gateway calls Order; the `CreateOrder` workflow begins | Order, Temporal |
-| 4 | Reserve tickets | Inventory locks the rows and holds the quantity | Inventory, `SELECT … FOR UPDATE` |
+| 4 | Reserve tickets | Inventory takes the quantity only if it is still free, and holds it | Inventory, guarded `UPDATE` |
 | 5 | Payment intent | Payment creates the intent and returns a payment URL | Payment, gRPC |
 | 6 | Pay and call back | The provider webhook marks the payment paid; an outbox row is written in the same transaction | Payment, outbox |
 | 7 | Confirm | The relay publishes the outbox row to Kafka; `ConfirmOrder` confirms inventory and completes the order | Kafka, Temporal |
@@ -131,7 +131,7 @@ Delivery is at-least-once, so every consumer is idempotent. Messages that exhaus
 
 **Polyglot persistence.** PostgreSQL where locking and ACID matter (users, events, payments, inventory), DynamoDB for orders queried by known keys, Redis for the queue where latency dominates. The trade-off is several engines to operate and no cross-store joins.
 
-**One HTTP front door.** Centralizing authentication, validation, and rate limiting at the gateway keeps internal services private and free of edge concerns, at the cost of a component that must stay available.
+**One HTTP front door.** Centralizing authentication and validation at the gateway keeps internal services private and free of edge concerns, at the cost of a component that must stay available.
 
 ---
 
@@ -212,7 +212,7 @@ See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure deta
 
 **Logging.** Structured logs throughout — Winston in the TypeScript services, Uber Zap in the Go services. Temporal contributes full workflow execution history for the saga.
 
-**Security.** JWT authentication with role-based access control, rate limiting at the gateway, request validation on every endpoint, parameterized queries, bcrypt password hashing, and CORS plus security headers via Helmet.
+**Security.** JWT authentication with role-based access control, request validation on every endpoint, parameterized queries, argon2 password hashing at the gateway, and a CORS allowlist. The gateway does not rate-limit or set security headers yet.
 
 ---
 

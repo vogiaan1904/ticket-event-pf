@@ -6,7 +6,9 @@ This is the **API Gateway** for TicketBottle V2. For the system-wide picture, po
 
 ## Role
 
-The only HTTP entry point to the platform. It exposes a REST API (global prefix `api`, Swagger docs in `development`/`staging`), handles JWT auth, validation, CORS, and rate limiting, then fans out to the backend services as a **gRPC client**. It owns no database.
+The only HTTP entry point to the platform. It exposes a REST API (global prefix `api`, Swagger docs in `development`/`staging`), handles JWT auth, validation and CORS, then fans out to the backend services as a **gRPC client**. It owns no database.
+
+Nothing rate-limits requests or sets security headers: `express-rate-limit` and `helmet` are dependencies that `src/main.ts` never wires.
 
 ## Commands
 
@@ -27,7 +29,7 @@ Runs on port **3000**. Swagger is served at `/<globalPrefix>/<swaggerPath>` only
 
 - `src/modules/{auth,users,events,inventory,orders,waitroom}` — one feature module per downstream service; each holds REST controllers + DTOs and a gRPC client that calls the matching service.
 - `src/common/{guards,filters,interceptors,middlewares,decorators,exceptions}` — auth guards, exception mapping (gRPC status → HTTP), request plumbing.
-- `src/shared/{microservices,services,constants,swagger,interfaces,types,utils}` — gRPC client registration, config/logger services, Swagger setup.
+- `src/shared/{microservices,services,constants,swagger,interfaces,types,utils}` — config/logger services, Swagger setup, downstream error-code constants. Each feature module registers its own gRPC client (`ClientsModule` in `<feature>.module.ts`).
 - `src/protogen/` — generated gRPC stubs (do not hand-edit). The single source of truth is the root `../../proto/` directory; `npm run update:proto` syncs it into `src/protos/` and regenerates `src/protogen/`. `src/protos/` is a generated, synced-from-root copy that the NestJS gRPC transport loads at runtime (`protoPath`) and `nest-cli.json` ships into `dist` — don't hand-edit it either.
 
 ## Notes

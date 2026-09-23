@@ -171,14 +171,15 @@ GET session:abc-123
 
 ```redis
 # Key: waitroom:{event_id}:queue
-# Score: timestamp (FIFO)
+# Score: drawn once at join -- a random point in the second before the sale
+#        for early joiners, the join time after it (CLAUDE.md, "Order is a draw")
 # Members: session_ids
 
 ZRANGE waitroom:concert-2024:queue 0 -1 WITHSCORES
 1) "session-abc-123"  # First in line
-2) "1696248000"       # Joined at timestamp
+2) "1696247999.12"    # Drawn into the second before the sale opened
 3) "session-def-456"  # Second in line
-4) "1696248015"       # Joined 15 seconds later
+4) "1696248015"       # Joined 15 seconds after it opened
 ```
 
 ### 3. Processing Set (Sorted Set)
@@ -202,11 +203,6 @@ ZRANGE waitroom:concert-2024:checkouts 0 -1
 # Holds payloads whose Kafka publish failed; drained at the head of the next tick.
 
 LRANGE waitroom:queue_ready:pending 0 -1
-
-# Receives real-time updates when:
-# - User joins queue (user_joined)
-# - User leaves queue (user_left)
-# - User admitted to checkout (user_admitted)
 ```
 
 ## Kafka Event Flow
@@ -243,8 +239,6 @@ queue state only; Kafka carries everything that crosses a service boundary.
 - **Latency:** ~5-50ms
 - **Durability:** Persistent (stored, replayable)
 - **Use case:** Notify other services about queue events
-
-**Both are necessary** - Redis for instant client updates, Kafka for reliable service communication.
 
 ## Configuration
 

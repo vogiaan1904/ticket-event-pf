@@ -21,7 +21,7 @@ Order matters: this is the real sequence a ticket purchase follows across the se
 | 1 | Join the queue | User enters the virtual waiting room; gets a fair position | Waitroom · Redis ZSET |
 | 2 | Get admitted | A background loop admits N users at a time and issues a checkout token | Waitroom → Kafka |
 | 3 | Create order | Gateway calls Order; a durable saga workflow begins | Order · Temporal |
-| 4 | Reserve tickets | Inventory locks rows and holds the quantity for ~15 min | Inventory · `SELECT … FOR UPDATE` |
+| 4 | Reserve tickets | Inventory takes the quantity only if it is still free, and holds it past the payment window | Inventory · guarded `UPDATE` |
 | 5 | Payment intent | Payment creates the intent and returns a pay URL | Payment · gRPC |
 | 6 | Pay & callback | Provider webhook marks paid; an outbox row is written atomically | Payment · Outbox |
 | 7 | Confirm | Outbox → Kafka → Order confirms inventory; order is `COMPLETED` | Kafka → Temporal |
@@ -38,7 +38,7 @@ Each decision below lists **why** it exists and its **trade-off**.
 **Seven services in two languages.** The *hot path* (queue, inventory) has very different scaling and latency needs than *business CRUD* (users, events). Go handles the concurrency-heavy, performance-critical pieces; NestJS handles the richer business logic. Each service scales, deploys, and fails independently.
 - **Trade-off:** network hops, distributed debugging, and ops overhead you don't have in a monolith. Justified by this domain — overkill for a low-traffic app.
 
-**One HTTP front door (the API Gateway).** The gateway is the *only* service exposed to the internet. It centralizes auth, rate limiting, validation, and CORS, then translates REST into internal gRPC. Internal services stay private and never speak HTTP to the outside.
+**One HTTP front door (the API Gateway).** The gateway is the *only* service exposed to the internet. It centralizes auth, validation, and CORS, then translates REST into internal gRPC. Internal services stay private and never speak HTTP to the outside.
 - **Trade-off:** a single choke point you must keep available and scale — but far simpler than every service doing its own auth.
 
 ### 2 · How services talk — sync when you need an answer, async when you don't
@@ -54,7 +54,7 @@ Each decision below lists **why** it exists and its **trade-off**.
 **Virtual waiting room — admit a bounded few at a time.** A hot on-sale is a *thundering herd*: everyone arrives in the same second. The waiting room queues them fairly (Redis sorted set) and admits only a capped number into checkout, so inventory and payment never get flooded.
 - **Trade-off:** users wait, and you carry queue state plus a background loop that releases slots as they free up.
 
-**Atomic inventory — lock the row, never oversell.** Two buyers must never claim the last seat. Every quantity change happens inside a transaction that *locks the row* (`SELECT … FOR UPDATE`). A three-step Reserve → Confirm / Release with a timed hold lets abandoned carts free themselves.
+**Atomic inventory — lock the row, never oversell.** Two buyers must never claim the last seat. Every quantity change is a write that cannot take the count past capacity: `Reserve` is one guarded `UPDATE` whose `WHERE` clause carries the capacity check, and Postgres serialises writers on the row. A three-step Reserve → Confirm / Release with a timed hold lets abandoned carts free themselves.
 - **Trade-off:** locks cut concurrency versus an optimistic approach, and you need a sweeper to expire stale holds.
 
 ### 4 · Consistency without one big transaction
@@ -71,9 +71,6 @@ This is the hardest part: a purchase spans services **and** databases, so a sing
 
 **Polyglot persistence.** *Postgres* (relational, transactional) for users, events, payments, and inventory where locks and ACID matter. *DynamoDB* (single-table NoSQL) for orders, queried by known keys at scale. *Redis* (in-memory) for the queue and sessions where microsecond latency wins.
 - **Trade-off:** several engines to operate, no cross-database joins, and you must model each store around its access patterns.
-
-**CQRS in the Event service.** The event service separates its *write model* from its *read model* so the two can be optimized and scaled independently — reading an event catalog behaves very differently from writing during setup.
-- **Trade-off:** more moving parts and eventual consistency between the two sides; only worth it where read/write shapes truly diverge.
 
 ### 6 · Running it — containers, Kubernetes, and cost-aware cloud targets
 
@@ -104,3 +101,4 @@ Knowing where this system is real and where it is stubbed is part of reading it.
 | [`README.md`](../README.md) | Architecture summary, services, ports, data flow |
 | [`deploy/README.md`](../deploy/README.md) | Helm chart, values overlays, Terraform |
 | `CLAUDE.md` (root + per service) | Conventions & gotchas |
+| `.claude/skills/system-map/` | Which document owns which question, and how far to trust it |

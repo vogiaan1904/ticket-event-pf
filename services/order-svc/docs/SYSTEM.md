@@ -17,7 +17,7 @@
 ```
 User Request → gRPC API → Temporal CreateOrder Workflow
                         ↓
-            [Check → Reserve → Create → Pay]
+            [Reserve → Create → Pay]
                         ↓
             Payment Complete Event (Kafka)
                         ↓

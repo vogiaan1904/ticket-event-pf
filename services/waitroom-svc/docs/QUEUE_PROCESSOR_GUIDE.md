@@ -107,7 +107,6 @@ waitroom:{event_id}:queue                 → Sorted set (users waiting)
 waitroom:{event_id}:checkouts             → Sorted set (users in checkout, scored by slot expiry)
 waitroom:session:{session_id}             → JSON (session data)
 waitroom:user_session:{user}:{event}      → String (session ID index)
-queue:updates:{event_id}                  → Pub/Sub channel
 ```
 
 ### Data Flow

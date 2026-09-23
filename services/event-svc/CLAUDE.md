@@ -40,5 +40,5 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 
 ## Notes
 
-- Despite the root README mentioning CQRS, this service does **not** use `@nestjs/cqrs` — it is a plain service + repository. Don't add CQRS scaffolding expecting it to already exist.
+- This service does **not** use `@nestjs/cqrs` — it is a plain service + repository. Don't add CQRS scaffolding expecting it to already exist.
 - Role-based access (organizer vs admin) gates lifecycle transitions; keep authorization checks in the service layer alongside the status update.
