@@ -9,14 +9,13 @@ the gateway's gRPC clients, and its request metrics.
 
 1. `services/api-gateway/CLAUDE.md` — **current**: role, commands, layout, where
    error mappings and client addresses belong.
-2. Root `CLAUDE.md`, *Error taxonomy* and *Canonical TS layout* — binding: the only
-   place a gRPC code becomes an HTTP status, and the target shape for any new module.
-3. `services/api-gateway/src/CLAUDE.md` — the style guide for the module shape the
-   gateway has today (`dtos/req` + `dtos/resp`, mappers, enums). It loads by itself
-   whenever you open gateway source. It predates the *Canonical TS layout*, which
-   forbids that split in new structure; where they conflict, the root file is
-   binding. Whether to keep it is open — see the root register.
-4. `docs/plans/2026-09-20-api-gateway-test-coverage.md` — what the tests pin, and the
+2. Root `CLAUDE.md`, *Error taxonomy* — binding: the only place a gRPC code becomes
+   an HTTP status.
+3. `services/api-gateway/src/CLAUDE.md` — **current**: how a feature module, its
+   errors and its auth are written. It loads by itself whenever you open gateway source.
+4. `docs/design/ts-layout.md` — the target shape for new structure. The gateway is not
+   converged; its `dtos/req` + `dtos/resp` modules stay until it is, whole.
+5. `docs/plans/2026-09-20-api-gateway-test-coverage.md` — what the tests pin, and the
    defects they found. A record of that day.
 
 ## By question

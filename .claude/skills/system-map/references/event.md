@@ -11,9 +11,9 @@ rules the waitroom and the saga read from an event.
    proto enum and why it must go through the mapper, layout, and the absence of CQRS.
 2. `docs/plans/2026-09-21-event-svc-domain-tests.md` — what the domain tests pin, and
    the defects they found. A record of that day.
-3. Root `CLAUDE.md`, *Canonical TS layout* — which calls `event-svc` the reference
-   and also forbids a split `event-svc` has. That contradiction is open; don't
-   resolve it by copying either shape into another service.
+3. `docs/design/ts-layout.md` — the target layout. `event-svc` is not converged
+   (its `controllers/grpc/dtos` + `dtos/` split is listed there), so don't copy its
+   shape into another service.
 
 ## By question
 

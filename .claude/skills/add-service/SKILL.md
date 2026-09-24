@@ -24,19 +24,21 @@ pkg/                        # logger, errors, grpc, response, util (reuse the ex
 ```
 Logging: zap wrapper, ctx-first `f`-methods. Use `fmt.Errorf` freely (the error-var rule is order-svc-only).
 
-**NestJS** (mirror the **Canonical TS layout** in root `CLAUDE.md` — do NOT copy event-svc's parallel `controllers/grpc/dtos` + `dtos` split):
+**NestJS** — follow `docs/design/ts-layout.md`, the domain-service or small-service
+archetype. No existing TS service is converged, so do not copy one:
 ```
-src/main.ts                 # NestFactory.createMicroservice, Transport.GRPC
-src/modules/<feature>/      # controller + service + module + dto/ + repository.ts
-src/common/*                # GlobalGrpcExceptionFilter, validation
-src/shared/*                # config/logger
-src/protogen/*              # generated (npm run proto:all)
-prisma/                     # if Prisma-backed
+src/main.ts                   # NestFactory.createMicroservice, Transport.GRPC
+src/modules/<feature>/        # <feature>.controller.ts, .service.ts, .module.ts, dto/
+                              # + <feature>.types.ts, repository/, entities/ for a domain service
+src/infra/database/prisma/    # if Prisma-backed
+src/common/*                  # exception filter, validation
+src/shared/*                  # config, logger
+src/protogen/*                # generated (npm run proto:all)
 ```
 Don't scaffold empty layers; right-size folder depth to the service.
 
 ## 3. Wire it up
-- **Port:** assign the next free port; record it in root `CLAUDE.md`'s authoritative port table (the README table is stale).
+- **Port:** assign the next free port; record it in root `CLAUDE.md`'s authoritative port table and in the README's copy for human readers.
 - **Config:** add a `<name>-config` ConfigMap block to `deploy/helm/ticketbottle/templates/apps/config.yaml`.
 - **Chart:** add the image to the matrix in `.github/workflows/build-push-ecr.yml` (and its ECR repository to `deploy/terraform/envs/foundation/main.tf`) and a Deployment via the `tb.appService` template (`deploy/helm/ticketbottle/templates/apps/`). Build contexts point at `services/<name>-svc` — never `../ticketbottle-*`.
 - **Proto regen:** add the new consumer to the root `Makefile` `proto-go`/`proto-ts` target.

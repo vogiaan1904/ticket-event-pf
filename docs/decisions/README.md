@@ -125,4 +125,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0013](0013-the-gateway-throttles-sign-in-not-purchase.md) | Should the gateway rate-limit and set security headers? | Helmet on every response; a per-IP limit on sign-in and sign-up only, in memory, with the trusted proxy hops set per target | Headers only, with limiting left to an ALB or WAF later | Per replica and per IP: N replicas admit N times the limit, and buyers behind one carrier NAT share a budget | proposed |
+
+### ts-layout
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0014](0014-ts-structure-follows-the-june-layout-rule.md) | Which TS layout is the target for new structure? | The 2026-06-16 rule, restored as a design: flat controller, one transport `dto/`, domain shapes in `<feature>.types.ts`, additions by archetype | Making `event-svc`'s current shape the rule | A rule no service follows yet, applied only as each service is converged | proposed |
 <!-- decisions:index:end -->

@@ -38,6 +38,7 @@ describing it for a week — because the fact had been copied rather than linked
 | Where is a decision's why recorded, and how is it reviewed? | `docs/decisions/README.md` | One record per decision, drafted when made; reviewed from the generated index |
 | Where does an agent start to learn a part of the system, and which document wins? | `.claude/skills/system-map` | A map of documents, not a copy of them; CI fails on a gone path or an uncited document; 2026-09-23 |
 | Does the gateway rate-limit and set security headers? | `docs/decisions/0013` | Helmet everywhere; sign-in and sign-up throttled per client IP, purchase never; 2026-09-24 |
+| Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet |
 
 ### Open
 
@@ -47,7 +48,6 @@ describing it for a week — because the fact had been copied rather than linked
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
-| Which TS layout is the reference for new structure? | *Canonical TS layout* below calls `event-svc` the converged reference and, in the same list, forbids the `controllers/grpc/dtos` + `dtos/` split `event-svc` has. The `add-service` skill says not to copy it, and `services/api-gateway/src/CLAUDE.md` — loaded whenever gateway source is opened — prescribes `dtos/req` + `dtos/resp`. |
 | Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports
@@ -247,12 +247,11 @@ it reads as noise once the bug is forgotten. State the invariant instead.
 
 - **Go services** (`order`, `inventory`, `waitroom`) share a layout: `cmd/<binary>/main.go` → `internal/{delivery,service(s),repository,models}` → shared `pkg/` (logger, errors, grpc, response, util). Logging uses the custom zap wrapper with `f`-suffixed, ctx-first methods: `l.Errorf(ctx, "...", err)`, `l.Infof(ctx, "...")`. (The "use error vars, never `fmt.Errorf`" rule is **Order-specific** — see `services/order-svc/CLAUDE.md`; the other Go services use `fmt.Errorf` freely.)
 - **TS services** (`api-gateway`, `event`, `user`, `payment`) are NestJS. The gateway boots an HTTP app (`NestFactory.create`); the others boot gRPC microservices (`NestFactory.createMicroservice`, `Transport.GRPC`). Prisma services use `prisma migrate dev` / migrations under `prisma/`.
-  - **Canonical TS layout (target convention — apply when touching a service):**
-    `src/main.ts` → `src/modules/<feature>/` (controller + service + module + `dto/` + `repository.ts`) → `src/common/*` (filters, guards, interceptors, decorators) → `src/shared/*` (cross-cutting helpers) → `src/protogen/*` (generated, never hand-edited).
-    - One `dto/` per module — do **not** split into parallel `dtos/req`+`dtos/resp`+`controllers/grpc/dtos` trees.
-    - Prefer the generated proto types/enums directly; avoid redefining domain enums and hand-writing enum↔proto mappers.
-    - Don't scaffold empty layers. A small service (e.g. `user-svc`) should not carry the same folder depth as the gateway. Collapse single-file `common/`/`shared/` folders into flat files.
-  - The three TS services currently use **three different** module/DTO conventions. `event-svc` is the converged reference implementation; bring the others onto it when you touch them.
+  - **Layout** — the target is `docs/design/ts-layout.md`: a flat controller, one
+    transport `dto/`, domain shapes in `<feature>.types.ts`, `infra/` for adapters,
+    and additions by archetype so a small service stays small. **No service follows
+    it yet**, so none is a template: a new module follows the design, not its
+    neighbours, and an existing service converges whole, never one module at a time.
 
 ## Documentation layout
 

@@ -28,4 +28,4 @@ Add the RPC + request/response messages to `proto/<owner>.proto`, then regenerat
 - Rebuild the owner (`go build ./...` or `npm run build`) and the gateway (`npm run build`).
 - The gateway is the only HTTP entry point (port 3000, Swagger in dev) — smoke-test through it.
 
-> Match the **existing** module's conventions in the service you're editing — the three TS services currently differ (see root `CLAUDE.md` "Canonical TS layout"). Don't introduce a new layout.
+> Match the **existing** module's conventions in the service you're editing — the TS services currently differ (see `docs/design/ts-layout.md`, *Where each service stands*). Don't introduce a new layout; a service converges whole.
