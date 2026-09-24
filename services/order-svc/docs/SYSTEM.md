@@ -464,7 +464,6 @@ SERVER_GRPC_PORT=50054
 SERVER_READ_TIMEOUT=30s
 SERVER_WRITE_TIMEOUT=30s
 SERVER_IDLE_TIMEOUT=60s
-PAYMENT_TIMEOUT_SECONDS=600  # loaded, never read: the window is PaymentTimeout in internal/workflows/shared.go
 ```
 
 ### Database (DynamoDB)
