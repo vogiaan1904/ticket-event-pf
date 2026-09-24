@@ -37,6 +37,7 @@ describing it for a week — because the fact had been copied rather than linked
 | Where does rationale live — comment, design, or plan? | This file, *Comment conventions*; `docs/README.md` | Binding |
 | Where is a decision's why recorded, and how is it reviewed? | `docs/decisions/README.md` | One record per decision, drafted when made; reviewed from the generated index |
 | Where does an agent start to learn a part of the system, and which document wins? | `.claude/skills/system-map` | A map of documents, not a copy of them; CI fails on a gone path or an uncited document; 2026-09-23 |
+| Does the gateway rate-limit and set security headers? | `docs/decisions/0013` | Helmet everywhere; sign-in and sign-up throttled per client IP, purchase never; 2026-09-24 |
 
 ### Open
 
@@ -46,7 +47,6 @@ describing it for a week — because the fact had been copied rather than linked
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
-| Should the gateway rate-limit and set security headers? | Neither happens: `express-rate-limit` and `helmet` are gateway dependencies that `src/main.ts` never wires. The README claimed both until 2026-09-23. |
 | Which TS layout is the reference for new structure? | *Canonical TS layout* below calls `event-svc` the converged reference and, in the same list, forbids the `controllers/grpc/dtos` + `dtos/` split `event-svc` has. The `add-service` skill says not to copy it, and `services/api-gateway/src/CLAUDE.md` — loaded whenever gateway source is opened — prescribes `dtos/req` + `dtos/resp`. |
 | Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
@@ -141,8 +141,10 @@ gRPC code is the contract; the API Gateway maps it to HTTP in
 produce it, the mapping is wrong. Sold out, sale closed, queue full and wrong-state
 are all `FAILED_PRECONDITION` — a buyer losing a race is not a server fault.
 
-`RESOURCE_EXHAUSTED` is deliberately unused: its canonical HTTP mapping is 429,
-which tells a buyer they were rate-limited when the truth is the show sold out.
+`RESOURCE_EXHAUSTED` means only that the gateway throttled this client — its own
+429 on sign-in and sign-up. No service returns it, and no business outcome maps to
+it: a sold-out buyer told they were rate-limited would retry a show that is gone.
+The gateway labels a downstream `RESOURCE_EXHAUSTED` `INTERNAL`.
 
 **The code is required, not defaulted.** Go services take it as the first argument
 of `pkgErrors.NewGRPCError(codes.X, "ID", "message")`, so omitting it does not

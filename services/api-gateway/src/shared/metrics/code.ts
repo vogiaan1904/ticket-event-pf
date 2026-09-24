@@ -31,6 +31,7 @@ const HTTP_TO_GRPC: Record<number, GrpcStatus> = {
   403: GrpcStatus.PERMISSION_DENIED,
   404: GrpcStatus.NOT_FOUND,
   409: GrpcStatus.FAILED_PRECONDITION,
+  429: GrpcStatus.RESOURCE_EXHAUSTED,
   501: GrpcStatus.UNIMPLEMENTED,
   503: GrpcStatus.UNAVAILABLE,
   504: GrpcStatus.DEADLINE_EXCEEDED,

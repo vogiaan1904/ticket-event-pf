@@ -212,7 +212,7 @@ See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure deta
 
 **Logging.** Structured logs throughout — Winston in the TypeScript services, Uber Zap in the Go services. Temporal contributes full workflow execution history for the saga.
 
-**Security.** JWT authentication with role-based access control, request validation on every endpoint, parameterized queries, argon2 password hashing at the gateway, and a CORS allowlist. The gateway does not rate-limit or set security headers yet.
+**Security.** JWT authentication with role-based access control, request validation on every endpoint, parameterized queries, argon2 password hashing at the gateway, and a CORS allowlist. The gateway sets security headers and throttles sign-in and sign-up per client.
 
 ---
 

@@ -9,7 +9,7 @@
 | `DEADLINE_EXCEEDED` | We did not answer in time | Covered by the latency burn rate |
 | `FAILED_PRECONDITION` | Sold out, sale closed, wrong state | **Never** |
 | `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_ARGUMENT`, `PERMISSION_DENIED`, `UNAUTHENTICATED` | Client-side outcomes | Never — a spike is a dashboard question |
-| `RESOURCE_EXHAUSTED` | Deliberately unused | — |
+| `RESOURCE_EXHAUSTED` | The gateway throttled a sign-in or sign-up (its own 429) | Never — a spike is someone hammering sign-in, a dashboard question |
 
 The absence of a `FAILED_PRECONDITION` rule is the policy's load-bearing half, so it is recorded as a comment in `prometheusrule.yaml` and asserted against the live object. YAML comments never reach the API server, so a non-zero count means someone wrote a real rule:
 

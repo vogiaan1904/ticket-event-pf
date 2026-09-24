@@ -8,7 +8,7 @@ This is the **API Gateway** for TicketBottle V2. For the system-wide picture, po
 
 The only HTTP entry point to the platform. It exposes a REST API (global prefix `api`, Swagger docs in `development`/`staging`), handles JWT auth, validation and CORS, then fans out to the backend services as a **gRPC client**. It owns no database.
 
-Nothing rate-limits requests or sets security headers: `express-rate-limit` and `helmet` are dependencies that `src/main.ts` never wires.
+`helmet` sets security headers on every response. Sign-in and sign-up are throttled per client IP, and nothing else is; the proxy hop count that makes the client IP trustworthy is set per target (`APP_TRUST_PROXY_HOPS`). Why, and what it costs: `docs/decisions/0013-the-gateway-throttles-sign-in-not-purchase.md`.
 
 ## Commands
 

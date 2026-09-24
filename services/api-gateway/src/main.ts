@@ -1,19 +1,25 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppConfigService } from '@services/config.service';
 import { LoggerService } from '@services/logger.service';
 import { AppModule } from './app.module';
+import { applyEdgeSecurity } from './common/security';
 import { startMetricsServer } from './shared/metrics/server';
 import { setupSwagger } from './shared/swagger/setup';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   const configService = app.get(AppConfigService);
   const logger = app.get(LoggerService);
   const isDocsEnv = ['development', 'staging'].includes(configService.nodeEnv);
 
   app.useLogger(logger);
+  applyEdgeSecurity(app, {
+    trustProxyHops: configService.appConfig.trustProxyHops,
+    docs: isDocsEnv,
+  });
 
   app.setGlobalPrefix(configService.appConfig.globalPrefix || 'api');
   app.useGlobalPipes(new ValidationPipe({ transform: true }));

@@ -1,5 +1,6 @@
 import { SuccessMessage } from '@/common/decorators/success-response.decorator';
 import { AccessGuard } from '@/common/guards/access.guard';
+import { AuthRateLimitGuard } from '@/common/guards/auth-rate-limit.guard';
 import { TokenPair } from '@/shared/interfaces/token.interface';
 import { RequestUser, RequestWithUser } from '@/shared/types/request-user.type';
 import { Body, Controller, Get, Post, Request, UseGuards } from '@nestjs/common';
@@ -14,11 +15,13 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
+  @UseGuards(AuthRateLimitGuard)
   async signup(@Body() dto: SignupDto): Promise<TokenPair> {
     return this.authService.signup(dto);
   }
 
   @Post('signin')
+  @UseGuards(AuthRateLimitGuard)
   async signin(@Body() dto: SigninDto): Promise<TokenPair> {
     return this.authService.signin(dto);
   }

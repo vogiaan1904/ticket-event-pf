@@ -91,6 +91,11 @@ gateway:
   # NodePort for k3s, reached through the SSH tunnel.
   # Set to null on EKS, where the Service becomes ClusterIP behind an ALB Ingress.
   nodePort: 30000
+  # Proxies in front of the gateway: 0 on the NodePort, 1 behind the ALB. Too
+  # many lets a client choose its own rate-limit key with X-Forwarded-For.
+  trustProxyHops: 0
+  # Sign-in and sign-up attempts per client IP per minute, per replica; 0 is off.
+  authRateLimitPerMinute: 20
 
 ingress:
   enabled: false

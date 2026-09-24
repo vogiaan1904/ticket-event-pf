@@ -119,4 +119,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0012](0012-agents-learn-the-system-from-a-map-of-documents.md) | How does an agent find the right source for a part of the system? | One routing skill that holds facts about documents only, with CI failing on a gone path or an uncited document | A skill per service, or a consolidated architecture reference | A map to keep current; the check cannot see a document whose content drifted | accepted |
+
+### gateway-edge
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0013](0013-the-gateway-throttles-sign-in-not-purchase.md) | Should the gateway rate-limit and set security headers? | Helmet on every response; a per-IP limit on sign-in and sign-up only, in memory, with the trusted proxy hops set per target | Headers only, with limiting left to an ALB or WAF later | Per replica and per IP: N replicas admit N times the limit, and buyers behind one carrier NAT share a budget | proposed |
 <!-- decisions:index:end -->

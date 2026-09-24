@@ -26,7 +26,8 @@ the gateway's gRPC clients, and its request metrics.
 | Which HTTP status a failure becomes | root `CLAUDE.md`, *Error taxonomy* | `services/api-gateway/src/shared/metrics/code.ts`, applied by `services/api-gateway/src/common/filters/global-exception.filter.ts` |
 | Sign-up, sign-in, tokens, password hashing | service `CLAUDE.md` | `services/api-gateway/src/modules/auth/auth.service.ts`, `services/api-gateway/src/modules/auth/strategies/jwt.strategy.ts` |
 | Which routes need which role | service `CLAUDE.md` | `services/api-gateway/src/common/guards/access.guard.ts` |
-| Rate limiting, CORS, security headers | service `CLAUDE.md`, *Role* | `services/api-gateway/src/main.ts` |
+| Rate limiting, security headers, trusted proxies | `docs/decisions/0013-the-gateway-throttles-sign-in-not-purchase.md` | `services/api-gateway/src/common/guards/auth-rate-limit.guard.ts`, `services/api-gateway/src/common/security.ts` |
+| CORS | service `CLAUDE.md`, *Role* | `services/api-gateway/src/main.ts` |
 | Why the gateway sends order fields the contract lacks | root `CLAUDE.md`, register — **open** | `services/api-gateway/src/protogen/order.pb.ts` against `services/api-gateway/src/protos/order.proto` |
 | Whose waitroom session a request may touch | `docs/decisions/0008-the-waitroom-enforces-session-ownership.md` | `services/api-gateway/src/modules/waitroom/waitroom.service.ts` |
 | What it records per request | `docs/METRICS.md` | `services/api-gateway/src/common/middlewares/metrics.middleware.ts` |

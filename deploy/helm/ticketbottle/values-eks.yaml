@@ -22,6 +22,7 @@ serviceAccount:
 # The gateway is fronted by an ALB, not a NodePort.
 gateway:
   nodePort: null
+  trustProxyHops: 1
 
 ingress:
   enabled: true
