@@ -1273,9 +1273,10 @@ spec:
             summary: "Saga rollbacks above 0.5 steps/s — read step= on dashboard B3 for where it fails"
             runbook: "docs/RUNBOOK.md#sagacompensationspike"
 
+        # No `for`: one refund is the page, and the [10m] window is the hold.
+        # A `for` as long as the window never fires on a single occurrence.
         - alert: OrdersNeedingRefund
-          expr: increase(tb_order_workflow_duration_seconds_count{workflow="ConfirmOrder",outcome="refund_required"}[10m]) > 0
-          for: 10m
+          expr: increase(tb_order_refund_required_total[10m]) > 0
           labels: { severity: page }
           annotations:
             summary: "A buyer was charged and holds no ticket — nothing consumes order.refund_required"

@@ -37,7 +37,7 @@ Recording rules use `level:metric:operations` — `tb:checkout_good:ratio1h`. Th
 | `TicketBottleInternalErrors` | 5m | page |
 | `OutboxBacklogGrowing` | 10m | page |
 | `SagaCompensationSpike` | 10m | page |
-| `OrdersNeedingRefund` | 10m | page |
+| `OrdersNeedingRefund` | — | page |
 | `TargetDown` | 3m | page |
 | `MetricsMissing` | 5m | ticket |
 | `CheckoutBurnRateFast` | 2m | page |
@@ -59,6 +59,12 @@ Swapping their jobs gives one of two broken alerts:
 |---|---|
 | short window + long `for` | the signal decays before the timer completes — **never fires** |
 | long window + `for: 0s` | fires on one sample, **flaps** as pods cycle |
+
+The exception is a counter of discrete events where one event is the page —
+`OrdersNeedingRefund`. The `increase()` window is the hold and there is no `for`:
+with a `for` as long as the window, one refund never fires (`promtool` confirms it).
+Such a counter must also export `0` from startup, or a series born at `1` shows no
+increase at all.
 
 Diagnosing a flapping alert — compare the signal at two windows. Spiky at 30s but steady at 5m means the signal is bursty and the rule needs a `for`; steady at both means the system really is failing.
 

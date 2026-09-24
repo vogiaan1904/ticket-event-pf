@@ -103,6 +103,10 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 		return err
 	}
 
+	// Counted at the write, not the decision: the alert pages on the ledger.
+	if status == models.OrderStatusRefundRequired {
+		metrics.OrdersRefundRequired.Inc()
+	}
 	return nil
 }
 

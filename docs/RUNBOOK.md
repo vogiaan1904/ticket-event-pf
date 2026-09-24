@@ -93,8 +93,9 @@ expiring before payment completes; see `services/order-svc/docs/RESERVATION_HOLD
 
 ## OrdersNeedingRefund
 
-**Means:** at least one ConfirmOrder workflow finished with `outcome="refund_required"` in the last
-ten minutes. A buyer was charged and holds no ticket. Money is owed.
+**Means:** at least one order was written into REFUND_REQUIRED in the last ten minutes
+(`tb_order_refund_required_total`, counted by `order-consumer` at the status write). A buyer was
+charged and holds no ticket. Money is owed.
 **Does not mean:** a sold-out buyer. Both arrive as FAILED_PRECONDITION from inventory, and the two
 invert at the ledger:
 
@@ -104,12 +105,14 @@ invert at the ledger:
 ```
 
 **First three checks**
-1. `increase(tb_order_workflow_duration_seconds_count{workflow="ConfirmOrder",outcome="refund_required"}[1h])`
-   — how many buyers, not just whether it happened. One is a manual refund; twenty is an incident.
-2. `kubectl -n ticketbottle logs deploy/order-service --since=1h | grep -i refund` — the order codes,
-   which is what you need to actually issue the refunds.
-3. `sum by (result) (rate(tb_inventory_reserve_total[5m]))` — dashboard B5. Tells you why inventory
-   refused the confirm: a genuine oversell, or an expired hold.
+1. `sum(increase(tb_order_refund_required_total[1h]))` — how many buyers, not just whether it
+   happened. One is a manual refund; twenty is an incident.
+2. `kubectl -n ticketbottle logs deploy/order-consumer --since=1h | grep "cannot be fulfilled"` — the
+   order codes, which is what you need to actually issue the refunds, and each one's `reason`.
+3. Read the `reason`. `inventory could not be confirmed` means the hold expired and the stock was
+   resold before the payment event arrived; `payment settled on an order in status …` means the
+   payment landed after the order had already ended. Both are the hold window losing to payment
+   latency — `services/order-svc/docs/RESERVATION_HOLD.md`.
 
 **Resolved looks like:** nothing. The alert clears ten minutes after the last occurrence, but
 `order.refund_required` has no consumer — no part of the system acts on that state. The alert going
