@@ -1,7 +1,7 @@
 # 0013 — The gateway sets security headers and throttles sign-in, not purchase
 
 **Date:** 2026-09-24
-**Status:** proposed
+**Status:** accepted
 **Arc:** gateway-edge — [plan](../plans/2026-09-24-architect-calls-from-the-system-map.md)
 **Where it lives:** `services/api-gateway/src/common/guards/auth-rate-limit.guard.ts`, `services/api-gateway/src/common/security.ts`
 
@@ -62,3 +62,19 @@ A flood from many addresses is not stopped: that is an edge job. The limit
 (`APP_AUTH_RATE_LIMIT_PER_MINUTE`, 20 by default, 0 for off) is the lever if an on-sale
 shows NAT false positives. Content-Security-Policy is off wherever Swagger UI is
 served, because the policy blocks its inline scripts.
+
+## Outcome
+
+`6a07657`. Seven tests boot a Nest app with the real metrics middleware and exception
+filter. They cover: a 429 past the limit, counted as `RESOURCE_EXHAUSTED` under its
+route; one budget shared by sign-in and sign-up; an unguarded route left alone;
+`X-Forwarded-For` ignored at 0 hops and used as the key at 1; the limiter off at 0; and
+the headers. Removing the 429 row from `HTTP_TO_GRPC`, or pinning trust proxy to 1 or
+to 0, each turned exactly one test red.
+
+The built gateway, at a limit of 3 with user-svc down, answered 503, 503, 503, 429,
+recorded as `code="RESOURCE_EXHAUSTED"` under `POST /api/auth/signin`. The chart renders
+one trusted hop on EKS and none on k3s. All six CI workflows passed on `f588c0f`.
+
+Not yet exercised on a cluster: no traffic has reached the limiter through the ALB or
+the NodePort.

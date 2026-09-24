@@ -1,7 +1,7 @@
 # 0014 — New TS structure follows the June layout rule; no service is its template yet
 
 **Date:** 2026-09-24
-**Status:** proposed
+**Status:** accepted
 **Arc:** ts-layout — [design](../design/ts-layout.md)
 **Where it lives:** `docs/design/ts-layout.md`, root `CLAUDE.md` *Conventions that span services*
 
@@ -46,3 +46,11 @@ whole, in a change that is working on that service anyway: the payoff is
 predictability, not capability. The first one converged becomes the worked example.
 The gateway's `src/CLAUDE.md` keeps its conventions for clients, errors and auth, and
 defers layout to the design.
+
+## Outcome
+
+`18116f3`. No code moved. The design, the root `CLAUDE.md`, the `add-service` and
+`add-grpc-endpoint` skills and the gateway's `src/CLAUDE.md` now say the same thing, and
+the system map routes to the design. Its check passed in CI on `f588c0f`. Whether the
+rule holds is decided at the first convergence, which is also when a service becomes
+its worked example.

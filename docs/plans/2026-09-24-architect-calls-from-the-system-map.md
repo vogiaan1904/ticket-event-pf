@@ -1,6 +1,6 @@
 # Architect calls from the system map — plan
 
-**Status: carried out 2026-09-24; closes when CI has run on it.** The *Found, not fixed* list of
+**Status: COMPLETE 2026-09-24.** All six CI workflows passed on `f588c0f`. The *Found, not fixed* list of
 `docs/plans/2026-09-23-system-map-skill.md`, put to the architect and carried out.
 Decisions: [0013](../decisions/0013-the-gateway-throttles-sign-in-not-purchase.md),
 [0014](../decisions/0014-ts-structure-follows-the-june-layout-rule.md); 0012 made the
