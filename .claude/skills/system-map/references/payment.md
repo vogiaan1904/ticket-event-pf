@@ -17,9 +17,8 @@ completed payment to Kafka: `payment-webhook` and `outbox-relay`.
    Lambda.
 4. `docs/plans/2026-09-20-payment-svc-test-coverage.md` — what the tests pin, which
    paths are latent, and why. A record of that day.
-5. `services/payment-svc/lambdas/README.md` — background: the SAM deployment. It
-   still describes the retired `outbox-processor` and a Prisma layer; the service
-   `CLAUDE.md` wins.
+5. `services/payment-svc/lambdas/README.md` — **current**: what each Lambda does, and
+   building, testing and deploying them with SAM.
 
 ## By question
 
@@ -55,8 +54,5 @@ completed payment to Kafka: `payment-webhook` and `outbox-relay`.
 
 ## Don't trust for current behaviour
 
-- `services/payment-svc/lambdas/README.md` on the outbox processor or on Prisma.
-- The outbox-relay skill's idempotency pattern as a description of the cluster's
-  `payment-webhook` — it describes the Lambda.
 - `services/payment-svc/src/modules/payment/controllers/http/payment.controller.ts` —
   an empty shell; no provider callback reaches the gRPC service.

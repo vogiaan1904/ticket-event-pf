@@ -106,7 +106,7 @@ Order {
     TotalAmount   int64              // Amount in cents
     Currency      string
     PaymentMethod PaymentMethod      // VNPAY, ZALOPAY, PAYOS
-    Status        OrderStatus        // PENDING, TIMEOUT, COMPLETED, CANCELLED, PAYMENT_FAILED, REFUNDED
+    Status        OrderStatus        // see Order Status Flow
     PaidAt        *time.Time
     CreatedAt     time.Time
     UpdatedAt     time.Time
@@ -138,13 +138,17 @@ OrderItem {
 
 ### Order Status Flow
 ```
-PENDING → COMPLETED (payment success)
-        → PAYMENT_FAILED (payment failed)
-        → CANCELLED (user/system cancellation)
-        → TIMEOUT (payment timeout - 10 minutes)
+PENDING → COMPLETED         ConfirmOrder, once inventory confirms the hold
+        → CANCELLED         Cancel, only while PENDING
+        → PAYMENT_FAILED    a payment.failed event
+        → REFUND_REQUIRED   ConfirmOrder: inventory refused the confirm
 
-COMPLETED → REFUNDED (future: refund processed)
+CANCELLED | PAYMENT_FAILED | TIMEOUT → REFUND_REQUIRED   a payment settled after the order ended
+REFUND_REQUIRED → REFUNDED                              nothing writes this yet
 ```
+
+`TIMEOUT` is read but never written: an unpaid order stays `PENDING`, and its inventory hold
+expires on its own (`internal/workflows/shared.go`, `docs/RESERVATION_HOLD.md`).
 
 ---
 
@@ -215,9 +219,11 @@ CreateOrderWorkflowResult {
 - Retry Policy: 10 attempts with exponential backoff
 
 **Paid but unfulfillable:**
-- A confirm that fails after retries, or a payment landing on an already cancelled or timed-out
-  order, moves the order to `REFUND_REQUIRED` and publishes `order.refund_required`
-  (`markForRefund`).
+- Inventory refusing the confirm (the hold expired and the stock was resold), or a payment
+  landing on an order already cancelled, failed or timed out, moves the order to
+  `REFUND_REQUIRED` and publishes `order.refund_required` (`markForRefund`).
+- Inventory being unavailable is not a refusal: the order stays `PENDING` for a redelivered
+  payment event, because whether it can still be fulfilled is unknown.
 - Nothing consumes that topic yet, so the state is a manual-reconciliation signal. The
   `OrdersNeedingRefund` alert fires on it — see `docs/RUNBOOK.md`.
 
@@ -458,7 +464,7 @@ SERVER_GRPC_PORT=50054
 SERVER_READ_TIMEOUT=30s
 SERVER_WRITE_TIMEOUT=30s
 SERVER_IDLE_TIMEOUT=60s
-PAYMENT_TIMEOUT_SECONDS=600  # 10 minutes
+PAYMENT_TIMEOUT_SECONDS=600  # loaded, never read: the window is PaymentTimeout in internal/workflows/shared.go
 ```
 
 ### Database (DynamoDB)

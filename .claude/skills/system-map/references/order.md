@@ -18,7 +18,7 @@ inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in Dyna
 4. `services/order-svc/docs/RESERVATION_HOLD.md` — **current**: why the inventory
    hold outlives the payment window.
 5. `services/order-svc/docs/SYSTEM.md` — background: activities, event schemas,
-   the gRPC surface, config. Corrected against the code on 2026-09-16; verify
+   the gRPC surface, config. Corrected against the code on 2026-09-24; verify
    anything it says about a workflow in the workflow file.
 
 ## By question

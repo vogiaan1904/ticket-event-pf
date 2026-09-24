@@ -77,5 +77,4 @@ Order-svc sets the hold to `PaymentTimeout + ReservationHoldGrace` (`internal/wo
 Rationale that does not fit a comment lives here, and comments point at it
 (see the root `CLAUDE.md`, "Comment conventions"):
 
-- `docs/MODELS.md` — stale: its column types, repository layer and examples no longer match `internal/models/`, which owns the schema.
 - `docs/POST_MIGRATE_DDL.md` — the post-`AutoMigrate` statements: why every constraint is `NOT VALID`, and the guarded `fk_ticket_class_reservations` repair.

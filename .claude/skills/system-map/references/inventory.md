@@ -52,8 +52,3 @@ The schema is owned by `services/inventory-svc/internal/models/` and
 - **Store** — Postgres, database `ticketbottle_inventory`, via GORM.
 - **Seeded by** `deploy/scripts/seed-ticketclass.sh` on a cluster.
 - **Deployed by** `deploy/helm/ticketbottle/templates/apps/inventory.yaml`.
-
-## Don't trust for current behaviour
-
-- `services/inventory-svc/docs/MODELS.md` — its column types, repository layer and
-  usage examples no longer match the code.
