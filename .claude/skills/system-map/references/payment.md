@@ -27,7 +27,7 @@ completed payment to Kafka: `payment-webhook` and `outbox-relay`.
 |---|---|---|
 | Are a payment and its event one write? | outbox-relay skill, *The core pattern* | `services/payment-svc/src/modules/outbox/outbox.service.ts` |
 | How an outbox row reaches Kafka, and on which topic | outbox-relay skill | `services/payment-svc/outbox-relay/src/relay.ts`, `services/payment-svc/outbox-relay/src/kafka.ts` |
-| What a duplicate provider webhook does | outbox-relay skill, pattern 4, for the Lambda; service `CLAUDE.md`, *The Lambdas*, for the cluster | `services/payment-svc/lambdas/payment-webhook-handler/handlers/webhook.handler.ts`, `deploy/adapters/payment-events/webhook.js` |
+| What a duplicate provider webhook does | outbox-relay skill, pattern 4; the cluster's simulated webhook keeps the same guard | `services/payment-svc/lambdas/payment-webhook-handler/handlers/webhook.handler.ts`, `deploy/adapters/payment-events/webhook.js` |
 | What happens to an event that never publishes | outbox-relay skill, pattern 5 | `services/payment-svc/lambdas/outbox-cleanup/handlers/cleanup.handler.ts` |
 | Adding a provider | service `CLAUDE.md` | `services/payment-svc/src/modules/payment/gateways/gateway.factory.ts` |
 | The outbox is backing up | `docs/RUNBOOK.md`, *OutboxBacklogGrowing* | `deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` |
