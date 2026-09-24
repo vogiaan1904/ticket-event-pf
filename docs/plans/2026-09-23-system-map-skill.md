@@ -195,8 +195,10 @@ Verified against the code; each needs a decision or work beyond this plan.
   which hard-codes `workflow="CreateOrder"`. Its runbook section greps
   `deploy/order-service` where the refund runs in `order-consumer`, and reads
   `tb_inventory_reserve_total`, which counts `Reserve` only.
-- **The cluster's `payment-webhook` has no `PENDING` guard** — a late or repeated
-  `/complete/<code>` produces `REFUND_REQUIRED` by construction on k3s and EKS.
+- **The cluster's `payment-webhook` has no `PENDING` guard** — a repeated
+  `/complete/<code>` writes a second outbox row and a duplicate `payment.completed`.
+  (First written here as producing `REFUND_REQUIRED`, which it does not; see
+  `docs/plans/2026-09-24-architect-calls-from-the-system-map.md`.)
 - **`services/inventory-svc/docs/MODELS.md`** is stale beyond repair by edit: column
   types, repository layer and examples. Deleting it is the likely call.
 - **`services/payment-svc/lambdas/README.md`** still describes the retired

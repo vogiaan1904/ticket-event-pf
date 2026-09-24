@@ -40,6 +40,9 @@ latest best practice of using claude skill in SDLC. Just brainstorm then plan an
 auto execute it". The agent chose the routing skill and put the three options,
 with their costs, in the plan before building.
 
+The architect made the call their own on 2026-09-24. Asked whether to own it, keep it
+a delegation, or reopen it, they answered "Yes, own it".
+
 ## Consequences
 
 An agent — or the architect briefing one — starts from the register, then the map,
@@ -63,5 +66,3 @@ questions to Opus it changed nothing — the register and grep were enough. On b
 questions to Sonnet it cut time by about 40% and tokens by about 14%, from one run
 per arm. Its runs caught three errors in the map itself, which is the check's blind
 spot: content drift is found by reading, not by CI.
-
-The Decision above is a delegation: the architect has not yet made this call their own.
