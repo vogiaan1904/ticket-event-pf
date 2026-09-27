@@ -124,13 +124,16 @@ export default function () {
     redirectUrl: 'https://example.com/done',
   }), auth);
 
+  // saga_latency.py joins this line to the order's saga by its code.
+  const code = or.status < 400 ? or.json('data.order.code') : null;
+  console.log(`CHECKOUT ${code || '-'} ${or.timings.duration.toFixed(1)} ${or.status}`);
+
   // 409 is the only correct rejection: sold out / sale closed / wrong-state all
   // arrive as FAILED_PRECONDITION. Any other 4xx is the harness (stale token,
   // bad body) and must not be counted as a buyer losing the race.
   if (or.status === 409) { rejected.add(1); return; }
   if (or.status >= 400) { unexpected.add(1, { step: 'order', status: or.status }); return; }
 
-  const code = or.json('data.order.code');
   if (!code) { unexpected.add(1, { step: 'order-code' }); return; }
 
   // 4. complete the payment
