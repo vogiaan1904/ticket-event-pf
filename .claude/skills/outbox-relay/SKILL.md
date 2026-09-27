@@ -16,6 +16,7 @@ This is how a completed payment reliably becomes a `payment.completed` Kafka eve
 | Long-lived relay worker | `services/payment-svc/outbox-relay/src/` — `relay.ts` (drain), `db.ts` (cycle), `runtime.ts` (LISTEN + scheduler + reconnect), `kafka.ts` (`topicFor`) |
 | Idempotent webhook completion | `services/payment-svc/lambdas/payment-webhook-handler/handlers/webhook.handler.ts` — conditional `UPDATE … WHERE status='PENDING'` |
 | Exhausted-retry → DLQ + metric | `services/payment-svc/lambdas/outbox-cleanup/handlers/cleanup.handler.ts` — `routeExhaustedEvents` |
+| Exhausted-retry → page, on the cluster | `countUnpublished` in `outbox.repo.ts`; `tb_outbox_exhausted_rows` in `outbox-relay/src/metrics.ts`; `OutboxEventsExhausted` in `templates/apps/prometheusrule.yaml` |
 | Schema (partial index, notify trigger) | `services/payment-svc/prisma/migrations/20260718075919_outbox_relay/migration.sql` |
 | Infra (DLQ + CloudWatch alarm) | `services/payment-svc/lambdas/template.yaml` |
 
@@ -42,7 +43,7 @@ WHERE orderCode = ? AND status='PENDING' RETURNING …
 ```
 `WHERE status='PENDING'` is a compare-and-set: the first webhook flips PENDING→COMPLETED and gets a row; a duplicate matches 0 rows and returns nothing. The outbox insert is gated on "did I get a row?", so a replay is a silent no-op instead of a double completion. **Idempotency enforced by the database, not by hoping messages arrive once.**
 
-**5 — DLQ + alarm for poison messages.** Retry with backoff → a *bounded* retry count → then `routeExhaustedEvents` ships the event to an SQS DLQ and emits the `OutboxFailedEvents` CloudWatch metric (alarm in `template.yaml`). **Rule:** "retry forever" lets one poison message stall the pipeline. Give failures an exit ramp *and* make them visible.
+**5 — DLQ + alarm for poison messages.** Retry with backoff → a *bounded* retry count → then `routeExhaustedEvents` ships the event to an SQS DLQ and emits the `OutboxFailedEvents` CloudWatch metric (alarm in `template.yaml`). **Rule:** "retry forever" lets one poison message stall the pipeline. Give failures an exit ramp *and* make them visible. On the cluster no Lambda runs, so the exit ramp is visibility alone: exhausted rows stay in `outbox`, `tb_outbox_exhausted_rows` counts them, and `OutboxEventsExhausted` pages ([0017](../../../docs/decisions/0017-an-exhausted-payment-event-pages.md)).
 
 **6 — Partial index on the hot set.** `idx_outbox_unpublished ON outbox("createdAt") WHERE "publishedAt" IS NULL` indexes only *unpublished* rows — the working set the relay scans. It stays tiny even as the outbox grows to millions of published rows. Pairs with dropping the old `published boolean` for `publishedAt IS NULL`: one nullable timestamp is a flag *and* an audit time *and* the index predicate.
 
@@ -55,9 +56,10 @@ WHERE orderCode = ? AND status='PENDING' RETURNING …
 - **Don't reintroduce the polling `outbox-processor` Lambda** or a `published boolean`. Publishing is the `outbox-relay` worker; unpublished = `publishedAt IS NULL`.
 - **New event types need a `topicFor` mapping** in `outbox-relay/src/kafka.ts`, keyed by the `EventType` enum value actually stored in `outbox.eventType` (a raw/unmapped value routes to the default topic — the pre-existing `PaymentCancelled` misroute is exactly this trap).
 - The payment gRPC service only **writes** the outbox — editing it does not change publishing behavior.
+- **The claim and the exhausted-rows gauge cut at one count.** `OUTBOX_MAX_RETRIES` is read once, in `outbox-relay/src/config.ts`; `countUnpublished`'s pending set is exactly what `claimBatch` can still claim, and a test holds them together.
 
 ## Debugging
-Order stuck / not confirming? Check, in order: outbox rows with `publishedAt IS NULL` piling up (relay not draining) → `kubectl -n ticketbottle logs deploy/outbox-relay` → the order consumer (`kubectl -n ticketbottle logs deploy/order-consumer`). A single stuck event that exhausted retries lands in the SQS DLQ and trips the `OutboxFailedEvents` alarm.
+Order stuck / not confirming? Check, in order: outbox rows with `publishedAt IS NULL` piling up (relay not draining) → `kubectl -n ticketbottle logs deploy/outbox-relay` → the order consumer (`kubectl -n ticketbottle logs deploy/order-consumer`). A single stuck event that exhausted retries lands in the SQS DLQ and trips the `OutboxFailedEvents` alarm — **only where the Lambdas are deployed**. On k3s and EKS it stays in `outbox` and pages as `OutboxEventsExhausted`; the recovery is `docs/RUNBOOK.md#outboxeventsexhausted`.
 
 ## Further reading
 Chris Richardson, [Transactional Outbox](https://microservices.io/patterns/data/transactional-outbox.html) and Polling Publisher vs Transaction Log Tailing — the latter (CDC / Debezium reading the WAL) is the one variant this repo deliberately did *not* use.

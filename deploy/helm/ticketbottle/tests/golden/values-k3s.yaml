@@ -1292,6 +1292,15 @@ spec:
             summary: "Outbox backlog has not drained below 50 rows in 10 minutes ({{ $value }} pending)"
             runbook: "docs/RUNBOOK.md#outboxbackloggrowing"
 
+        # No `for`: a row leaves this state only by hand. max_over_time bridges
+        # the 0 a restarted relay reports until its first refresh.
+        - alert: OutboxEventsExhausted
+          expr: max(max_over_time(tb_outbox_exhausted_rows[5m])) > 0
+          labels: { severity: page }
+          annotations:
+            summary: "{{ $value }} payment events stopped retrying — charged buyers whose orders will not confirm"
+            runbook: "docs/RUNBOOK.md#outboxeventsexhausted"
+
         - alert: SagaCompensationSpike
           expr: sum(rate(tb_order_compensations_total[5m])) > 0.5
           for: 10m

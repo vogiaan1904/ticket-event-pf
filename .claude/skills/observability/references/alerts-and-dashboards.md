@@ -28,7 +28,7 @@ The decision follows the money, not the code.
 
 ## What is in the file
 
-`deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml`, values-gated on `monitoring.enabled`. **5 recording + 8 alerting rules.**
+`deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml`, values-gated on `monitoring.enabled`. **5 recording + 10 alerting rules.**
 
 Recording rules use `level:metric:operations` — `tb:checkout_good:ratio1h`. The colon is the marker: nothing scraped from an exporter contains one, so a colon means a rule in your own config produced it and the definition is one grep away.
 
@@ -36,12 +36,14 @@ Recording rules use `level:metric:operations` — `tb:checkout_good:ratio1h`. Th
 |---|---|---|
 | `TicketBottleInternalErrors` | 5m | page |
 | `OutboxBacklogGrowing` | 10m | page |
+| `OutboxEventsExhausted` | — | page |
 | `SagaCompensationSpike` | 10m | page |
 | `OrdersNeedingRefund` | — | page |
 | `TargetDown` | 3m | page |
 | `MetricsMissing` | 5m | ticket |
 | `CheckoutBurnRateFast` | 2m | page |
 | `CheckoutBurnRateSlow` | 15m | ticket |
+| `ScrapeTargetsMissing` | 5m | page |
 
 `TicketBottleInternalErrors` is deliberately first in the group, so a JSON-patch by index (`/spec/groups/1/rules/0/for`) reaches it.
 
@@ -88,6 +90,8 @@ Each alert `and`s a long and a short window, and both must exceed:
 `tb_outbox_pending_rows` is instantaneous: the relay claims a batch, publishes, and the gauge drops back within seconds, so a scrape landing mid-batch reads a value that was true for 200ms. `min_over_time(...[10m]) > 50` only holds when the backlog never drained.
 
 The cost is latency — the 10m window must fill, then `for: 10m` must elapse, so this pages roughly **20 minutes** after a relay stops. Size any experiment against that number.
+
+`tb_outbox_exhausted_rows` is the opposite shape: rows leave it only by hand, so it cannot spike. Its alert has no `for`, and uses `max_over_time(...[5m])` for one reason — a restarted relay reports 0 until its first refresh, and a bare `> 0` would clear and re-fire on every relay rollout. `promtool` confirms the bare form drops the alert in that gap.
 
 ## Escaping Prometheus templating in chart templates
 

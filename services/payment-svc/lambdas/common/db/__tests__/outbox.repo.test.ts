@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { getDb, closeDb } from '../kysely';
-import { claimBatch, markPublished } from '../outbox.repo';
+import { claimBatch, countUnpublished, markPublished } from '../outbox.repo';
 
 // id has no DB default (Prisma's @default(uuid()) is client-side), and createdAt
 // must differ per row or the oldest-first ordering ties at statement timestamp.
@@ -68,4 +68,34 @@ test('two concurrent claims never return the same row (SKIP LOCKED)', async () =
   const [a, b] = await Promise.all([claimAndHold(), claimAndHold()]);
   const ids = [...a, ...b].map((r) => r.id);
   expect(new Set(ids).size).toBe(ids.length);
+});
+
+// Retry counts either side of the cut-off, plus a published row that is neither.
+const seedAroundCutoff = async (maxRetries: number) => {
+  const db = getDb();
+  await db.deleteFrom('outbox').execute();
+  const row = (retryCount: number, publishedAt: Date | null = null) => ({
+    id: randomUUID(),
+    aggregateId: `r${retryCount}`,
+    aggregateType: 'payment',
+    eventType: 'PaymentCompleted',
+    payload: JSON.stringify({}),
+    retryCount,
+    publishedAt,
+  });
+  await db
+    .insertInto('outbox')
+    .values([row(0), row(maxRetries - 1), row(maxRetries), row(maxRetries + 1), row(0, new Date())])
+    .execute();
+};
+
+test('countUnpublished splits unpublished rows at the retry cut-off', async () => {
+  await seedAroundCutoff(5);
+  expect(await countUnpublished(getDb(), 5)).toEqual({ pending: 2, exhausted: 2 });
+});
+
+test('countUnpublished counts as pending exactly what claimBatch can still claim', async () => {
+  await seedAroundCutoff(5);
+  const { pending } = await countUnpublished(getDb(), 5);
+  expect(await claimBatch(getDb(), 100, 5)).toHaveLength(pending);
 });

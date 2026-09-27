@@ -46,7 +46,8 @@ window. The relay is not draining. Paid orders are not being confirmed, so buyer
 charged are still waiting for a ticket.
 **Does not mean:** a burst of payments. The rule reads `min_over_time`, not the instant gauge,
 precisely so a relay that claims a batch and publishes it — spiking the gauge for 200ms — does not
-page. Exceeding 50 for ten solid minutes means the backlog never drained.
+page. Exceeding 50 for ten solid minutes means the backlog never drained. Nor does it count rows
+that stopped retrying; those page as [OutboxEventsExhausted](#outboxeventsexhausted).
 
 **First three checks**
 1. `kubectl -n ticketbottle get pods -l app=outbox-relay` then
@@ -63,6 +64,48 @@ further 10 minutes after the backlog actually clears — the window has to refil
 Budget ~20 minutes end to end; this alert is slow by construction (10m window plus `for: 10m`).
 **If it does not resolve:** check Redpanda is reachable from the relay pod. The relay claims rows
 with `FOR UPDATE SKIP LOCKED`, so a transaction stuck open elsewhere holds rows invisible to it.
+
+---
+
+## OutboxEventsExhausted
+
+**Means:** at least one payment event failed to publish `OUTBOX_MAX_RETRIES` (5) times, and the
+relay will never claim it again (`tb_outbox_exhausted_rows`). Each row is a buyer who was charged
+and whose order will not confirm until someone acts. Nothing retries it; the cluster runs no DLQ.
+**Does not mean:** a slow relay — that is [OutboxBacklogGrowing](#outboxbackloggrowing), which does
+not count these rows. Nor a Kafka restart: one lasts ~10s, and on k3s a row took ~13 minutes of
+outage to exhaust (`docs/plans/2026-09-25-payment-outbox-tech-debt.md`).
+
+**First three checks**
+1. The rows and why they failed, from the payment database:
+   ```bash
+   kubectl -n ticketbottle exec postgres-0 -- psql -U root -d ticketbottle_payment -c \
+     'SELECT id, "aggregateId", "eventType", "createdAt", left("lastError", 120) FROM outbox
+      WHERE "publishedAt" IS NULL AND "retryCount" >= 5 ORDER BY "createdAt"'
+   ```
+2. Read `lastError`. `Connection error` or `ECONNREFUSED` means Kafka was down; anything else,
+   such as a serialisation or size error, means this event cannot publish as written.
+3. `kubectl -n ticketbottle get pod redpanda-0` and
+   `kubectl -n ticketbottle logs deploy/outbox-relay --tail=20` — is Kafka back, and is the relay
+   publishing new rows?
+
+**Recover** once the cause is gone. Only then, or the rows exhaust again:
+
+```bash
+kubectl -n ticketbottle exec postgres-0 -- psql -U root -d ticketbottle_payment -c \
+  'UPDATE outbox SET "retryCount" = 0 WHERE "publishedAt" IS NULL AND "retryCount" >= 5'
+```
+
+The relay's next poll, within 5s, publishes them and `ConfirmOrder` runs. A hold expires 9 minutes
+after its order was created; inventory's `Confirm` re-acquires an expired hold while stock remains.
+Where the stock was resold, the order becomes REFUND_REQUIRED and pages as
+[OrdersNeedingRefund](#ordersneedingrefund) — a refund owed, no longer a silent loss.
+
+**Resolved looks like:** `max(tb_outbox_exhausted_rows)` reads 0 within 15s of the reset; the alert
+clears 5 minutes later, when the `max_over_time` window empties.
+**If it does not resolve:** the rows exhaust again, with the same `lastError`. The event cannot
+publish as written. Fix the payload or the topic mapping (`outbox-relay/src/kafka.ts`), not the
+retry count.
 
 ---
 

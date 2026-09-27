@@ -138,4 +138,10 @@ the records, never the block.
 |---|---|---|---|---|---|
 | [0015](0015-app-pods-sleep-before-sigterm.md) | Does an app pod keep serving after it leaves its Service's endpoints? | A native `preStop` sleep of 5s on every app a Service routes to | 2s on the same apps, or 5s on all ten | 5s on every pod stop, and nothing for a pod that crashes | accepted |
 | [0016](0016-the-gateway-drains-for-up-to-65s.md) | How long may a stopping gateway keep serving requests in flight? | Up to 65s: `Connection: close` on every response, idle sockets closed, the rest cut at 65s; a 75s grace period | Up to 20s inside the default 30s grace period | In the worst case a gateway stop takes 75s | accepted |
+
+### payment-outbox
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0017](0017-an-exhausted-payment-event-pages.md) | How does a payment event that can never publish become visible on the cluster? | A gauge of rows past the retry cap, a page on any, recovery by one hand-run `UPDATE` | Also capping retries by time, so a long Kafka outage strands nothing | A Kafka outage longer than ~13 minutes strands every row it touches until someone resets them | proposed |
 <!-- decisions:index:end -->
