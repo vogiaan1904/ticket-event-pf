@@ -27,6 +27,7 @@ spec:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 8080 }]
+          {{- include "tb.preStopSleep" . | nindent 10 }}
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 3

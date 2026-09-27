@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -17,14 +16,12 @@ type QueueRepository interface {
 	RemoveFromQueue(ctx context.Context, eID string, ssIDs ...string) error
 	GetQueueLength(ctx context.Context, eID string) (int64, error)
 	GetQueuePosition(ctx context.Context, eID, ssID string) (int64, error)
-	GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error)
+	GetQueuePositionAndLength(ctx context.Context, eID, ssID string) (int64, int64, error)
+	GetQueueMembers(ctx context.Context, eID string, before float64, count int64) ([]string, error)
 	AddToProcessing(ctx context.Context, eID, ssID string, ttl time.Duration) error
 	RemoveFromProcessing(ctx context.Context, eID, ssID string) error
 	GetProcessingCount(ctx context.Context, eID string) (int64, error)
 	IsProcessing(ctx context.Context, eID, ssID string) (bool, error)
-	// Pub/Sub methods for real-time position updates
-	PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error
-	SubscribeToPositionUpdates(ctx context.Context, eID string) (*redis.PubSub, error)
 	// Buffered QUEUE_READY publishes awaiting retry
 	BufferQueueReady(ctx context.Context, payload []byte) error
 	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
@@ -111,10 +108,47 @@ func (r *redisQueueRepository) GetQueuePosition(ctx context.Context, eID, ssID s
 	return rank + 1, nil
 }
 
-func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, start, stop int64) ([]string, error) {
+// GetQueuePositionAndLength reads a session's rank and the queue's size together.
+// Every waiting client polls for both, so the pair is this service's hot read and
+// costs one round trip rather than two.
+func (r *redisQueueRepository) GetQueuePositionAndLength(ctx context.Context, eID, ssID string) (int64, int64, error) {
 	qKey := r.queueKey(eID)
 
-	mems, err := r.cli.ZRange(ctx, qKey, start, stop)
+	pipe := r.cli.GetClient().Pipeline()
+	rank := pipe.ZRank(ctx, qKey, ssID)
+	card := pipe.ZCard(ctx, qKey)
+	_, execErr := pipe.Exec(ctx)
+
+	// go-redis stamps a sibling's redis.Nil onto every command in the batch, so a
+	// member that is absent marks ZCard failed while its value is still correct.
+	// Read the values; only a non-Nil error is a real one.
+	if execErr != nil && !errors.Is(execErr, redis.Nil) {
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", execErr)
+		return 0, 0, execErr
+	}
+	if err := card.Err(); err != nil && !errors.Is(err, redis.Nil) {
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", err)
+		return 0, 0, err
+	}
+	length := card.Val()
+
+	if err := rank.Err(); err != nil {
+		if errors.Is(err, redis.Nil) {
+			// Not in the sorted set: -1, as GetQueuePosition reports.
+			return -1, length, nil
+		}
+		r.l.Errorf(ctx, "redisQueueRepository.GetQueuePositionAndLength: %v", err)
+		return 0, 0, err
+	}
+
+	return rank.Val() + 1, length, nil
+}
+
+// GetQueueMembers returns up to count members scored below `before`, head first.
+func (r *redisQueueRepository) GetQueueMembers(ctx context.Context, eID string, before float64, count int64) ([]string, error) {
+	qKey := r.queueKey(eID)
+
+	mems, err := r.cli.ZRangeBelow(ctx, qKey, before, count)
 	if err != nil {
 		r.l.Errorf(ctx, "redisQueueRepository.GetQueueMembers: %v", err)
 		return nil, err
@@ -193,37 +227,6 @@ func (r *redisQueueRepository) IsProcessing(ctx context.Context, eID, ssID strin
 	return int64(expiresAt) > time.Now().UnixMilli(), nil
 }
 
-func (r *redisQueueRepository) PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error {
-	channel := r.positionUpdateChannel(update.EventID)
-
-	payload, err := json.Marshal(update)
-	if err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.PublishPositionUpdate: failed to marshal update: %v", err)
-		return fmt.Errorf("failed to marshal position update: %w", err)
-	}
-
-	if err := r.cli.Publish(ctx, channel, payload); err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.PublishPositionUpdate: %v", err)
-		return fmt.Errorf("failed to publish position update: %w", err)
-	}
-
-	return nil
-}
-
-func (r *redisQueueRepository) SubscribeToPositionUpdates(ctx context.Context, eID string) (*redis.PubSub, error) {
-	channel := r.positionUpdateChannel(eID)
-
-	pubsub := r.cli.Subscribe(ctx, channel)
-
-	_, err := pubsub.Receive(ctx)
-	if err != nil {
-		r.l.Errorf(ctx, "redisQueueRepository.SubscribeToPositionUpdates: %v", err)
-		return nil, fmt.Errorf("failed to subscribe to position updates: %w", err)
-	}
-
-	return pubsub, nil
-}
-
 func (r *redisQueueRepository) queueKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:queue", eID)
 }
@@ -236,18 +239,12 @@ func (r *redisQueueRepository) processingKey(eID string) string {
 	return fmt.Sprintf("waitroom:%s:checkouts", eID)
 }
 
-func (r *redisQueueRepository) positionUpdateChannel(eID string) string {
-	return fmt.Sprintf("queue:updates:%s", eID)
-}
-
 // ============= Buffered QUEUE_READY Publishes =============
 
 // maxBufferedQueueReady caps the retry buffer; the oldest entries are shed past it.
 // Why: it only grows while Kafka is down, but an unbounded list is its own outage.
 const maxBufferedQueueReady = 10000
 
-// BufferQueueReady parks a QUEUE_READY payload whose publish failed. The list is
-// FIFO: appended at the tail, drained from the head, so ordering survives.
 func (r *redisQueueRepository) BufferQueueReady(ctx context.Context, payload []byte) error {
 	key := r.bufferedQueueReadyKey()
 

@@ -151,7 +151,7 @@ data:
   QUEUE_DEFAULT_RELEASE_RATE: "10"
   QUEUE_PROCESS_INTERVAL: 1s
   QUEUE_SESSION_TTL: 7200s
-  QUEUE_POSITION_UPDATE_INTERVAL: 5s
+  QUEUE_EVENT_CACHE_TTL: 30s
   EVENT_SERVICE_ADDR: event-service:50053
   JWT_EXPIRY: 15m
   LOGGER_LEVEL: debug
@@ -192,7 +192,6 @@ data:
   SERVER_READ_TIMEOUT: 30s
   SERVER_WRITE_TIMEOUT: 30s
   SERVER_IDLE_TIMEOUT: 60s
-  PAYMENT_TIMEOUT_SECONDS: "600"
   # Bounds the wait on the CreateOrder saga. At 100 concurrent buyers on one hot
   # ticket class the slowest saga took 33s, so a 30s bound returned 504 for ~8%.
   ORDER_CREATE_TIMEOUT: "60s"
@@ -223,10 +222,13 @@ data:
   NAME: TicketBottle_Event
   APP_GLOBAL_PREFIX: api
   CORS_ORIGINS: "[\"*\"]"
+  APP_TRUST_PROXY_HOPS: "0"
+  APP_AUTH_RATE_LIMIT_PER_MINUTE: "20"
   JWT_ACCESS_EXPIRATION: 1d
   JWT_REFRESH_EXPIRATION: 7d
   JWT_REFRESH_SLIDING_WINDOW: 24h
   SALT_ROUND: "10"
+  SHUTDOWN_DRAIN_SECONDS: "65"
   USER_SERVICE: user-service:50052
   EVENT_SERVICE: event-service:50053
   INVENTORY_SERVICE: inventory-service:50057
@@ -575,6 +577,9 @@ spec:
             - configMapRef: { name: event-config }
             - secretRef: { name: event-secrets }
           ports: [{ containerPort: 50053 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50053 }
             initialDelaySeconds: 5
@@ -602,6 +607,7 @@ spec:
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: app-gateway }
     spec:
+      terminationGracePeriodSeconds: 75
       containers:
         - name: app-gateway
           image: ticketbottle/gateway:dev
@@ -618,6 +624,9 @@ spec:
             - configMapRef: { name: gateway-config }
             - secretRef: { name: gateway-secrets }
           ports: [{ containerPort: 3000 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             httpGet: { path: /api, port: 3000 }
             initialDelaySeconds: 5
@@ -661,6 +670,9 @@ spec:
             - configMapRef: { name: inventory-config }
             - secretRef: { name: inventory-secrets }
           ports: [{ containerPort: 50057 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50057 }
             initialDelaySeconds: 5
@@ -704,6 +716,9 @@ spec:
             - configMapRef: { name: order-config }
             - secretRef: { name: order-secrets }
           ports: [{ containerPort: 50054 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50054 }
             initialDelaySeconds: 5
@@ -823,6 +838,9 @@ spec:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 8080 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 3
@@ -865,6 +883,9 @@ spec:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 50055 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50055 }
             initialDelaySeconds: 5
@@ -908,6 +929,9 @@ spec:
             - configMapRef: { name: user-config }
             - secretRef: { name: user-secrets }
           ports: [{ containerPort: 50052 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50052 }
             initialDelaySeconds: 5
@@ -951,6 +975,9 @@ spec:
             - configMapRef: { name: waitroom-config }
             - secretRef: { name: waitroom-secrets }
           ports: [{ containerPort: 50056 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50056 }
             initialDelaySeconds: 5
@@ -1171,7 +1198,7 @@ spec:
       labels: { app: redpanda }
     spec:
       # A dynamically provisioned EBS volume arrives root:root; the redpanda image runs
-      # as non-root and cannot write its data dir. kind/k3s local-path happened to create
+      # as non-root and cannot write its data dir. k3s local-path happened to create
       # world-writable directories, which hid this. fsGroup makes the chart portable.
       securityContext:
         fsGroup: 101
@@ -1265,6 +1292,15 @@ spec:
             summary: "Outbox backlog has not drained below 50 rows in 10 minutes ({{ $value }} pending)"
             runbook: "docs/RUNBOOK.md#outboxbackloggrowing"
 
+        # No `for`: a row leaves this state only by hand. max_over_time bridges
+        # the 0 a restarted relay reports until its first refresh.
+        - alert: OutboxEventsExhausted
+          expr: max(max_over_time(tb_outbox_exhausted_rows[5m])) > 0
+          labels: { severity: page }
+          annotations:
+            summary: "{{ $value }} payment events stopped retrying — charged buyers whose orders will not confirm"
+            runbook: "docs/RUNBOOK.md#outboxeventsexhausted"
+
         - alert: SagaCompensationSpike
           expr: sum(rate(tb_order_compensations_total[5m])) > 0.5
           for: 10m
@@ -1273,9 +1309,10 @@ spec:
             summary: "Saga rollbacks above 0.5 steps/s — read step= on dashboard B3 for where it fails"
             runbook: "docs/RUNBOOK.md#sagacompensationspike"
 
+        # No `for`: one refund is the page, and the [10m] window is the hold.
+        # A `for` as long as the window never fires on a single occurrence.
         - alert: OrdersNeedingRefund
-          expr: increase(tb_order_workflow_duration_seconds_count{workflow="ConfirmOrder",outcome="refund_required"}[10m]) > 0
-          for: 10m
+          expr: increase(tb_order_refund_required_total[10m]) > 0
           labels: { severity: page }
           annotations:
             summary: "A buyer was charged and holds no ticket — nothing consumes order.refund_required"

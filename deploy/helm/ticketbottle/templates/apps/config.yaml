@@ -67,7 +67,7 @@ data:
   QUEUE_DEFAULT_RELEASE_RATE: "10"
   QUEUE_PROCESS_INTERVAL: 1s
   QUEUE_SESSION_TTL: 7200s
-  QUEUE_POSITION_UPDATE_INTERVAL: 5s
+  QUEUE_EVENT_CACHE_TTL: 30s
   EVENT_SERVICE_ADDR: event-service:50053
   JWT_EXPIRY: 15m
   LOGGER_LEVEL: debug
@@ -106,17 +106,12 @@ data:
   SERVER_READ_TIMEOUT: 30s
   SERVER_WRITE_TIMEOUT: 30s
   SERVER_IDLE_TIMEOUT: 60s
-  PAYMENT_TIMEOUT_SECONDS: "600"
   # Bounds the wait on the CreateOrder saga. At 100 concurrent buyers on one hot
   # ticket class the slowest saga took 33s, so a 30s bound returned 504 for ~8%.
   ORDER_CREATE_TIMEOUT: {{ .Values.order.createTimeout | quote }}
   DYNAMODB_TABLE_NAME: ticketbottle-orders
   AWS_REGION: {{ .Values.order.awsRegion | quote }}
   DYNAMODB_ENDPOINT: {{ .Values.order.dynamodbEndpoint | quote }}
-  {{- if .Values.order.awsAccessKeyId }}
-  AWS_ACCESS_KEY_ID: {{ .Values.order.awsAccessKeyId | quote }}
-  AWS_SECRET_ACCESS_KEY: {{ .Values.order.awsSecretAccessKey | quote }}
-  {{- end }}
   TEMPORAL_HOST_PORT: temporal:7233
   TEMPORAL_NAMESPACE: default
   JWT_EXPIRY: 15m
@@ -140,10 +135,13 @@ data:
   NAME: TicketBottle_Event
   APP_GLOBAL_PREFIX: api
   CORS_ORIGINS: {{ .Values.gateway.corsOrigins | quote }}
+  APP_TRUST_PROXY_HOPS: {{ .Values.gateway.trustProxyHops | quote }}
+  APP_AUTH_RATE_LIMIT_PER_MINUTE: {{ .Values.gateway.authRateLimitPerMinute | quote }}
   JWT_ACCESS_EXPIRATION: 1d
   JWT_REFRESH_EXPIRATION: 7d
   JWT_REFRESH_SLIDING_WINDOW: 24h
   SALT_ROUND: "10"
+  SHUTDOWN_DRAIN_SECONDS: {{ .Values.shutdown.gatewayDrainSeconds | quote }}
   USER_SERVICE: user-service:50052
   EVENT_SERVICE: event-service:50053
   INVENTORY_SERVICE: inventory-service:50057

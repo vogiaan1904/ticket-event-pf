@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -124,9 +125,14 @@ func (r *Client) ZRank(ctx context.Context, key, member string) (int64, error) {
 	return r.redis.ZRank(ctx, key, member).Result()
 }
 
-// ZRange returns a range of members in a sorted set by index.
-func (r *Client) ZRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
-	return r.redis.ZRange(ctx, key, start, stop).Result()
+// ZRangeBelow returns up to count members scored strictly below max, lowest
+// first. A negative count returns them all.
+func (r *Client) ZRangeBelow(ctx context.Context, key string, max float64, count int64) ([]string, error) {
+	return r.redis.ZRangeByScore(ctx, key, &redis.ZRangeBy{
+		Min:   "-inf",
+		Max:   "(" + strconv.FormatFloat(max, 'f', -1, 64),
+		Count: count,
+	}).Result()
 }
 
 // ZScore returns the score of a member in a sorted set. It returns redis.Nil

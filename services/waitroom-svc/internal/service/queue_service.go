@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/models"
 	repo "github.com/vogiaan1904/ticketbottle-waitroom/internal/repository/redis"
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
@@ -28,14 +26,6 @@ type QueueService interface {
 	BufferQueueReady(ctx context.Context, payload []byte) error
 	PeekBufferedQueueReady(ctx context.Context, count int) ([]string, error)
 	TrimBufferedQueueReady(ctx context.Context, count int) error
-
-	PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error
-	SubscribeToPositionUpdates(ctx context.Context, eventID string) (PositionUpdateSubscription, error)
-}
-
-type PositionUpdateSubscription interface {
-	Updates() <-chan *models.PositionUpdateEvent
-	Close() error
 }
 
 type queueService struct {
@@ -71,16 +61,6 @@ func (s *queueService) EnqueueSession(ctx context.Context, ss *models.Session) (
 
 	s.l.Infof(ctx, "Session enqueued - id: %s, event_id: %s, position: %d", ss.ID, ss.EventID, pos)
 
-	// Broadcast position update to all sessions in this event's queue
-	if err := s.repo.PublishPositionUpdate(ctx, &models.PositionUpdateEvent{
-		EventID:            ss.EventID,
-		UpdateType:         models.UpdateTypeUserJoined,
-		AffectedSessionIDs: []string{ss.ID},
-		Timestamp:          time.Now(),
-	}); err != nil {
-		s.l.Warnf(ctx, "Failed to publish position update after enqueue - session_id: %s, error: %v", ss.ID, err)
-	}
-
 	return pos, nil
 }
 
@@ -105,17 +85,6 @@ func (s *queueService) DequeueSession(ctx context.Context, eventID, sessionID st
 		}
 	}
 
-	// Broadcast position update to all remaining sessions in this event's queue
-	if err := s.repo.PublishPositionUpdate(ctx, &models.PositionUpdateEvent{
-		EventID:            eventID,
-		UpdateType:         models.UpdateTypeUserLeft,
-		AffectedSessionIDs: []string{sessionID},
-		Timestamp:          time.Now(),
-	}); err != nil {
-		s.l.Warnf(ctx, "Failed to publish position update after dequeue - session_id: %s, error: %v", sessionID, err)
-		// Don't fail the request if pub/sub fails
-	}
-
 	return nil
 }
 
@@ -128,14 +97,9 @@ func (s *queueService) GetQueueStatus(ctx context.Context, sessionID string, ses
 	}
 
 	if session.Status == models.SessionStatusQueued {
-		position, err := s.repo.GetQueuePosition(ctx, session.EventID, session.ID)
+		position, queueLength, err := s.repo.GetQueuePositionAndLength(ctx, session.EventID, session.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get queue position: %w", err)
-		}
-
-		queueLength, err := s.repo.GetQueueLength(ctx, session.EventID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get queue length: %w", err)
 		}
 
 		out.Position = position
@@ -194,7 +158,10 @@ func (s *queueService) PeekQueue(ctx context.Context, eventID string, count int)
 		return nil, nil
 	}
 
-	sessionIDs, err := s.repo.GetQueueMembers(ctx, eventID, 0, int64(count-1))
+	// Due once its whole second has passed. Pre-open draws sit in
+	// [saleStart-1, saleStart), so none is due before the doors open.
+	due := float64(time.Now().Unix())
+	sessionIDs, err := s.repo.GetQueueMembers(ctx, eventID, due, int64(count))
 	if err != nil {
 		return nil, fmt.Errorf("failed to peek queue: %w", err)
 	}
@@ -235,68 +202,4 @@ func (s *queueService) PeekBufferedQueueReady(ctx context.Context, count int) ([
 
 func (s *queueService) TrimBufferedQueueReady(ctx context.Context, count int) error {
 	return s.repo.TrimBufferedQueueReady(ctx, count)
-}
-
-func (s *queueService) PublishPositionUpdate(ctx context.Context, update *models.PositionUpdateEvent) error {
-	return s.repo.PublishPositionUpdate(ctx, update)
-}
-
-func (s *queueService) SubscribeToPositionUpdates(ctx context.Context, eventID string) (PositionUpdateSubscription, error) {
-	pubsub, err := s.repo.SubscribeToPositionUpdates(ctx, eventID)
-	if err != nil {
-		return nil, err
-	}
-
-	return &positionUpdateSubscription{
-		pubsub:  pubsub,
-		updates: make(chan *models.PositionUpdateEvent, 10),
-		ctx:     ctx,
-		logger:  s.l,
-	}, nil
-}
-
-// positionUpdateSubscription wraps Redis PubSub into a cleaner interface
-type positionUpdateSubscription struct {
-	pubsub  *redis.PubSub
-	updates chan *models.PositionUpdateEvent
-	ctx     context.Context
-	logger  logger.Logger
-}
-
-func (p *positionUpdateSubscription) Updates() <-chan *models.PositionUpdateEvent {
-	// Start goroutine to convert Redis messages to PositionUpdateEvent
-	go p.processMessages()
-	return p.updates
-}
-
-func (p *positionUpdateSubscription) processMessages() {
-	defer close(p.updates)
-
-	ch := p.pubsub.Channel()
-	for {
-		select {
-		case <-p.ctx.Done():
-			return
-		case msg := <-ch:
-			if msg == nil {
-				continue
-			}
-
-			var event models.PositionUpdateEvent
-			if err := json.Unmarshal([]byte(msg.Payload), &event); err != nil {
-				p.logger.Warnf(p.ctx, "Failed to unmarshal position update: %v", err)
-				continue
-			}
-
-			select {
-			case p.updates <- &event:
-			case <-p.ctx.Done():
-				return
-			}
-		}
-	}
-}
-
-func (p *positionUpdateSubscription) Close() error {
-	return p.pubsub.Close()
 }

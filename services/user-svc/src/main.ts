@@ -19,6 +19,8 @@ async function bootstrap() {
       url: `${HOST}:${PORT}`,
       package: USER_PACKAGE_NAME,
       protoPath: join(__dirname, 'protos', 'user.proto'),
+      // Without it, close() cancels in-flight RPCs instead of finishing them.
+      gracefulShutdown: true,
     },
   });
 
@@ -40,8 +42,14 @@ async function bootstrap() {
   const metricsServer = startMetricsServer(METRICS_PORT);
   logger.log(`metrics server running on: ${HOST}:${METRICS_PORT}/metrics`);
 
+  // Drain in-flight work, then exit: a listener replaces Node's default exit on
+  // the signal, and waiting for the event loop to drain hangs on any open handle.
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-    process.on(sig, () => metricsServer.close());
+    process.on(sig, async () => {
+      await app.close();
+      metricsServer.close();
+      process.exit(0);
+    });
   }
 }
 bootstrap();

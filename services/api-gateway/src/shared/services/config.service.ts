@@ -137,6 +137,8 @@ export class AppConfigService {
       jwtRefreshExpiration: this.get('JWT_REFRESH_EXPIRATION'),
       jwtRefreshSlidingWindow: this.get('JWT_REFRESH_SLIDING_WINDOW'),
       saltRound: this.getNumber('SALT_ROUND'),
+      trustProxyHops: this.getNumber('APP_TRUST_PROXY_HOPS'),
+      authRateLimitPerMinute: Number(this.get('APP_AUTH_RATE_LIMIT_PER_MINUTE') || 20),
     };
   }
 }

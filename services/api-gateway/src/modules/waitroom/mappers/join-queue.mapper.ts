@@ -9,7 +9,6 @@ export class JoinQueueMapper {
       queueLength: Number(proto.queueLength),
       queuedAt: new Date(proto.queuedAt),
       expiresAt: new Date(proto.expiresAt),
-      websocketUrl: proto.websocketUrl,
     };
   }
 }

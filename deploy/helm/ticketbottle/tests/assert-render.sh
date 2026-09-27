@@ -13,7 +13,7 @@ fail() { echo "FAIL: $1"; exit 1; }
 actual="$(mktemp)"
 trap 'rm -f "$actual"' EXIT
 
-for overlay in local k3s; do
+for overlay in k3s; do
   helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" > "$actual"
   golden="$HERE/golden/values-$overlay.yaml"
   [ -f "$golden" ] || fail "no golden file for $overlay — run render-golden.sh"
@@ -23,7 +23,7 @@ for overlay in local k3s; do
 done
 # Credentials belong in Secrets: a ConfigMap is readable by anything holding
 # `get configmaps`, and `kubectl describe` prints it in full.
-for overlay in local k3s; do
+for overlay in k3s; do
   cms=$(helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" \
         | awk '/^kind: ConfigMap$/{f=1} /^---$/{f=0} f')
   if grep -qiE '(DATABASE_PASSWORD|postgresql://[^:]+:[^@]+@)' <<<"$cms"; then
@@ -36,12 +36,12 @@ done
 # under pipefail. Match against a here-string, never a pipeline.
 # An external-database target renders no datastore and still renders every
 # application workload, and each migration Job waits on its own service's host.
-off=$(helm template tb "$CHART" -f "$CHART/values-local.yaml" -f "$SECRETS" --set postgres.enabled=false)
+off=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set postgres.enabled=false)
 grep -q "name: postgres$" <<<"$off" && fail "postgres.enabled=false still renders a postgres object"
 grep -q "name: order-service" <<<"$off" || fail "postgres.enabled=false wrongly removed an application workload"
 echo "OK  postgres.enabled=false removes only the datastore"
 
-ext=$(helm template tb "$CHART" -f "$CHART/values-local.yaml" -f "$SECRETS" \
+ext=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" \
       --set postgres.enabled=false --set postgres.hosts.payment=pay.example.com \
       --set postgres.hosts.shared=shared.example.com)
 grep -q "pg_isready -h postgres " <<<"$ext" && fail "a migration Job still waits on the in-cluster host"
@@ -50,7 +50,7 @@ echo "OK  migration Jobs wait on their configured host"
 # A DSN now lives in a Secret, so every container that reads a database-backed
 # service's config must mount its Secret too -- envFrom is per-container, and a
 # Job or sidecar that pulls only the ConfigMap starts with no DATABASE_URL.
-for overlay in local k3s; do
+for overlay in k3s; do
   helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" > "$actual"
   awk '
     /configMapRef: \{ name: (user|event|payment|inventory)-config \}/ {
@@ -67,7 +67,7 @@ done
 # A Deployment that mounts a Secret needs a digest of it in the pod template.
 # Without one, rotating a Secret changes no Deployment, helm rolls nothing, and
 # the pods keep serving the old value until something else happens to restart them.
-for overlay in local k3s; do
+for overlay in k3s; do
   helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS" > "$actual"
   awk 'BEGIN { RS = "\n---\n" }
     /kind: Deployment/ && /secretRef/ && !/checksum\/secret/ {
@@ -78,6 +78,35 @@ for overlay in local k3s; do
     || fail "$overlay: $(tr '\n' ' ' < "$actual.nodigest")mounts a Secret with no checksum annotation"
   echo "OK  $overlay rolls its pods when a Secret changes"
 done
+
+# Apps a Service routes to sleep before SIGTERM, so kube-proxy drops them before
+# they close their port; the gateway's grace period covers its drain deadline.
+# Distinct values, so a template that hard-codes 5, 65 or 75 cannot pass.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" \
+  --set shutdown.preStopSleepSeconds=7 --set shutdown.gatewayDrainSeconds=11 > "$actual"
+deployment() { awk -v n="$1" 'BEGIN { RS = "\n---\n" } /kind: Deployment/ && $0 ~ ("\n  name: " n "\n")' "$actual"; }
+for d in app-gateway user-service event-service order-service payment-service \
+         waitroom-service inventory-service payment-webhook; do
+  grep -q "sleep: { seconds: 7 }" <<<"$(deployment "$d")" || fail "$d does not sleep before SIGTERM"
+done
+for d in order-consumer outbox-relay; do
+  grep -q "preStop" <<<"$(deployment "$d")" && fail "$d sleeps, though no Service routes requests to it"
+done
+grep -q "terminationGracePeriodSeconds: 23$" <<<"$(deployment app-gateway)" \
+  || fail "app-gateway's grace period is not sleep + drain + 5"
+grep -q "terminationGracePeriodSeconds" <<<"$(deployment event-service)" \
+  && fail "event-service has its own grace period, though only the gateway drains long requests"
+grep -q 'SHUTDOWN_DRAIN_SECONDS: "11"' "$actual" || fail "gateway-config does not carry the drain deadline"
+echo "OK  apps with a Service sleep before SIGTERM; the gateway's grace covers its drain"
+
+# A gateway stop must outlast the longest checkout, or every rollout cuts some.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" > "$actual"
+create=$(sed -n 's/^  ORDER_CREATE_TIMEOUT: "\([0-9]*\)\([sm]\)"$/\1 \2/p' "$actual")
+drain=$(sed -n 's/^  SHUTDOWN_DRAIN_SECONDS: "\([0-9]*\)"$/\1/p' "$actual")
+[ -n "$create" ] && [ -n "$drain" ] || fail "cannot read ORDER_CREATE_TIMEOUT (Ns or Nm) or SHUTDOWN_DRAIN_SECONDS"
+read -r n unit <<<"$create"; [ "$unit" = m ] && n=$((n * 60))
+[ "$drain" -gt "$n" ] || fail "the gateway drains for ${drain}s, but a checkout may run ${n}s"
+echo "OK  the gateway's drain outlasts a checkout (${drain}s > ${n}s)"
 
 # The goldens are committed, so a real secret reaching one is published. Skipped
 # where the developer's file is absent, as in CI.

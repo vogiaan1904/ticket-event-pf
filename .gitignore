@@ -80,3 +80,6 @@ tools/
 
 # Chart secrets: generated per environment by `make -C deploy secrets-init`.
 deploy/secrets.values.yaml
+
+# Python bytecode (docs/decisions/index_test.py, hook scripts)
+__pycache__/

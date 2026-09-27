@@ -60,9 +60,9 @@ The AWS SDK resolves credentials in a **fixed order, first match wins**:
 4. EC2 instance profile  IMDS 169.254.169.254            ← what the box WANTS
 ```
 
-On kind, the chart sets `AWS_ACCESS_KEY_ID=local` (fake creds for dynamodb-local). Leave that on the box and the SDK stops at **step 1**, uses the fake key, and DynamoDB auth fails — the instance profile at step 4 never gets a look.
+Any `AWS_ACCESS_KEY_ID` in the pod's environment stops the SDK at **step 1**; DynamoDB auth then fails and the instance profile at step 4 never gets a look. An empty string is *not* safe either — an empty env var is still *set*, and the chain still stops at step 1.
 
-**The fix, and it's subtle:** `values-k3s.yaml` sets the creds to `""`, and `templates/apps/config.yaml` **omits the env vars entirely when empty**. Setting them to an empty string is *not* enough — an empty env var is still *set*, and the chain still stops at step 1. With no env creds and no `~/.aws`, resolution falls through to the instance profile.
+**So the chart renders no static key at all.** `templates/apps/config.yaml` has no `AWS_ACCESS_KEY_ID`, and there is no value to add one. With no env creds and no `~/.aws`, resolution falls through to the instance profile.
 
 `services/order-svc/pkg/dynamodb/client.go` cooperates: it only injects static creds when `DYNAMODB_ENDPOINT != ""`. Empty endpoint → plain `LoadDefaultConfig` → the chain above.
 
@@ -89,6 +89,11 @@ Namespace `ticketbottle`, from `deploy/helm/ticketbottle`.
 | `outbox-relay` | — | none (LISTEN/NOTIFY relay → Kafka) |
 | `payment-webhook` | — | ClusterIP (simulated provider webhook adapter) |
 
+Every workload with a Service sleeps in `preStop` before SIGTERM, and `app-gateway` alone gets a
+longer grace period to drain its keep-alive clients. Both come from `shutdown` in `values.yaml`;
+why and how long: `docs/decisions/0015-app-pods-sleep-before-sigterm.md`,
+`docs/decisions/0016-the-gateway-drains-for-up-to-65s.md`.
+
 Plus migration **Jobs** (`user-migrate`, `event-migrate`, `payment-migrate`) that run Prisma migrations before the services come up.
 
 **Infra tier — trimmed to fit one box:**
@@ -99,39 +104,39 @@ Plus migration **Jobs** (`user-migrate`, `event-migrate`, `payment-migrate`) tha
 | Redis | StatefulSet + PVC (1Gi) | 1 instance, logical DBs, instead of 2 |
 | Redpanda | StatefulSet + PVC (5Gi) | Kafka-API compatible, **drops Zookeeper** (~1GB vs ~3GB). Sarama/KafkaJS clients unchanged. |
 | Temporal | Deployment | **No Elasticsearch** — SQL/Postgres visibility. ES alone wants 1–2GB. |
-| DynamoDB | *(absent)* | `dynamodb.enabled: false` — the real AWS table replaces the local pod |
+| DynamoDB | *(absent)* | the real AWS table; the chart has no DynamoDB pod |
 
 PVCs are backed by k3s's `local-path` provisioner writing to the **gp3 root volume**. That's what makes the stop/start data guarantee work: stopping an EC2 instance preserves its EBS volumes.
 
 ---
 
-## `values-k3s.yaml` — the entire delta from local
+## `values-k3s.yaml` — what the box overrides
 
 ```yaml
 target: k3s
-image: { tag: dev, pullPolicy: Always }      # registry injected at deploy via --set
-dynamodb: { enabled: false }                 # use the real AWS table
-order:
-  dynamodbEndpoint: ""                       # empty -> default AWS endpoint
-  awsRegion: us-east-1
-  awsAccessKeyId: ""                         # empty -> omitted -> instance profile
-  awsSecretAccessKey: ""
-paymentEvents: { enabled: true }             # in-cluster payment path, same as kind
+image: { tag: dev, pullPolicy: Always }      # registry and tag set at deploy by `make k3s-deploy`
+paymentEvents: { enabled: true }             # in-cluster payment path, same as EKS
 outboxRelay:   { enabled: true }
 postgres: { storage: 5Gi }                   # PVCs sized for the real box
 redpanda: { storage: 5Gi }
 redis:    { storage: 1Gi }
+monitoring: { enabled: true, targets: ... }  # every workload scraped on :2112
+temporal: { ui: { enabled: true } }
 ```
 
-The **registry is deliberately not in git** (it contains the account id) — it's passed at deploy time:
+Real DynamoDB is the chart's default — `order.dynamodbEndpoint` is empty in
+`values.yaml` — so no overlay mentions it.
+
+The **registry is deliberately not in git** (it contains the account id); `make k3s-deploy` passes it, and the tag, at deploy time:
 
 ```bash
 helm upgrade --install tb deploy/helm/ticketbottle -n ticketbottle --create-namespace \
-  -f deploy/helm/ticketbottle/values-k3s.yaml \
-  --set image.registry="${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/" --wait --timeout 10m
+  -f deploy/helm/ticketbottle/values-k3s.yaml -f deploy/secrets.values.yaml \
+  --set image.registry="${ACCOUNT}.dkr.ecr.us-east-1.amazonaws.com/" \
+  --set image.tag="sha-${COMMIT}" --wait --timeout 10m
 ```
 
-`pullPolicy: Always` matters: the branch tag is mutable (`:dev` moves), so `IfNotPresent` would silently keep a stale image after CI pushes a new one.
+**Deploy the sha, not the branch tag.** `:dev` moves, but a helm upgrade that sets `:dev` again leaves the pod spec unchanged, so nothing rolls and the old pods keep serving the old build — `pullPolicy: Always` only acts when a pod is created. `make k3s-deploy` therefore resolves `:dev` (or `REF=<branch>`) to the immutable `sha-<commit>` tag CI pushed beside it and deploys that; it refuses if the tag names no single build. To confirm what runs, compare a pod's `imageID` digest with ECR.
 
 ---
 
@@ -159,7 +164,7 @@ make -C deploy stop-ec2-k3s      # THE COST SWITCH — compute billing halts, EB
 make -C deploy k3s-ip            # current public IP
 ```
 
-**Access is SSH-tunnel-only.** `localhost:3000` on the workstation forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives kind and k3s unchanged.
+**Access is SSH-tunnel-only.** `localhost:3000` on the workstation forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives k3s (through the tunnel) and EKS (through the ALB) unchanged.
 
 The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` in `k3s-kubeconfig`) — the box's IP is ephemeral and gets recycled by AWS, so pinning it would produce a false MITM warning on every start.
 

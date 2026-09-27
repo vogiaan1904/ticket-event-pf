@@ -1,19 +1,28 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppConfigService } from '@services/config.service';
 import { LoggerService } from '@services/logger.service';
 import { AppModule } from './app.module';
+import { applyEdgeSecurity } from './common/security';
 import { startMetricsServer } from './shared/metrics/server';
+import { createHttpDrain } from './shared/utils/http-drain.util';
 import { setupSwagger } from './shared/swagger/setup';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const drain = createHttpDrain();
+  app.use(drain.middleware);
 
   const configService = app.get(AppConfigService);
   const logger = app.get(LoggerService);
   const isDocsEnv = ['development', 'staging'].includes(configService.nodeEnv);
 
   app.useLogger(logger);
+  applyEdgeSecurity(app, {
+    trustProxyHops: configService.appConfig.trustProxyHops,
+    docs: isDocsEnv,
+  });
 
   app.setGlobalPrefix(configService.appConfig.globalPrefix || 'api');
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
@@ -32,6 +41,7 @@ async function bootstrap() {
 
   const port = configService.appConfig.port || 3000;
   const metricsPort = Number(process.env.SERVER_METRICS_PORT || 2112);
+  const drainMs = Number(process.env.SHUTDOWN_DRAIN_SECONDS || 25) * 1000;
 
   if (isDocsEnv) {
     setupSwagger(app, configService.swaggerConfig);
@@ -42,8 +52,15 @@ async function bootstrap() {
   const metricsServer = startMetricsServer(metricsPort);
   logger.log(`metrics server running on: http://localhost:${metricsPort}/metrics`);
 
+  // Drain in-flight work, then exit: a listener replaces Node's default exit on
+  // the signal, and waiting for the event loop to drain hangs on any open handle.
   for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-    process.on(sig, () => metricsServer.close());
+    process.on(sig, async () => {
+      drain.begin(app.getHttpServer(), drainMs);
+      await app.close();
+      metricsServer.close();
+      process.exit(0);
+    });
   }
 
   logger.log(

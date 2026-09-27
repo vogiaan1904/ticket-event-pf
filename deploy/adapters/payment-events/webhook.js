@@ -23,12 +23,18 @@ async function complete(orderCode) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    // Compare-and-set, as the Lambda does: a repeated call matches no row and
+    // writes no second outbox event.
     const pay = await client.query(
       `UPDATE payments SET status = 'COMPLETED', "completedAt" = now()
-       WHERE "orderCode" = $1 RETURNING id, "amountCents", currency, provider`,
+       WHERE "orderCode" = $1 AND status = 'PENDING' RETURNING id, "amountCents", currency, provider`,
       [orderCode],
     );
-    if (pay.rowCount === 0) { await client.query('ROLLBACK'); return { code: 404 }; }
+    if (pay.rowCount === 0) {
+      await client.query('ROLLBACK');
+      const found = await client.query('SELECT 1 FROM payments WHERE "orderCode" = $1', [orderCode]);
+      return found.rowCount === 0 ? { code: 404 } : { code: 200, duplicate: true };
+    }
     const p = pay.rows[0];
     const payload = {
       order_code: orderCode, payment_id: p.id, amount_cents: p.amountCents,
@@ -51,8 +57,10 @@ http.createServer(async (req, res) => {
   if (req.method === 'POST' && m) {
     try {
       const r = await complete(decodeURIComponent(m[1]));
-      webhookEvents.inc({ type: EVENT_TYPE, result: r.code === 200 ? 'accepted' : 'rejected' });
-      res.writeHead(r.code, { 'Content-Type': 'application/json' }).end(JSON.stringify(r.payload || { error: 'payment not found' }));
+      const result = r.code !== 200 ? 'rejected' : r.duplicate ? 'duplicate' : 'accepted';
+      webhookEvents.inc({ type: EVENT_TYPE, result });
+      const body = r.payload || (r.duplicate ? { status: 'already completed' } : { error: 'payment not found' });
+      res.writeHead(r.code, { 'Content-Type': 'application/json' }).end(JSON.stringify(body));
     } catch (e) {
       webhookEvents.inc({ type: EVENT_TYPE, result: 'rejected' });
       console.error(e); res.writeHead(500).end(JSON.stringify({ error: e.message }));

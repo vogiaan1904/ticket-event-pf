@@ -87,7 +87,7 @@ helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-eks
 diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
 ```
 
-- `storageClass: gp3` — empty on kind/k3s, so the key is omitted entirely and they keep their default provisioner.
+- `storageClass: gp3` — empty on k3s, so the key is omitted entirely and it keeps its default provisioner.
 - `gateway.nodePort: null` — `null` (not omitted, not `0`) removes the key from merged values, the
   `{{- if .nodePort }}` guard goes false, and the Service falls back to `ClusterIP` behind the ALB.
 - `ingress.enabled: true` + ALB annotations — `target-type: ip` (pod IPs direct via the VPC CNI),
@@ -95,10 +95,10 @@ diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
   target into unhealthy), and `inbound-cidrs` locked to your `/32` because the stack ships dev secrets.
 - `serviceAccount.order.*` — creates the SA and stamps the `eks.amazonaws.com/role-arn` annotation.
 
-`dynamodb.enabled: false` and `order.dynamodbEndpoint: ""` are **identical to k3s**. The difference
-is *where the credentials come from*, not any app config: empty env creds fall through the SDK chain
-to the web-identity step instead of IMDS. This is why `config.yaml` must **omit** the AWS env vars
-rather than blank them — an empty-string env var still wins over IMDS.
+The DynamoDB config is **identical to k3s** — both take the chart default, an empty
+`order.dynamodbEndpoint`. The difference is *where the credentials come from*, not any app config:
+with no env creds the SDK chain reaches the web-identity step instead of IMDS. This is why
+`config.yaml` renders **no** AWS key env vars — an empty-string one would still win over IMDS.
 
 ---
 
@@ -217,6 +217,9 @@ which is what the cluster exists to make possible:
   evidence that the complexity bought something.
 - **HPA + load test** the virtual queue and inventory under real concurrency. Two ceilings are known
   in advance and neither is fixed by adding replicas — see § scaling limits below.
+- **Rollouts behind the ALB** — the `preStop` sleep was measured on k3s only, through kube-proxy;
+  the ALB deregisters targets on its own, slower clock. Measure through the ALB before EKS carries
+  traffic (`docs/decisions/0015-app-pods-sleep-before-sigterm.md`, *Consequences*).
 - **Observability** — metrics first (metrics-server is not installed by EKS); distributed tracing is
   a later, larger piece because it means instrumenting seven services in two languages.
 - Optional: ACM + Route 53 TLS on the ALB, External Secrets Operator + Secrets Manager, PITR/backups.
@@ -235,15 +238,22 @@ defaults `POSTGRES_MAX_OPEN_CONNS` to **25 per replica**. Four `inventory-servic
 the server on their own, and the failure lands on `user-service` / `event-service` /
 `payment-service` as `FATAL: sorry, too many clients already` — services that were never under load.
 
-**2 — the lock ceiling.** `services/inventory-svc/internal/services/reservation.go` reserves under
-`SELECT … FOR UPDATE` (with `Order("id")` for consistent lock acquisition) plus a guarded
-`WHERE reserved + sold + q <= total` update. This is *correct* — overselling is structurally
-impossible at the database layer — and it is exactly why throughput against one hot ticket class is
-bounded by lock hold time rather than replica count.
+**2 — the lock ceiling.** `services/inventory-svc/internal/services/reservation.go` reserves with a
+guarded conditional `UPDATE` per class in ascending id order — `WHERE … AND reserved + sold + q <=
+total` — and takes **no** `SELECT … FOR UPDATE` (removed in `35e864f`). This is *correct*: under
+READ COMMITTED, Postgres re-checks the predicate against the newest committed row after taking its
+own lock, so overselling is structurally impossible. The row is still held from that `UPDATE` to
+`COMMIT`, so one hot ticket class is processed serially — throughput is bounded by lock hold time,
+not replica count. Measured ~1300 reserves/sec, peaking at four concurrent reservers:
+`docs/plans/2026-09-22-inventory-contention-benchmark.md`.
 
 **Consequence: do not autoscale `inventory-service`.** Replicas cost 25 connections each and buy no
-throughput on the contended path. Lifting ceiling 2 means changing the data model, not the
-infrastructure.
+throughput on the contended path.
+
+**Ceiling 2 is not reached at the shipped configuration**, so it is not a to-do. The waitroom admits
+at `QUEUE_DEFAULT_MAX_CONCURRENT / checkout duration` — 100 slots against a 15-minute `JWT_EXPIRY`,
+i.e. under 1 admit/sec against a ~1300/sec ceiling. Lifting it is a data-model change worth making
+only if the admission rate is raised toward it.
 
 **3 — every PVC-backed pod is pinned to one availability zone.** The EBS CSI driver writes node
 affinity onto each PersistentVolume, because an EBS volume physically exists in one AZ.

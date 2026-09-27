@@ -20,12 +20,12 @@ Add the RPC + request/response messages to `proto/<owner>.proto`, then regenerat
 - Use a `dto/` class with `class-validator` decorators (a global `ValidationPipe` throws `RpcValidationException`). Map domain ↔ proto in the module's mapper if one exists; prefer the generated proto types directly over redefining enums.
 
 ## 3. Expose via the API Gateway (if the endpoint is client-facing)
-- In `services/api-gateway/src/modules/<service>/`: add a REST controller method, a request/response DTO, and call the downstream service through its **gRPC client** (registered in `src/shared/microservices`).
+- In `services/api-gateway/src/modules/<service>/`: add a REST controller method, a request/response DTO, and call the downstream service through its **gRPC client** (registered with `ClientsModule` in that feature's `<feature>.module.ts`).
 - gRPC client addresses come from config/env (one address per downstream service) — never hardcode ports.
-- Map gRPC errors to HTTP in `src/common/filters` (add a mapping there, not in the controller).
+- gRPC codes become HTTP statuses only through `GRPC_TO_HTTP` in `src/shared/metrics/code.ts`, applied by the global filter in `src/common/filters` — never in the controller.
 
 ## 4. Verify
 - Rebuild the owner (`go build ./...` or `npm run build`) and the gateway (`npm run build`).
 - The gateway is the only HTTP entry point (port 3000, Swagger in dev) — smoke-test through it.
 
-> Match the **existing** module's conventions in the service you're editing — the three TS services currently differ (see root `CLAUDE.md` "Canonical TS layout"). Don't introduce a new layout.
+> Match the **existing** module's conventions in the service you're editing — the TS services currently differ (see `docs/design/ts-layout.md`, *Where each service stands*). Don't introduce a new layout; a service converges whole.

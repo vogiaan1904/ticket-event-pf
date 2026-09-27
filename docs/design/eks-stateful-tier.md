@@ -3,7 +3,7 @@
 **Status:** phases (a) and (a2) built and proven; **phases (b)–(f) deferred
 2026-09-19** — see *Relationship to the scope pivot*.
 Phase (a)'s work order: `docs/plans/2026-09-19-eks-stateful-tier-phase-a.md`.
-**Target:** the `values-eks.yaml` deploy target only. kind and k3s are unchanged.
+**Target:** the `values-eks.yaml` deploy target only. k3s is unchanged.
 
 ## The problem
 
@@ -60,6 +60,16 @@ survives, because nothing irreplaceable is left in the cluster.
 - **shared** — `user`, `event`, and Temporal's two databases. Low traffic, and a
   shared outage there is recoverable.
 
+> **"Low traffic" describes today's load, not the design.** Temporal writes
+> workflow history, polls task queues and updates visibility once per in-flight
+> order, so its database load scales with **concurrent checkouts**, not with
+> traffic generally. At the ~100 the platform is configured for, `shared` is
+> idle. Raise `QUEUE_DEFAULT_MAX_CONCURRENT` into the thousands and Temporal
+> becomes the platform's heaviest writer — at which point this grouping, and
+> `db.t4g.micro` at 2 burstable vCPU and 1 GiB, both invert. The split below is
+> sized for failure isolation; re-size it against measured load before any
+> on-sale admitting more than low hundreds concurrently.
+
 Five instances (one per service) was considered and rejected: the two extra
 instances buy isolation between `user` and `event`, which have no meaningful
 contention and no independent failure story worth $0.14/hr.
@@ -88,11 +98,11 @@ inside `DATABASE_URL` leave the ConfigMap entirely.
 
 > The password is in a **ConfigMap** today (`config.yaml:12`, `:27`, `:97`) —
 > the shape `deploy/Makefile` warns about for the chart's other secrets. Moving
-> to Secrets Manager fixes it as a side effect, and it must be fixed for k3s and
-> kind too, where the value moves into the existing per-service Secret.
+> to Secrets Manager fixes it as a side effect, and it must be fixed for k3s
+> too, where the value moves into the existing per-service Secret.
 
-**`values-local.yaml` / `values-k3s.yaml`** — unchanged. All three hosts default
-to `postgres`, so both render byte-identical to today. This is the acceptance
+**`values-k3s.yaml`** — unchanged. All three hosts default to `postgres`, so it
+renders byte-identical to today. This is the acceptance
 test for the chart phase.
 
 **`values-eks.yaml`** — `postgres.enabled: false`, three hosts set from Terraform
@@ -183,23 +193,35 @@ infra side of the project. Reconciled 2026-09-19:
 - **(a2) stands.** A half-migrated node placement is worse than either end state,
   and Gate 3a is green against it.
 - **(a) stands, for its credential fix.** The Postgres password is in a ConfigMap
-  on *every* target including kind, where `kubectl describe` prints it in full.
+  on *every* target, where `kubectl describe` prints it in full.
   That is a defect independent of whether RDS is ever built. **Task 5 — the
   `values-eks.yaml` placeholder hosts — is out of scope**: unresolvable hostnames
   for instances nobody is building are not worth committing.
-- **(b)–(f) are deferred.** Each is sound; none is the highest-value work
-  available. The ranked backlog that outranks them: lift the inventory
+- **(b)–(f) were deferred** behind a ranked backlog: lift the inventory
   serialization ceiling *and measure it*, test the four NestJS services, and more
   order-flow-shaped correctness work.
+
+**That ranking no longer holds (2026-09-23).** Both items that outranked this
+work are resolved:
+
+- The four NestJS services are under CI.
+- The inventory ceiling was measured, and it is **not reachable**. Reserve
+  sustains ~1300/sec; the waitroom admits at `maxConcurrent / checkout duration`,
+  which at the shipped `QUEUE_DEFAULT_MAX_CONCURRENT: 100` against a 15-minute
+  `JWT_EXPIRY` is under 1/sec. Method and numbers:
+  `docs/plans/2026-09-22-inventory-contention-benchmark.md`.
+
+So (b)–(f) are no longer deferred *for the stated reason*. Whether they are the
+next work is an open call rather than a settled one.
 
 Deferred is not cancelled. The problem statement above is still true: one
 StatefulSet holding six databases is the coupling the saga exists to avoid.
 
 ## Success criteria
 
-- [ ] `helm template -f values-local.yaml` and `-f values-k3s.yaml` render
-      byte-identical to the current output.
-- [ ] `make gate1` passes on kind with no RDS in the picture.
+- [ ] `helm template -f values-k3s.yaml` renders byte-identical to the current
+      output.
+- [ ] `make -C deploy k3s-gate2` passes with no RDS in the picture.
 - [ ] On EKS, the purchase flow completes with three RDS instances behind it.
 - [ ] `payment`'s RDS instance reboots with `inventory` unaffected and the queue
       still admitting.

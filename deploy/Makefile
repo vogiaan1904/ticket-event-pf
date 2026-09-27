@@ -1,54 +1,7 @@
 # TicketBottle — cluster operations for every deploy target.
-CLUSTER := ticketbottle
-CTX     := kind-$(CLUSTER)
 NS      := ticketbottle
-
-.PHONY: cluster-up cluster-down cluster-status
-
-cluster-up:            ## Create the local kind cluster
-	kind create cluster --config kind/cluster.yaml
-	kubectl --context $(CTX) create namespace $(NS) --dry-run=client -o yaml | kubectl --context $(CTX) apply -f -
-
-cluster-down:          ## Delete the local kind cluster
-	kind delete cluster --name $(CLUSTER)
-
-cluster-status:        ## Show nodes and namespaces
-	kubectl --context $(CTX) get nodes
-	kubectl --context $(CTX) get ns $(NS)
-
-CHART := helm/ticketbottle
+CHART   := helm/ticketbottle
 RELEASE := tb
-LOCAL_VALUES := $(CHART)/values-local.yaml
-
-.PHONY: infra-up infra-down smoke
-
-infra-up:              ## Install/upgrade the infra tier on the local cluster (no app pods)
-	./scripts/build-migrate-images.sh
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) --set apps.enabled=false --wait --timeout 6m
-
-infra-down:            ## Uninstall the chart (keeps the cluster)
-	helm uninstall $(RELEASE) -n $(NS) || true
-
-smoke:                 ## Verify every infra component end-to-end
-	./scripts/smoke-infra.sh
-
-.PHONY: apps-up apps-build apps-deploy smoke-apps
-
-apps-build:            ## Build the app images and load them into kind
-	./scripts/build-images.sh
-
-apps-deploy: secrets-check  ## Deploy/upgrade the chart only (no image build)
-	helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace -f $(LOCAL_VALUES) -f $(SECRETS_FILE) --wait --timeout 8m
-
-apps-up: apps-build apps-deploy   ## Build+load images and deploy the app tier
-
-smoke-apps:            ## Verify the app tier (pods Ready + signup)
-	./scripts/smoke-apps.sh
-
-.PHONY: gate1
-
-gate1:                 ## Run the full purchase-flow acceptance test
-	./scripts/gate1-purchase-flow.sh
 
 # --- observability ----------------------------------------------------
 # Cluster-agnostic: acts on whatever the current KUBECONFIG points at.
@@ -66,8 +19,6 @@ obs-grafana:           ## Port-forward Grafana on :3001 (admin password below)
 temporal-ui:           ## Port-forward the Temporal web UI on :8233
 	@echo "http://localhost:8233"
 	kubectl -n $(NS) port-forward svc/temporal-ui 8233:8080
-
-
 
 # --- k3s on EC2 -------------------------------------------------------
 K3S_ENV := terraform/envs/k3s
@@ -112,14 +63,22 @@ k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
 	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
-# HELM_EXTRA passes extra flags through, e.g. deploying a branch build:
-#   make k3s-deploy HELM_EXTRA="--set image.tag=my-branch"
+# REF is the moving tag CI pushes per branch (slashes as dashes), e.g. REF=my-branch.
+# k3s-deploy deploys the immutable sha- build it points at: the moving tag itself
+# leaves the pod spec unchanged, so helm rolls nothing and old pods keep running.
+# HELM_EXTRA passes any other helm flags through.
+REF ?= dev
 HELM_EXTRA ?=
 
-k3s-deploy: secrets-check  ## Deploy the chart to k3s from ECR (tunnel must be open)
-	KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
+k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel must be open)
+	@tags=$$(aws ecr describe-images --region us-east-1 --repository-name ticketbottle/gateway \
+	    --image-ids imageTag=$(REF) --query 'imageDetails[0].imageTags' --output text | tr '\t' '\n' | grep '^sha-'); \
+	 [ "$$(echo "$$tags" | grep -c .)" = 1 ] || { echo "REFUSING: :$(REF) must name exactly one sha- build, found: $$(echo $${tags:-none})"; exit 1; }; \
+	 echo "deploying $$tags (:$(REF))"; \
+	 KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
 	  --set image.registry="$$(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-1.amazonaws.com/" \
+	  --set image.tag=$$tags \
 	  $(HELM_EXTRA) \
 	  --wait --timeout 10m
 

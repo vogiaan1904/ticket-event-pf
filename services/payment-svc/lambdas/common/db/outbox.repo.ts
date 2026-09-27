@@ -28,6 +28,23 @@ export const claimBatch = (
     .skipLocked()
     .execute() as Promise<OutboxRow[]>;
 
+// countUnpublished splits unpublished rows at claimBatch's own cut-off.
+// pending is what the relay will still claim; exhausted rows it never claims again.
+export const countUnpublished = async (
+  db: Kysely<Database>,
+  maxRetries: number,
+): Promise<{ pending: number; exhausted: number }> => {
+  const row = await db
+    .selectFrom('outbox')
+    .select((eb) => [
+      eb.fn.countAll<string>().filterWhere('retryCount', '<', maxRetries).as('pending'),
+      eb.fn.countAll<string>().filterWhere('retryCount', '>=', maxRetries).as('exhausted'),
+    ])
+    .where('publishedAt', 'is', null)
+    .executeTakeFirstOrThrow();
+  return { pending: Number(row.pending), exhausted: Number(row.exhausted) };
+};
+
 export const markPublished = async (db: Kysely<Database>, ids: string[]): Promise<void> => {
   if (ids.length === 0) return;
   await db.updateTable('outbox').set({ publishedAt: new Date() }).where('id', 'in', ids).execute();

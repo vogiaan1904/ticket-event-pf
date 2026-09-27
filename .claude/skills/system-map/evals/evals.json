@@ -1,0 +1,80 @@
+{
+  "skill_name": "system-map",
+  "evals": [
+    {
+      "id": 1,
+      "name": "reserve-mechanism",
+      "prompt": "I'm planning to add assigned-seat reservations to inventory-svc. Before I touch anything: how does Reserve currently guarantee we never oversell a ticket class, what limits its throughput on one hot class, and which documents would I have to keep in step when I change it?",
+      "expected_output": "Reserve is one transaction issuing a guarded conditional UPDATE per class (capacity and eligibility in the WHERE clause, ascending id order), with no SELECT ... FOR UPDATE; the row is held from the UPDATE to COMMIT, so one hot class is serial (~1300 reserves/s measured). Owners: services/inventory-svc/CLAUDE.md, the contention-benchmark plan; order-svc's hold window couples to it.",
+      "files": [],
+      "assertions": [
+        "States that Reserve uses a guarded conditional UPDATE whose WHERE clause carries the capacity check",
+        "Does not claim that Reserve takes SELECT ... FOR UPDATE",
+        "Names services/inventory-svc/CLAUDE.md as a source",
+        "Explains that the row is held until COMMIT so one hot ticket class is processed serially, citing the measurement (plan or number)",
+        "Cites services/inventory-svc/internal/services/reservation.go with a line number",
+        "Names at least one document outside inventory-svc that must stay in step (order-svc hold window, trace-purchase-flow skill, README/ARCHITECTURE, or the deployment skill's scaling limits)"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "refund-required",
+      "prompt": "A buyer paid but their order is stuck in REFUND_REQUIRED. Which docs and code explain how an order ends up there, what are the likely causes, and will anything fix it automatically?",
+      "expected_output": "ConfirmOrder's markForRefund (services/order-svc/internal/workflows/confirm_order.go) moves a paid order to REFUND_REQUIRED when inventory Confirm fails (the hold expired and the stock was resold) or a payment event lands on an order already cancelled, timed out or failed; it publishes order.refund_required, which nothing consumes, so it is a manual-reconciliation signal. OrdersNeedingRefund in docs/RUNBOOK.md; the hold window in services/order-svc/docs/RESERVATION_HOLD.md.",
+      "files": [],
+      "assertions": [
+        "Points to markForRefund in services/order-svc/internal/workflows/confirm_order.go",
+        "Names inventory Confirm failing after the hold expired and the stock was resold as a cause",
+        "Names a payment event arriving for an order already cancelled, timed out or failed as a cause",
+        "States that nothing consumes order.refund_required, so recovery is manual",
+        "Points to docs/RUNBOOK.md (OrdersNeedingRefund)",
+        "Points to services/order-svc/docs/RESERVATION_HOLD.md or the hold/payment-window relationship"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "gateway-new-endpoint",
+      "prompt": "I want to add GET /api/waitroom/sessions to the api-gateway so a user can list their own waitroom sessions. Don't write code yet: which module layout and DTO conventions should the new code follow, where does error mapping go, and what should I read first?",
+      "expected_output": "Notices that services/api-gateway/src/CLAUDE.md (dtos/req + dtos/resp) conflicts with the root CLAUDE.md Canonical TS layout, and that the root is binding / the question is open in the register; error mapping belongs only in common/filters/global-exception.filter.ts per the error taxonomy; session ownership (decision 0008) and passing user_id in the contract; a new RPC means proto/waitroom.proto first (add-grpc-endpoint / proto-change skills); gRPC client registered in the feature module.",
+      "files": [],
+      "assertions": [
+        "Identifies the conflict between services/api-gateway/src/CLAUDE.md and the root CLAUDE.md Canonical TS layout",
+        "Says the gRPC-to-HTTP mapping belongs in services/api-gateway/src/common/filters/global-exception.filter.ts and nowhere else",
+        "Raises session ownership (the waitroom checks the owner / user_id passed in the contract, decision 0008)",
+        "Says the contract change starts in proto/waitroom.proto and must be regenerated into the consumers",
+        "Does not claim gRPC clients are registered in src/shared/microservices",
+        "Does not claim the gateway rate-limits requests"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "onboarding-order",
+      "prompt": "I'm new to this codebase and I've been asked to change what the order saga does when creating the payment intent fails. Give me a reading list, in order, saying what each document is for and whether I can trust it for how the code behaves today. Keep it under a page.",
+      "expected_output": "Starts at services/order-svc/CLAUDE.md, then the trace-purchase-flow skill; names create_order.go / steps.go to verify; rates SYSTEM.md as background; does not send the reader to README/ARCHITECTURE for mechanism.",
+      "files": [],
+      "assertions": [
+        "Lists services/order-svc/CLAUDE.md before any file under services/order-svc/docs/",
+        "Includes the trace-purchase-flow skill",
+        "Names services/order-svc/internal/workflows/create_order.go or steps.go as code to verify in",
+        "If services/order-svc/docs/SYSTEM.md is listed, it is marked as background or to be verified against the code",
+        "Does not present README.md or docs/ARCHITECTURE.md as a source for how the saga behaves today",
+        "Gives a trust judgement for each listed document"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "brief-waitroom-caps",
+      "prompt": "I'm about to hand this to a subagent: 'make the waitroom's concurrent-checkout cap configurable per event'. Write the brief I should give it \u2014 what to read, in what order, what is already decided, and what not to trust. Don't implement anything.",
+      "expected_output": "Points at the register's Open row, services/waitroom-svc/CLAUDE.md, queue_processor.go (reads the cap once at construction), event_gate.go (per-event config path), config.go; the single-replica constraint; decisions 0004/0006; tells the subagent not to trust the waitroom docs/ background files.",
+      "files": [],
+      "assertions": [
+        "Points to the Open row in the root CLAUDE.md decision register about per-event concurrency",
+        "Names services/waitroom-svc/CLAUDE.md as required reading",
+        "Names services/waitroom-svc/internal/service/queue_processor.go",
+        "Names services/waitroom-svc/internal/service/event_gate.go as the per-event config path",
+        "Mentions the single-replica constraint",
+        "Warns against trusting services/waitroom-svc/docs/ (SYSTEM_FLOW_README or QUEUE_PROCESSOR_GUIDE) for current behaviour"
+      ]
+    }
+  ]
+}

@@ -5,10 +5,10 @@
 // source: waitroom.proto
 
 /* eslint-disable */
-import { GrpcMethod, GrpcStreamMethod } from '@nestjs/microservices';
-import { Observable } from 'rxjs';
+import { GrpcMethod, GrpcStreamMethod } from "@nestjs/microservices";
+import { Observable } from "rxjs";
 
-export const protobufPackage = 'waitroom.v1';
+export const protobufPackage = "waitroom.v1";
 
 export enum SessionStatus {
   SESSION_STATUS_UNSPECIFIED = 0,
@@ -36,11 +36,11 @@ export interface JoinQueueResponse {
   queueLength: number;
   queuedAt: string;
   expiresAt: string;
-  websocketUrl: string;
 }
 
 export interface GetQueueStatusRequest {
   sessionId: string;
+  userId: string;
 }
 
 export interface QueueStatusResponse {
@@ -58,6 +58,7 @@ export interface QueueStatusResponse {
 
 export interface LeaveQueueRequest {
   sessionId: string;
+  userId: string;
 }
 
 export interface LeaveQueueResponse {
@@ -65,21 +66,8 @@ export interface LeaveQueueResponse {
   message: string;
 }
 
-export interface StreamPositionRequest {
-  sessionId: string;
+export interface HealthCheckRequest {
 }
-
-export interface PositionUpdate {
-  sessionId: string;
-  position: number;
-  queueLength: number;
-  status: SessionStatus;
-  updatedAt: string;
-  checkoutToken: string;
-  checkoutUrl: string;
-}
-
-export interface HealthCheckRequest {}
 
 export interface HealthCheckResponse {
   status: string;
@@ -94,7 +82,7 @@ export interface HealthCheckResponse_ComponentsEntry {
   value: string;
 }
 
-export const WAITROOM_V1_PACKAGE_NAME = 'waitroom.v1';
+export const WAITROOM_V1_PACKAGE_NAME = "waitroom.v1";
 
 export interface WaitroomServiceClient {
   joinQueue(request: JoinQueueRequest): Observable<JoinQueueResponse>;
@@ -103,15 +91,11 @@ export interface WaitroomServiceClient {
 
   leaveQueue(request: LeaveQueueRequest): Observable<LeaveQueueResponse>;
 
-  streamQueuePosition(request: StreamPositionRequest): Observable<PositionUpdate>;
-
   healthCheck(request: HealthCheckRequest): Observable<HealthCheckResponse>;
 }
 
 export interface WaitroomServiceController {
-  joinQueue(
-    request: JoinQueueRequest,
-  ): Promise<JoinQueueResponse> | Observable<JoinQueueResponse> | JoinQueueResponse;
+  joinQueue(request: JoinQueueRequest): Promise<JoinQueueResponse> | Observable<JoinQueueResponse> | JoinQueueResponse;
 
   getQueueStatus(
     request: GetQueueStatusRequest,
@@ -121,8 +105,6 @@ export interface WaitroomServiceController {
     request: LeaveQueueRequest,
   ): Promise<LeaveQueueResponse> | Observable<LeaveQueueResponse> | LeaveQueueResponse;
 
-  streamQueuePosition(request: StreamPositionRequest): Observable<PositionUpdate>;
-
   healthCheck(
     request: HealthCheckRequest,
   ): Promise<HealthCheckResponse> | Observable<HealthCheckResponse> | HealthCheckResponse;
@@ -130,27 +112,17 @@ export interface WaitroomServiceController {
 
 export function WaitroomServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = [
-      'joinQueue',
-      'getQueueStatus',
-      'leaveQueue',
-      'streamQueuePosition',
-      'healthCheck',
-    ];
+    const grpcMethods: string[] = ["joinQueue", "getQueueStatus", "leaveQueue", "healthCheck"];
     for (const method of grpcMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcMethod('WaitroomService', method)(constructor.prototype[method], method, descriptor);
+      GrpcMethod("WaitroomService", method)(constructor.prototype[method], method, descriptor);
     }
     const grpcStreamMethods: string[] = [];
     for (const method of grpcStreamMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
-      GrpcStreamMethod('WaitroomService', method)(
-        constructor.prototype[method],
-        method,
-        descriptor,
-      );
+      GrpcStreamMethod("WaitroomService", method)(constructor.prototype[method], method, descriptor);
     }
   };
 }
 
-export const WAITROOM_SERVICE_NAME = 'WaitroomService';
+export const WAITROOM_SERVICE_NAME = "WaitroomService";

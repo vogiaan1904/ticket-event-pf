@@ -1,23 +1,13 @@
 target: k3s
 
 image:
-  # registry is injected at deploy time via --set (keeps the account id out of git)
-  # The box is the everyday development environment, so it tracks dev, not main.
-  # Deploy another branch's build with --set image.tag=<branch, slashes as dashes>.
+  # registry and tag are set at deploy time: `make k3s-deploy` resolves ECR's
+  # :dev (or REF=<branch>) to the immutable sha- build it names, so each new
+  # build rolls the pods. The account id stays out of git.
   tag: dev
   pullPolicy: Always
 
-# Use REAL AWS DynamoDB (no in-cluster dynamodb-local pod).
-dynamodb:
-  enabled: false
-
-order:
-  dynamodbEndpoint: ""     # empty -> default AWS endpoint
-  awsRegion: us-east-1
-  awsAccessKeyId: ""       # empty -> config.yaml omits creds -> instance-profile chain
-  awsSecretAccessKey: ""
-
-# In-cluster payment path (simulated webhook + relay), same as the kind target.
+# In-cluster payment path (simulated webhook + relay), same as EKS.
 paymentEvents:
   enabled: true
 outboxRelay:

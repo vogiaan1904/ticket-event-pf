@@ -5,6 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+	"github.com/vogiaan1904/ticketbottle-order/internal/metrics"
+	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"go.temporal.io/sdk/temporal"
@@ -68,4 +72,44 @@ func TestCreateOrder_CodeReusedByADifferentOrderIsRefused(t *testing.T) {
 	if !appErr.NonRetryable() {
 		t.Fatal("expected the collision error to be non-retryable")
 	}
+}
+
+// OrdersNeedingRefund pages on this counter, so it must move exactly when a
+// paid order is written into REFUND_REQUIRED -- and on no other status write.
+func TestUpdateOrderStatus_CountsOnlyAWrittenRefundRequired(t *testing.T) {
+	a := newTestOrderActivities(t)
+	ctx := context.Background()
+
+	opt := repo.CreateOrderOption{
+		Code: "TB-REFUND-0001", UserID: "u1", EventID: "e1",
+		Currency: "VND", TotalAmount: 1000,
+	}
+	if _, err := a.CreateOrder(ctx, opt); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	before := counterValue(t, metrics.OrdersRefundRequired)
+
+	if err := a.UpdateOrderStatus(ctx, opt.Code, models.OrderStatusCompleted); err != nil {
+		t.Fatalf("update to COMPLETED: %v", err)
+	}
+	if got := counterValue(t, metrics.OrdersRefundRequired) - before; got != 0 {
+		t.Fatalf("a COMPLETED write moved the refund counter by %v", got)
+	}
+
+	if err := a.UpdateOrderStatus(ctx, opt.Code, models.OrderStatusRefundRequired); err != nil {
+		t.Fatalf("update to REFUND_REQUIRED: %v", err)
+	}
+	if got := counterValue(t, metrics.OrdersRefundRequired) - before; got != 1 {
+		t.Fatalf("refund counter moved by %v, want 1", got)
+	}
+}
+
+func counterValue(t *testing.T, c prometheus.Counter) float64 {
+	t.Helper()
+	var m dto.Metric
+	if err := c.Write(&m); err != nil {
+		t.Fatalf("read counter: %v", err)
+	}
+	return m.GetCounter().GetValue()
 }

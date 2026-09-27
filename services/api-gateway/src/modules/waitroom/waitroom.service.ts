@@ -1,7 +1,6 @@
 import {
   JoinQueueResponse,
   LeaveQueueResponse,
-  PositionUpdate,
   QueueStatusResponse,
   WAITROOM_SERVICE_NAME,
   WaitroomServiceClient,
@@ -9,7 +8,7 @@ import {
 import { RequestUser } from '@/shared/types/request-user.type';
 import { Inject, Injectable } from '@nestjs/common';
 import { ClientGrpc } from '@nestjs/microservices';
-import { firstValueFrom, Observable } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { JoinQueueDto, LeaveQueueDto } from './dtos/req';
 
 @Injectable()
@@ -41,23 +40,18 @@ export class WaitroomService {
     return joinQueueResp;
   }
 
-  async leaveQueue(dto: LeaveQueueDto): Promise<LeaveQueueResponse> {
+  async leaveQueue(user: RequestUser, dto: LeaveQueueDto): Promise<LeaveQueueResponse> {
     const leaveQueueResp = await firstValueFrom(
       this.waitroomService.leaveQueue({
         sessionId: dto.sessionId,
+        userId: user.id,
       }),
     );
 
     return leaveQueueResp;
   }
 
-  async getQueueStatus(sessionId: string): Promise<QueueStatusResponse> {
-    return firstValueFrom(this.waitroomService.getQueueStatus({ sessionId }));
-  }
-
-  streamQueuePosition(sessionId: string): Observable<PositionUpdate> {
-    return this.waitroomService.streamQueuePosition({
-      sessionId,
-    });
+  async getQueueStatus(user: RequestUser, sessionId: string): Promise<QueueStatusResponse> {
+    return firstValueFrom(this.waitroomService.getQueueStatus({ sessionId, userId: user.id }));
   }
 }

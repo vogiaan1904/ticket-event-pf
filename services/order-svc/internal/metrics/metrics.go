@@ -53,6 +53,15 @@ var (
 		[]string{"workflow", "outcome"},
 	)
 
+	// OrdersRefundRequired is unlabelled so it exports 0 from startup: a
+	// series born at 1 shows no increase(), and the first refund would not page.
+	OrdersRefundRequired = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "tb_order_refund_required_total",
+			Help: "Orders written into REFUND_REQUIRED: charged, and holding no ticket.",
+		},
+	)
+
 	Compensations = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "tb_order_compensations_total",

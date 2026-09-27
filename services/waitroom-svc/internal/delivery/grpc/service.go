@@ -40,17 +40,16 @@ func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRe
 	}
 
 	return &waitroompb.JoinQueueResponse{
-		SessionId:    out.SessionID,
-		Position:     out.Position,
-		QueueLength:  out.QueueLength,
-		QueuedAt:     util.TimeToISO8601Str(out.QueuedAt),
-		ExpiresAt:    util.TimeToISO8601Str(out.ExpiresAt),
-		WebsocketUrl: out.WebSocketURL,
+		SessionId:   out.SessionID,
+		Position:    out.Position,
+		QueueLength: out.QueueLength,
+		QueuedAt:    util.TimeToISO8601Str(out.QueuedAt),
+		ExpiresAt:   util.TimeToISO8601Str(out.ExpiresAt),
 	}, nil
 }
 
 func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQueueStatusRequest) (*waitroompb.QueueStatusResponse, error) {
-	out, err := s.svc.GetQueueStatus(ctx, req.SessionId)
+	out, err := s.svc.GetQueueStatus(ctx, req.SessionId, req.UserId)
 	if err != nil {
 		s.l.Errorf(ctx, "Failed to get queue status: %v", err)
 		err = s.mapGRPCError(err)
@@ -78,82 +77,15 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 }
 
 func (s *grpcService) LeaveQueue(ctx context.Context, req *waitroompb.LeaveQueueRequest) (*waitroompb.LeaveQueueResponse, error) {
-	err := s.svc.LeaveQueue(ctx, req.SessionId)
-	if err != nil {
-		return nil, resp.ParseGRPCError(err)
+	if err := s.svc.LeaveQueue(ctx, req.SessionId, req.UserId); err != nil {
+		s.l.Errorf(ctx, "Failed to leave queue: %v", err)
+		return nil, resp.ParseGRPCError(s.mapGRPCError(err))
 	}
 
 	return &waitroompb.LeaveQueueResponse{
 		SessionId: req.SessionId,
 		Message:   "Queue left successfully",
 	}, nil
-}
-
-func (s *grpcService) StreamQueuePosition(req *waitroompb.StreamPositionRequest, stream waitroompb.WaitroomService_StreamQueuePositionServer) error {
-	ctx := stream.Context()
-
-	s.l.Info(ctx, "Starting position stream",
-		"session_id", req.SessionId,
-	)
-
-	upds := make(chan *service.PositionStreamUpdate, 10)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- s.svc.StreamSessionPosition(ctx, req.SessionId, upds)
-	}()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.l.Info(ctx, "Position stream cancelled by client",
-				"session_id", req.SessionId,
-			)
-			return ctx.Err()
-
-		case err := <-errCh:
-			if err != nil {
-				s.l.Error(ctx, "Position stream error",
-					"session_id", req.SessionId,
-					"error", err,
-				)
-				return resp.ParseGRPCError(err)
-			}
-			s.l.Info(ctx, "Position stream completed",
-				"session_id", req.SessionId,
-			)
-			return nil
-
-		case upd := <-upds:
-			if upd == nil {
-				return nil
-			}
-
-			pbUpd := &waitroompb.PositionUpdate{
-				SessionId:     upd.SessionID,
-				Position:      upd.Position,
-				QueueLength:   upd.QueueLength,
-				Status:        convertSessionStatusToProto(upd.Status),
-				UpdatedAt:     util.TimeToISO8601Str(upd.UpdatedAt),
-				CheckoutToken: upd.CheckoutToken,
-				CheckoutUrl:   upd.CheckoutURL,
-			}
-
-			if err := stream.Send(pbUpd); err != nil {
-				s.l.Error(ctx, "Failed to send position update",
-					"session_id", req.SessionId,
-					"error", err,
-				)
-				return err
-			}
-
-			s.l.Debug(ctx, "Sent position update to client",
-				"session_id", req.SessionId,
-				"position", upd.Position,
-				"status", upd.Status,
-			)
-		}
-	}
 }
 
 func convertSessionStatusToProto(status models.SessionStatus) waitroompb.SessionStatus {

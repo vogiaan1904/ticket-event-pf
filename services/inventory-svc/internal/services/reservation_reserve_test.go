@@ -16,7 +16,7 @@ func reserveSvc(t *testing.T) (ReservationService, *pkgGorm.Repository) {
 	return NewReservationService(newTestLogger(), repo), repo
 }
 
-func ticketClassByID(t *testing.T, repo *pkgGorm.Repository, id int64) models.TicketClass {
+func ticketClassByID(t testing.TB, repo *pkgGorm.Repository, id int64) models.TicketClass {
 	t.Helper()
 	var tc models.TicketClass
 	if err := repo.FindByID(context.Background(), &tc, id); err != nil {

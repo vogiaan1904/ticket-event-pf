@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - "deploy/helm/**"
+      - ".github/workflows/chart-assertions.yml"
   workflow_dispatch: {}
 
 permissions:

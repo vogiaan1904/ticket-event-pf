@@ -29,8 +29,6 @@ type ServerConfig struct {
 	WriteTimeout time.Duration
 	IdleTimeout  time.Duration
 
-	PaymentTimeoutSeconds int32
-
 	// How long Create waits for the CreateOrder saga before giving up. On expiry
 	// the workflow is cancelled so it cannot go on reserving inventory for a
 	// caller that has already left.
@@ -96,8 +94,7 @@ func Load() (*Config, error) {
 			WriteTimeout: getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 			IdleTimeout:  getEnvAsDuration("SERVER_IDLE_TIMEOUT", 60*time.Second),
 
-			PaymentTimeoutSeconds: int32(getEnvAsInt("PAYMENT_TIMEOUT_SECONDS", 600)),
-			CreateOrderTimeout:    getEnvAsDuration("ORDER_CREATE_TIMEOUT", 30*time.Second),
+			CreateOrderTimeout: getEnvAsDuration("ORDER_CREATE_TIMEOUT", 30*time.Second),
 		},
 		DynamoDB: DynamoDBConfig{
 			TableName: getEnv("DYNAMODB_TABLE_NAME", "ticketbottle-orders"),

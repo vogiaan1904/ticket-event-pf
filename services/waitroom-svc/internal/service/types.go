@@ -19,7 +19,6 @@ type JoinQueueOutput struct {
 	QueueLength  int64
 	QueuedAt     time.Time
 	ExpiresAt    time.Time
-	WebSocketURL string
 }
 
 type QueueStatusOutput struct {
@@ -66,16 +65,4 @@ type QueueInfoOutput struct {
 	EventID         string
 	QueueLength     int64
 	ProcessingCount int64
-}
-
-// PositionStreamUpdate represents a real-time position update sent via stream
-type PositionStreamUpdate struct {
-	SessionID         string
-	Status            models.SessionStatus
-	Position          int64
-	QueueLength       int64
-	UpdatedAt         time.Time
-	CheckoutToken     string
-	CheckoutURL       string
-	CheckoutExpiresAt *time.Time
 }

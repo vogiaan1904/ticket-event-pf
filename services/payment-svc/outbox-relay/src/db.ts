@@ -7,9 +7,7 @@ import { claimBatch, markPublished, markFailed, OutboxRow } from '../../lambdas/
 import { drainOnce } from './relay';
 import { publishRow, topicFor } from './kafka';
 import { observePublishLag } from './metrics';
-
-const BATCH = Number(process.env.OUTBOX_BATCH_SIZE ?? 100);
-const MAX_RETRIES = Number(process.env.OUTBOX_MAX_RETRIES ?? 5);
+import { BATCH, MAX_RETRIES } from './config';
 
 // One cycle drains batches until one comes back empty, so a single wakeup clears
 // a whole backlog. Each batch is one transaction: claim (FOR UPDATE SKIP LOCKED)

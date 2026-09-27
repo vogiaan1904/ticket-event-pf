@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka/producer"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/models"
 	pkgLog "github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
 	"github.com/vogiaan1904/ticketbottle-waitroom/protogen/event"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -29,8 +29,8 @@ func eventServiceError(err error, notFound error) error {
 
 type WaitroomService interface {
 	JoinQueue(ctx context.Context, req *JoinQueueInput) (*JoinQueueOutput, error)
-	GetQueueStatus(ctx context.Context, ssID string) (*QueueStatusOutput, error)
-	LeaveQueue(ctx context.Context, ssID string) error
+	GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error)
+	LeaveQueue(ctx context.Context, ssID, userID string) error
 	HandleCheckoutCompleted(ctx context.Context, in CheckoutCompletedInput) error
 	HandleCheckoutFailed(ctx context.Context, in CheckoutFailedInput) error
 	HandleCheckoutExpired(ctx context.Context, in CheckoutExpiredInput) error
@@ -38,14 +38,12 @@ type WaitroomService interface {
 	StartQueueProcessor(ctx context.Context) error
 	StopQueueProcessor() error
 	GetProcessorStatus() ProcessorStatus
-
-	StreamSessionPosition(ctx context.Context, sessionID string, updates chan<- *PositionStreamUpdate) error
 }
 
 type waitroomService struct {
 	qSvc  QueueService
 	ssSvc SessionService
-	eSvc  event.EventServiceClient
+	eGate *eventGate
 	prod  producer.Producer
 	l     pkgLog.Logger
 	proc  QueueProcessor
@@ -58,11 +56,12 @@ func NewWaitroomService(
 	prod producer.Producer,
 	l pkgLog.Logger,
 	proc QueueProcessor,
+	eventCacheTTL time.Duration,
 ) WaitroomService {
 	return &waitroomService{
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
-		eSvc:  eSvc,
+		eGate: newEventGate(eSvc, eventCacheTTL),
 		prod:  prod,
 		l:     l,
 		proc:  proc,
@@ -70,42 +69,13 @@ func NewWaitroomService(
 }
 
 func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*JoinQueueOutput, error) {
-	var eCfg *event.EventConfig
-	g, gCtx := errgroup.WithContext(ctx)
-
-	g.Go(func() error {
-		out, err := s.eSvc.FindOne(gCtx, &event.FindOneEventRequest{
-			Id: in.EventID,
-		})
-		if err != nil {
-			return eventServiceError(err, ErrEventNotFound)
-		}
-		if out.Event == nil {
-			return ErrEventNotFound
-		}
-		return nil
-	})
-
-	g.Go(func() error {
-		cfgOut, err := s.eSvc.GetConfig(gCtx, &event.GetEventConfigRequest{
-			EventId: in.EventID,
-		})
-		if err != nil {
-			return eventServiceError(err, ErrEventConfigNotFound)
-		}
-		if cfgOut.EventConfig == nil {
-			return ErrEventConfigNotFound
-		}
-		eCfg = cfgOut.EventConfig
-		return nil
-	})
-
-	if err := g.Wait(); err != nil {
+	eInfo, err := s.eGate.Get(ctx, in.EventID)
+	if err != nil {
 		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 		return nil, err
 	}
 
-	if !eCfg.AllowWaitRoom {
+	if !eInfo.AllowWaitRoom {
 		s.l.Warnf(ctx, "service.waitroomService.JoinQueue: %v", ErrWaitRoomNotAllowed)
 		return nil, ErrWaitRoomNotAllowed
 	}
@@ -116,6 +86,7 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		in.EventID,
 		in.UserAgent,
 		in.IPAddress,
+		eInfo.SaleStartAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
@@ -136,31 +107,22 @@ func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*J
 		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 	}
 
-	if err := s.ssSvc.UpdateSession(ctx, ss); err != nil {
-		return nil, fmt.Errorf("failed to update session: %w", err)
-	}
-
 	qInf, err := s.qSvc.GetQueueInfo(ctx, in.EventID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue info: %w", err)
 	}
 
 	return &JoinQueueOutput{
-		SessionID:    ss.ID,
-		Position:     pos,
-		QueueLength:  qInf.QueueLength,
-		QueuedAt:     ss.QueuedAt,
-		ExpiresAt:    ss.ExpiresAt,
-		WebSocketURL: fmt.Sprintf("/api/v1/waitroom/stream/%s", ss.ID),
+		SessionID:   ss.ID,
+		Position:    pos,
+		QueueLength: qInf.QueueLength,
+		QueuedAt:    ss.QueuedAt,
+		ExpiresAt:   ss.ExpiresAt,
 	}, nil
 }
 
-func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID string) (*QueueStatusOutput, error) {
-	if err := s.ssSvc.ValidateSession(ctx, ssID); err != nil {
-		return nil, err
-	}
-
-	ss, err := s.ssSvc.GetSession(ctx, ssID)
+func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error) {
+	ss, err := s.ssSvc.ActiveSession(ctx, ssID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +135,14 @@ func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID string) (*Que
 	return stt, nil
 }
 
-func (s *waitroomService) LeaveQueue(ctx context.Context, ssID string) error {
+func (s *waitroomService) LeaveQueue(ctx context.Context, ssID, userID string) error {
 	ss, err := s.ssSvc.GetSession(ctx, ssID)
 	if err != nil {
 		s.l.Errorf(ctx, "waitroomService.LeaveQueue: %v", err)
 		return err
+	}
+	if ss.UserID != userID {
+		return ErrSessionNotFound
 	}
 
 	if err := s.qSvc.DequeueSession(ctx, ss.EventID, ssID); err != nil {
@@ -320,107 +285,4 @@ func (s *waitroomService) GetProcessorStatus() ProcessorStatus {
 		return ProcessorStatus{IsRunning: false}
 	}
 	return s.proc.GetStatus()
-}
-
-func (s *waitroomService) StreamSessionPosition(ctx context.Context, ssID string, upds chan<- *PositionStreamUpdate) error {
-	if err := s.ssSvc.ValidateSession(ctx, ssID); err != nil {
-		return err
-	}
-
-	ss, err := s.ssSvc.GetSession(ctx, ssID)
-	if err != nil {
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-
-	// Send initial position update immediately
-	initUpd, err := s.buildPositionUpdate(ctx, ss)
-	if err != nil {
-		return fmt.Errorf("failed to build initial position update: %w", err)
-	}
-
-	select {
-	case upds <- initUpd:
-		s.l.Debugf(ctx, "Sent initial position update - session_id: %s, position: %d",
-			ssID, initUpd.Position)
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	sub, err := s.qSvc.SubscribeToPositionUpdates(ctx, ss.EventID)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to position updates: %w", err)
-	}
-	defer sub.Close()
-
-	s.l.Infof(ctx, "Started streaming position updates - session_id: %s, event_id: %s",
-		ssID, ss.EventID)
-
-	updCh := sub.Updates()
-	for {
-		select {
-		case <-ctx.Done():
-			s.l.Infof(ctx, "Position stream closed by context - session_id: %s", ssID)
-			return ctx.Err()
-
-		case event := <-updCh:
-			if event == nil {
-				// Channel closed
-				return nil
-			}
-
-			s.l.Debugf(ctx, "Received position update event - session_id: %s, update_type: %s",
-				ssID, event.UpdateType)
-
-			ss, err = s.ssSvc.GetSession(ctx, ssID)
-			if err != nil {
-				s.l.Errorf(ctx, "Failed to get session during stream: %v", err)
-				continue
-			}
-
-			upd, err := s.buildPositionUpdate(ctx, ss)
-			if err != nil {
-				s.l.Errorf(ctx, "Failed to build position update: %v", err)
-				continue
-			}
-
-			select {
-			case upds <- upd:
-				s.l.Debugf(ctx, "Sent position update - session_id: %s, position: %d, status: %s",
-					ssID, upd.Position, upd.Status)
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-
-			if ss.Status != models.SessionStatusQueued {
-				s.l.Infof(ctx, "Session status changed, closing stream - session_id: %s, status: %s",
-					ssID, ss.Status)
-				return nil
-			}
-		}
-	}
-}
-
-func (s *waitroomService) buildPositionUpdate(ctx context.Context, ss *models.Session) (*PositionStreamUpdate, error) {
-	upd := &PositionStreamUpdate{
-		SessionID: ss.ID,
-		Status:    ss.Status,
-		UpdatedAt: ss.UpdatedAt,
-	}
-
-	if ss.Status == models.SessionStatusQueued {
-		status, err := s.qSvc.GetQueueStatus(ctx, ss.ID, ss)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get queue status: %w", err)
-		}
-		upd.Position = status.Position
-		upd.QueueLength = status.QueueLength
-	}
-
-	if ss.Status == models.SessionStatusAdmitted {
-		upd.CheckoutToken = ss.CheckoutToken
-		upd.CheckoutURL = "/checkout" // Relative: resolved against the client's own origin.
-		upd.CheckoutExpiresAt = ss.CheckoutExpiresAt
-	}
-
-	return upd, nil
 }

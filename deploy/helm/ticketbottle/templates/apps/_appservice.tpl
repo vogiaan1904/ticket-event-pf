@@ -1,3 +1,11 @@
+{{- /* Keeps serving while kube-proxy drops the pod from its Service.
+       See docs/decisions/0015. */}}
+{{- define "tb.preStopSleep" -}}
+lifecycle:
+  preStop:
+    sleep: { seconds: {{ .Values.shutdown.preStopSleepSeconds }} }
+{{- end -}}
+
 {{- define "tb.appService" -}}
 {{- $ := .ctx -}}
 {{- if $.Values.apps.enabled }}
@@ -38,6 +46,9 @@ spec:
       {{- if .serviceAccount }}
       serviceAccountName: {{ .serviceAccount }}
       {{- end }}
+      {{- with .drainSeconds }}
+      terminationGracePeriodSeconds: {{ add $.Values.shutdown.preStopSleepSeconds . 5 }}
+      {{- end }}
       containers:
         - name: {{ .name }}
           image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}
@@ -50,6 +61,9 @@ spec:
             {{- end }}
           {{- if gt (int .port) 0 }}
           ports: [{ containerPort: {{ .port }} }]
+          {{- end }}
+          {{- if .svcName }}
+          {{- include "tb.preStopSleep" $ | nindent 10 }}
           {{- end }}
           {{- if eq .probe "tcp" }}
           readinessProbe:
