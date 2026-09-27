@@ -59,6 +59,16 @@ def load_client(path):
         return [(code, float(ms) / 1000, int(status)) for code, ms, status in CHECKOUT.findall(f.read())]
 
 
+def split_burst(runs, secs=3.0):
+    """Splits sagas into the opening burst, started within secs of the first, and the rest.
+
+    Why 3s: a burst of 20 spans two 1s admission ticks, up to 2.7s on k3s.
+    """
+    first = min(r["start"] for r in runs)
+    burst = [r for r in runs if (r["start"] - first).total_seconds() < secs]
+    return burst, [r for r in runs if r not in burst]
+
+
 def pct(xs, p):
     xs = sorted(xs)
     return xs[min(len(xs) - 1, round(p / 100 * (len(xs) - 1)))]
@@ -92,15 +102,14 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("histories")
     ap.add_argument("k6_log", nargs="?")
-    ap.add_argument("--burst-secs", type=float, default=2.0,
+    ap.add_argument("--burst-secs", type=float, default=3.0,
                     help="sagas started this soon after the first are the opening burst")
     a = ap.parse_args()
     runs = load_histories(a.histories)
     client = load_client(a.k6_log) if a.k6_log else []
-    first = min(r["start"] for r in runs)
-    burst = [r for r in runs if (r["start"] - first).total_seconds() < a.burst_secs]
+    burst, steady = split_burst(runs, a.burst_secs)
     report("burst", burst, client)
-    report("steady", [r for r in runs if r not in burst], client)
+    report("steady", steady, client)
     report("all", runs, client)
     rejected = [(s, status) for c, s, status in client if status >= 400]
     if rejected:

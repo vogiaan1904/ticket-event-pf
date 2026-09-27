@@ -52,6 +52,14 @@ class ParseTest(unittest.TestCase):
         self.assertAlmostEqual(got[0][1], 2.1504)
         self.assertAlmostEqual(got[1][1], 0.012)
 
+    def test_default_burst_spans_two_admission_ticks(self):
+        # Run A's shape: two ticks 0-2.7s, then the next saga 2.8s later.
+        runs = [saga_latency.parse(f"CreateOrder:TB-{i}", [event(1, secs, "WORKFLOW_EXECUTION_STARTED")])
+                for i, secs in enumerate([0.0, 1.3, 2.7, 5.5])]
+        burst, steady = saga_latency.split_burst(runs)
+        self.assertEqual([r["code"] for r in burst], ["TB-0", "TB-1", "TB-2"])
+        self.assertEqual([r["code"] for r in steady], ["TB-3"])
+
     def test_percentile_is_nearest_rank(self):
         xs = [float(x) for x in range(1, 101)]
         self.assertEqual(saga_latency.pct(xs, 50), 51.0)

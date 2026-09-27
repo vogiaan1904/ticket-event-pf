@@ -39,7 +39,7 @@ gateway's time is on top):
 2. **The payment call has two modes.** 263 calls took 0.2–0.6s, 23 took
    0.7–1.3s, and none fell between. From the box, one round trip to
    `sb-openapi.zalopay.vn` is 0.24s and a fresh TLS connection 0.96s. The slow
-   mode is the price of a new connection, not of ZaloPay.
+   mode matches the price of a new connection, not a slow ZaloPay.
 3. **The hand-offs cost as much as the work.** Excluding payment, the four steps
    run ~0.15s combined; the queue waits between them sum to ~0.35s at p50.
 
@@ -567,11 +567,12 @@ git commit -m "docs: record where a checkout's time goes, and what slows the ope
 | 06:43Z | 20 | ~10 min | 20 of 20 (saga) | 1.01s / 5.28s | not captured | not captured | 1.14s / 0.44s | 30 of 287 / not captured |
 | A | 20 | ≥10 min | 20 of 20 | 0.95s / 2.71s | 2–12% / up to 13 | 23 of 301 | 0.90s / 0.59s | 42 / 43 of 321 |
 | B | 20 | none | 19 of 20 | 0.47s / 4.56s | 4–26% / up to 14 | 17 of 305 | 0.91s / 0.57s | 36 / 36 of 325 |
-| N=10 | 10 | ~2 min | 10 of 10 | 0.34s / 0.76s | 6–46% / up to 12 | 5 of 324 | 0.96s / 0.43s | 13 / 15 of 334 |
-| N=40 | 40 | ~4.5 min | 40 of 40 | 3.07s / 8.03s | 0–15% / up to 39 | 28 of 283 | 1.13s / 0.47s | 67 / 68 of 323 |
+| N=10 | 10 | ~2 min | 10 of 10 | 0.34s / 0.76s | 6–45% / up to 12 | 5 of 324 | 0.96s / 0.43s | 13 / 15 of 334 |
+| N=40 | 40 | ~4.5 min | 40 of 40 | 3.07s / 8.03s | 0–57%, 0–15% after its first second / up to 39 | 28 of 283 | 1.13s / 0.47s | 67 / 68 of 323 |
 
 Runs A, B, N=10 and N=40 were read with `--burst-secs 3`: a burst of 20 spans two
-admission ticks, 0–2.7s, and the default of 2 cut run A's in two. "Idle before"
+admission ticks, 0–2.7s, and the default of 2 cut run A's in two. The tool's
+default is now 3. "Idle before"
 for N=10 and N=40 is the time since the previous run's last checkout; both ran
 right after the waiting room was rolled to change its release rate.
 
@@ -597,11 +598,13 @@ it shows.**
    busy CPU, against 0.34–0.50 for the seven services together and 0.02 for k6. Of
    Postgres's row writes over the box's life, `temporal` has 587k and the four
    app databases about 19k together. The Open row's suspect is now measured.
-4. **The payment call has its own cold path.** Its slow mode, 0.7–1.5s against
-   ~0.33s, is a new TLS connection to ZaloPay. It hit every call in a burst that
-   followed a pause of a minute or more, and ~11% of steady-state calls. It
-   carries about two thirds of the steady-state misses, none of which waited on
-   Temporal. H4 holds.
+4. **The payment call has a second, slower mode.** 0.7–1.5s against ~0.33s,
+   which matches the cost of a new TLS connection to ZaloPay. It hit 15–30% of
+   the calls in each 20- or 40-saga burst, all 10 in the N=10 burst, and 6–10%
+   of steady-state calls: bursts raise it two- to threefold, as connections
+   opened under concurrency would, but the pause before a burst does not
+   predict it. It carries about half (A) to two thirds (B) of the steady-state
+   misses, none of which waited on Temporal. H4 holds.
 5. **The SLO instrument is honest.** Across four runs the gateway's count of
    checkouts over 2s matched the client's within two.
 
@@ -626,8 +629,9 @@ seven services spend doing the work, before its share of Postgres.
 
 ## Found, not fixed
 
-- **~11% of steady-state payment calls open a new connection.** Whether the
-  client's pool drops sockets or ZaloPay closes idle ones is unmeasured.
+- **6–10% of steady-state payment calls take the slow mode.** That it is a new
+  connection is inferred from its timing; whether the client's pool drops
+  sockets or ZaloPay closes idle ones is unmeasured.
 - **`ticketbottle_event` has ~1.04M transactions against 1.1k row writes** over
   the box's life, the most of any database. Nothing here says which path reads
   it that often.
