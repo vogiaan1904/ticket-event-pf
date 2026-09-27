@@ -1,7 +1,7 @@
 # 0017 — A payment event that stops retrying pages; recovery stays manual
 
 **Date:** 2026-09-27
-**Status:** proposed
+**Status:** accepted
 **Arc:** payment-outbox — [plan](../plans/2026-09-25-payment-outbox-tech-debt.md)
 **Where it lives:** `services/payment-svc/lambdas/common/db/outbox.repo.ts` (`countUnpublished`), `services/payment-svc/outbox-relay/src/metrics.ts`, `deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` (`OutboxEventsExhausted`)
 
@@ -70,3 +70,22 @@ was resold confirms as `REFUND_REQUIRED`, and nothing consumes `order.refund_req
 If outages past ~13 minutes become routine, or one incident strands more rows than a
 person can reason about, the time-based cap is the next step. Retention is not
 addressed: published rows accumulate on the cluster, which costs disk, not latency.
+
+## Outcome
+
+`11df387`. Two database tests hold the split at the retry cut-off and the pending count
+equal to what `claimBatch` can claim; two relay tests hold the gauges apart and the count
+at the configured cut-off. Six mutations each turned a test red. `promtool` showed the
+rule firing on one row, holding through a relay replacement that reports 0 for 30s, and
+clearing five minutes after the reset; a bare `max(...) > 0` failed the replacement case.
+
+On k3s at `sha-11df387`, 2026-09-27:
+
+- **Detection.** 60 rows at `retryCount = 5` fired `OutboxEventsExhausted` 32s after the
+  insert, reaching Alertmanager with the summary "60 payment events stopped retrying".
+  `tb_outbox_pending_rows` read 0 throughout; before this change it would have read 60.
+- **A real order, stranded and recovered.** With the relay stopped, a purchase through the
+  gateway left `TB-GATE1-20260927-54GFXBKW` paid and `PENDING`. Its outbox row set to
+  `retryCount = 5` stayed unpublished with the relay back up, and the order stayed
+  `PENDING`. The runbook's `UPDATE`, run as written, completed the order 7.0s later.
+- **Clearing.** The alert cleared about 4.5 minutes after the gauge returned to 0.

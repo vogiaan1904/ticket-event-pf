@@ -1,6 +1,6 @@
 # Payment outbox tech debt — plan
 
-**Status: item 1 BUILT 2026-09-27, its k3s check not yet run; item 2 DEFERRED.**
+**Status: item 1 COMPLETE 2026-09-27, verified on k3s; item 2 DEFERRED.**
 Written 2026-09-25. Two defects in the payment event path, found while tracing it.
 Item 1 could strand a charged buyer without an alert — decided as
 [0017](../decisions/0017-an-exhausted-payment-event-pages.md); item 2 is latent
@@ -127,7 +127,7 @@ path until (a) lands. Decide it after item 1.
 
 ## Results
 
-### Item 1 — built 2026-09-27
+### Item 1 — built 2026-09-27 (`11df387`)
 
 | Piece | Where |
 |---|---|
@@ -154,4 +154,6 @@ path until (a) lands. Decide it after item 1.
   replacement case.
 - `assert-render.sh` passes with the regenerated golden; the only drift was the rule.
 
-**Not yet run:** the *Done when* check on k3s. It needs this build in ECR.
+**The *Done when* check, on k3s at `sha-11df387`:** passed, and extended from a synthetic
+row to a real stranded order recovered with the runbook's `UPDATE`. The evidence is the
+Outcome of [0017](../decisions/0017-an-exhausted-payment-event-pages.md#outcome).

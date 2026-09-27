@@ -40,7 +40,7 @@ describing it for a week — because the fact had been copied rather than linked
 | Does the gateway rate-limit and set security headers? | `docs/decisions/0013` | Helmet everywhere; sign-in and sign-up throttled per client IP, purchase never; 2026-09-24 |
 | Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet |
 | How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; built; measured on k3s 2026-09-27 |
-| How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; decided 2026-09-27, built, not yet run on k3s |
+| How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; built; verified on k3s 2026-09-27 |
 
 ### Open
 

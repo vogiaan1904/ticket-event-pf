@@ -143,5 +143,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0017](0017-an-exhausted-payment-event-pages.md) | How does a payment event that can never publish become visible on the cluster? | A gauge of rows past the retry cap, a page on any, recovery by one hand-run `UPDATE` | Also capping retries by time, so a long Kafka outage strands nothing | A Kafka outage longer than ~13 minutes strands every row it touches until someone resets them | proposed |
+| [0017](0017-an-exhausted-payment-event-pages.md) | How does a payment event that can never publish become visible on the cluster? | A gauge of rows past the retry cap, a page on any, recovery by one hand-run `UPDATE` | Also capping retries by time, so a long Kafka outage strands nothing | A Kafka outage longer than ~13 minutes strands every row it touches until someone resets them | accepted |
 <!-- decisions:index:end -->
