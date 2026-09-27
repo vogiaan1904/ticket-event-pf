@@ -79,6 +79,35 @@ for overlay in k3s; do
   echo "OK  $overlay rolls its pods when a Secret changes"
 done
 
+# Apps a Service routes to sleep before SIGTERM, so kube-proxy drops them before
+# they close their port; the gateway's grace period covers its drain deadline.
+# Distinct values, so a template that hard-codes 5, 65 or 75 cannot pass.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" \
+  --set shutdown.preStopSleepSeconds=7 --set shutdown.gatewayDrainSeconds=11 > "$actual"
+deployment() { awk -v n="$1" 'BEGIN { RS = "\n---\n" } /kind: Deployment/ && $0 ~ ("\n  name: " n "\n")' "$actual"; }
+for d in app-gateway user-service event-service order-service payment-service \
+         waitroom-service inventory-service payment-webhook; do
+  grep -q "sleep: { seconds: 7 }" <<<"$(deployment "$d")" || fail "$d does not sleep before SIGTERM"
+done
+for d in order-consumer outbox-relay; do
+  grep -q "preStop" <<<"$(deployment "$d")" && fail "$d sleeps, though no Service routes requests to it"
+done
+grep -q "terminationGracePeriodSeconds: 23$" <<<"$(deployment app-gateway)" \
+  || fail "app-gateway's grace period is not sleep + drain + 5"
+grep -q "terminationGracePeriodSeconds" <<<"$(deployment event-service)" \
+  && fail "event-service has its own grace period, though only the gateway drains long requests"
+grep -q 'SHUTDOWN_DRAIN_SECONDS: "11"' "$actual" || fail "gateway-config does not carry the drain deadline"
+echo "OK  apps with a Service sleep before SIGTERM; the gateway's grace covers its drain"
+
+# A gateway stop must outlast the longest checkout, or every rollout cuts some.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" > "$actual"
+create=$(sed -n 's/^  ORDER_CREATE_TIMEOUT: "\([0-9]*\)\([sm]\)"$/\1 \2/p' "$actual")
+drain=$(sed -n 's/^  SHUTDOWN_DRAIN_SECONDS: "\([0-9]*\)"$/\1/p' "$actual")
+[ -n "$create" ] && [ -n "$drain" ] || fail "cannot read ORDER_CREATE_TIMEOUT (Ns or Nm) or SHUTDOWN_DRAIN_SECONDS"
+read -r n unit <<<"$create"; [ "$unit" = m ] && n=$((n * 60))
+[ "$drain" -gt "$n" ] || fail "the gateway drains for ${drain}s, but a checkout may run ${n}s"
+echo "OK  the gateway's drain outlasts a checkout (${drain}s > ${n}s)"
+
 # The goldens are committed, so a real secret reaching one is published. Skipped
 # where the developer's file is absent, as in CI.
 REAL="$CHART/../../secrets.values.yaml"

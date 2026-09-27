@@ -154,6 +154,13 @@ resources:
 # from its manifest entirely — see the note in _appservice.tpl.
 replicas: {}
 
+# How an app pod stops. See docs/decisions/0015 and 0016.
+shutdown:
+  # Seconds an app with a Service keeps serving after it leaves its endpoints.
+  preStopSleepSeconds: 5
+  # The gateway's drain deadline; its grace period is sleep + drain + 5.
+  gatewayDrainSeconds: 65
+
 # Off everywhere by default; values-eks.yaml opts app-gateway in.
 # Requires metrics-server (bundled in k3s, installed by eks-bootstrap.sh on EKS).
 autoscaling:

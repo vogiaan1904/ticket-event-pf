@@ -141,6 +141,7 @@ data:
   JWT_REFRESH_EXPIRATION: 7d
   JWT_REFRESH_SLIDING_WINDOW: 24h
   SALT_ROUND: "10"
+  SHUTDOWN_DRAIN_SECONDS: {{ .Values.shutdown.gatewayDrainSeconds | quote }}
   USER_SERVICE: user-service:50052
   EVENT_SERVICE: event-service:50053
   INVENTORY_SERVICE: inventory-service:50057

@@ -131,4 +131,11 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0014](0014-ts-structure-follows-the-june-layout-rule.md) | Which TS layout is the target for new structure? | The 2026-06-16 rule, restored as a design: flat controller, one transport `dto/`, domain shapes in `<feature>.types.ts`, additions by archetype | Making `event-svc`'s current shape the rule | A rule no service follows yet, applied only as each service is converged | accepted |
+
+### rollout-drain
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0015](0015-app-pods-sleep-before-sigterm.md) | Does an app pod keep serving after it leaves its Service's endpoints? | A native `preStop` sleep of 5s on every app a Service routes to | 2s on the same apps, or 5s on all ten | 5s on every pod stop, and nothing for a pod that crashes | proposed |
+| [0016](0016-the-gateway-drains-for-up-to-65s.md) | How long may a stopping gateway keep serving requests in flight? | Up to 65s: `Connection: close` on every response, idle sockets closed, the rest cut at 65s; a 75s grace period | Up to 20s inside the default 30s grace period | In the worst case a gateway stop takes 75s | proposed |
 <!-- decisions:index:end -->

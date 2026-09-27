@@ -228,6 +228,7 @@ data:
   JWT_REFRESH_EXPIRATION: 7d
   JWT_REFRESH_SLIDING_WINDOW: 24h
   SALT_ROUND: "10"
+  SHUTDOWN_DRAIN_SECONDS: "65"
   USER_SERVICE: user-service:50052
   EVENT_SERVICE: event-service:50053
   INVENTORY_SERVICE: inventory-service:50057
@@ -576,6 +577,9 @@ spec:
             - configMapRef: { name: event-config }
             - secretRef: { name: event-secrets }
           ports: [{ containerPort: 50053 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50053 }
             initialDelaySeconds: 5
@@ -603,6 +607,7 @@ spec:
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: app-gateway }
     spec:
+      terminationGracePeriodSeconds: 75
       containers:
         - name: app-gateway
           image: ticketbottle/gateway:dev
@@ -619,6 +624,9 @@ spec:
             - configMapRef: { name: gateway-config }
             - secretRef: { name: gateway-secrets }
           ports: [{ containerPort: 3000 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             httpGet: { path: /api, port: 3000 }
             initialDelaySeconds: 5
@@ -662,6 +670,9 @@ spec:
             - configMapRef: { name: inventory-config }
             - secretRef: { name: inventory-secrets }
           ports: [{ containerPort: 50057 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50057 }
             initialDelaySeconds: 5
@@ -705,6 +716,9 @@ spec:
             - configMapRef: { name: order-config }
             - secretRef: { name: order-secrets }
           ports: [{ containerPort: 50054 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50054 }
             initialDelaySeconds: 5
@@ -824,6 +838,9 @@ spec:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 8080 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             httpGet: { path: /healthz, port: 8080 }
             initialDelaySeconds: 3
@@ -866,6 +883,9 @@ spec:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
           ports: [{ containerPort: 50055 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50055 }
             initialDelaySeconds: 5
@@ -909,6 +929,9 @@ spec:
             - configMapRef: { name: user-config }
             - secretRef: { name: user-secrets }
           ports: [{ containerPort: 50052 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50052 }
             initialDelaySeconds: 5
@@ -952,6 +975,9 @@ spec:
             - configMapRef: { name: waitroom-config }
             - secretRef: { name: waitroom-secrets }
           ports: [{ containerPort: 50056 }]
+          lifecycle:
+            preStop:
+              sleep: { seconds: 5 }
           readinessProbe:
             tcpSocket: { port: 50056 }
             initialDelaySeconds: 5
