@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -83,7 +82,8 @@ func DecodeCursor(cursor string) (map[string]types.AttributeValue, error) {
 	return result, nil
 }
 
-// GenerateItemID generates a unique ID for order items
-func GenerateItemID() string {
-	return fmt.Sprintf("%d", time.Now().UnixNano())
+// OrderItemID names an order's pos-th item. Derived, not generated, so a retried
+// write puts the same items again instead of adding a second set.
+func OrderItemID(orderCode string, pos int) string {
+	return fmt.Sprintf("%s-%d", orderCode, pos+1)
 }

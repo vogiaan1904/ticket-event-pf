@@ -20,8 +20,8 @@ func (r *implRepository) CreateManyItems(ctx context.Context, orderCode string, 
 	items := make([]models.OrderItem, 0, len(opts))
 	writeRequests := make([]types.WriteRequest, 0, len(opts))
 
-	for _, opt := range opts {
-		item := r.buildOrderItemModel(orderCode, opt)
+	for i, opt := range opts {
+		item := r.buildOrderItemModel(orderCode, i, opt)
 		items = append(items, item)
 
 		av, err := attributevalue.MarshalMap(item)
