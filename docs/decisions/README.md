@@ -144,4 +144,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0017](0017-an-exhausted-payment-event-pages.md) | How does a payment event that can never publish become visible on the cluster? | A gauge of rows past the retry cap, a page on any, recovery by one hand-run `UPDATE` | Also capping retries by time, so a long Kafka outage strands nothing | A Kafka outage longer than ~13 minutes strands every row it touches until someone resets them | accepted |
+
+### saga-orchestration-cost
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0018](0018-short-saga-steps-run-as-local-activities.md) | Which saga steps pay a Temporal task-queue hand-off? | Six short, idempotent steps run as local activities behind a workflow version; reserve, confirm and the payment intent stay remote | Merging steps into fewer regular activities | A local step re-runs when the workflow task that ran it fails, so every such step must be idempotent, and its workflow tests run real activities over fakes | proposed |
 <!-- decisions:index:end -->
