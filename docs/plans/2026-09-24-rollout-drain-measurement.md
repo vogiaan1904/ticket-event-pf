@@ -4,8 +4,9 @@
 rule calls for a delay. The run also found two defects this plan did not look for;
 see *Results*. The architect's calls are
 [0015](../decisions/0015-app-pods-sleep-before-sigterm.md) and
-[0016](../decisions/0016-the-gateway-drains-for-up-to-65s.md), and the work and the
-re-run are [the fixes plan](2026-09-27-rollout-drain-fixes.md).
+[0016](../decisions/0016-the-gateway-drains-for-up-to-65s.md). The work and the
+re-run are [the fixes plan](2026-09-27-rollout-drain-fixes.md), **COMPLETE 2026-09-27**:
+ten rollouts with the fixes, zero failures ([its results](2026-09-27-rollout-drain-fixes.md#results)).
 
 **Goal:** Measure whether a rollout refuses requests now that the NestJS services
 exit on SIGTERM (`7cd6774`), and whether a `preStop` delay removes the refusals.

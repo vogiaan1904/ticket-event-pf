@@ -1,7 +1,7 @@
 # 0015 — An app with a Service sleeps 5s before SIGTERM
 
 **Date:** 2026-09-27
-**Status:** proposed
+**Status:** accepted
 **Arc:** rollout-drain — [plan](../plans/2026-09-27-rollout-drain-fixes.md), from [the measurement](../plans/2026-09-24-rollout-drain-measurement.md)
 **Where it lives:** `deploy/helm/ticketbottle/templates/apps/_appservice.tpl`, `deploy/helm/ticketbottle/templates/apps/payment-events.yaml`, `shutdown.preStopSleepSeconds` in `deploy/helm/ticketbottle/values.yaml`
 
@@ -66,3 +66,19 @@ It holds while kube-proxy propagates an endpoint change well inside 5s, and whil
 app with a Service finishes its shutdown in the 25s left of the default 30s grace
 period. The gateway, which cannot, has its own grace period:
 [0016](0016-the-gateway-drains-for-up-to-65s.md).
+
+## Outcome
+
+`0fddef9` added `tb.preStopSleep` to every app with a Service and to `payment-webhook`,
+from `shutdown.preStopSleepSeconds`. `assert-render.sh` failed on the chart before it
+and passed after; deleting the webhook's sleep turned it red by name.
+
+On k3s on 2026-09-27 (`sha-e3f0b51`) the live Deployments carried `sleep: 5` on the
+eight apps and on nothing else. Five event-service rollouts at 50 req/s: 0 failures of
+27,621 and no `UNAVAILABLE`, against 9,718 failures in 4 of 5 rollouts on 2026-09-25.
+Five gateway rollouts: 0 of 27,676, against 126 refused connects. Both positive
+controls failed (88 and 437), so the zeros are not from a blind probe.
+
+The trace did not settle the ~40s. In three traced rollouts without the sleep, a
+refused reconnect cost about 1s — grpc-js's first backoff — and the 40s did not
+recur. What produced it on 2026-09-25 is unknown; the crash case stays open.

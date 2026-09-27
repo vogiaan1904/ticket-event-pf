@@ -1,7 +1,7 @@
 # 0016 — A stopping gateway drains for up to 65s inside a 75s grace period
 
 **Date:** 2026-09-27
-**Status:** proposed
+**Status:** accepted
 **Arc:** rollout-drain — [plan](../plans/2026-09-27-rollout-drain-fixes.md), from [the measurement](../plans/2026-09-24-rollout-drain-measurement.md)
 **Where it lives:** `services/api-gateway/src/shared/utils/http-drain.util.ts`, `services/api-gateway/src/main.ts`, `shutdown.gatewayDrainSeconds` in `deploy/helm/ticketbottle/values.yaml`
 
@@ -52,3 +52,19 @@ slow request ends within about 5s of SIGTERM.
 
 A node drain, or an HPA scale-in on EKS, can wait up to 75s per gateway pod. If
 `ORDER_CREATE_TIMEOUT` rises above 60s, the drain rises with it.
+
+## Outcome
+
+`0fddef9` renders `SHUTDOWN_DRAIN_SECONDS` and the gateway's 75s grace period from
+`shutdown.gatewayDrainSeconds`. `assert-render.sh` fails on a hard-coded grace period
+and on an `ORDER_CREATE_TIMEOUT` of 70s; both mutants went red by name.
+
+`e3f0b51` added `http-drain.util.ts` and runs `drain.begin` before `app.close()`. Its
+three tests pass, and each fails on the mutant it exists for: no `Connection: close`
+(test 1 times out), every socket cut at once (test 2, `socket hang up`), no deadline
+(test 3 times out). Nest 11 closes the gRPC clients at `onApplicationShutdown`, after
+the HTTP server, so the backends stay reachable for the whole drain.
+
+On k3s on 2026-09-27, five gateway rollouts at 50 req/s over keep-alive connections:
+0 failures of 27,676, and each old pod was gone 16–21s after the rollout began,
+against 40–42s on 2026-09-25. No stop came near the 75s ceiling.

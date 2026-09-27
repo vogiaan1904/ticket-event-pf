@@ -1,6 +1,7 @@
 # Rollout drain fixes — plan
 
-**Status: NOT STARTED.** Written 2026-09-27. Implements
+**Status: COMPLETE 2026-09-27.** Ten rollouts on k3s, zero failures; the trace did not
+reproduce the ~40s — see *Results*. Written 2026-09-27. Implements
 [0015](../decisions/0015-app-pods-sleep-before-sigterm.md) and
 [0016](../decisions/0016-the-gateway-drains-for-up-to-65s.md), from the findings of
 [the rollout drain measurement](2026-09-24-rollout-drain-measurement.md#results).
@@ -572,4 +573,43 @@ git commit -m "docs: accept the rollout drain records with their k3s run"
 
 ## Results
 
-Not run.
+Run 2026-09-27 on k3s (t3.large, v1.36.4+k3s1), `deploy/scripts/rollout-drain.sh` at
+50 req/s.
+
+**Step 3 — the trace, on `sha-39e4300` (no sleep, no drain): matches neither row.**
+Three traced event-service rollouts, all alike: `READY -> IDLE` as the old pod
+closed, one `CONNECTING -> TRANSIENT_FAILURE` (`ECONNREFUSED`), about 1s in
+`TRANSIENT_FAILURE` — grpc-js's first reconnect backoff — then `CONNECTING -> READY`
+in under 0.1s.
+
+| Rollout | `ECONNREFUSED` | `READY` again | 503s |
+|---|---|---|---|
+| 1 | 04:20:25.788 | 04:20:26.523 | 21 |
+| 2 | 04:27:19.289 | 04:27:20.263 | 70 |
+| 3 | 04:28:31.013 | 04:28:32.004 | 55 |
+
+A refused reconnect cost about 1s, and the 40s of 2026-09-25 did not recur. What
+produced it then, in 4 of 5 rollouts, is not found; the crash case stays open.
+
+Rollout 1 also had 325 k6 timeouts (5s) while the new event pod booted, on a gateway
+restarted 20s before the probe. A 60s baseline with no rollout had none (median
+183ms, p95 1.21s, the gateway at ~500m CPU), nor did rollouts 2 and 3. At 50 req/s
+this box has little headroom: a run on a cold gateway can fail on latency, not drain.
+
+**Step 5 — the live objects, on `sha-e3f0b51`: as expected.** `sleep: 5` on the eight
+apps and on nothing else, a grace period of 75 on `app-gateway` only, no trace
+variable left on it, and `SHUTDOWN_DRAIN_SECONDS: "65"`.
+
+**Step 6 — controls: both red.**
+
+| Target | Failures |
+|---|---|
+| `app-gateway` | 88, all status 0 |
+| `event-service` | 437, all 503; the gateway's `UNAVAILABLE` also 437 |
+
+**Step 7 — the matrix: zero failures.**
+
+| Target | Failures | Old pod gone, after the stop began | 2026-09-25, no fixes |
+|---|---|---|---|
+| `app-gateway` ×5 | 0 of 27,676 | 16, 21, 17, 20, 18s | 126 refused; gone in 40–42s |
+| `event-service` ×5 | 0 of 27,621; `UNAVAILABLE` 0 | 21, 19, 18, 22, 15s | 9,718, in 4 of 5 rollouts |
