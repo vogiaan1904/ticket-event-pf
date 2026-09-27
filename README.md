@@ -17,12 +17,16 @@ A distributed ticket-selling platform built for high-demand on-sales, where thou
 
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [How a purchase works](#how-a-purchase-works)
+  - [The waiting room](#the-waiting-room)
+  - [Inventory](#inventory)
+  - [The purchase saga](#the-purchase-saga)
 - [Services](#services)
-- [The purchase flow](#the-purchase-flow)
 - [Communication patterns](#communication-patterns)
 - [Design decisions](#design-decisions)
+- [Measured](#measured)
 - [Repository layout](#repository-layout)
-- [Running it locally](#running-it-locally)
+- [Running it](#running-it)
 - [gRPC contracts](#grpc-contracts)
 - [Deployment](#deployment)
 - [Observability and security](#observability-and-security)
@@ -34,10 +38,10 @@ A distributed ticket-selling platform built for high-demand on-sales, where thou
 
 A ticket on-sale is a worst-case concurrency problem: demand arrives as a spike, the inventory is finite and non-fungible, and every oversell is a refund and a support ticket. TicketBottle addresses that with four mechanisms working in sequence.
 
-- **Virtual waiting room.** Buyers are queued fairly and admitted into checkout a bounded number at a time, so the services behind never see the full spike.
-- **Atomic inventory.** Every quantity change happens under a row lock inside a transaction, with a timed hold that abandoned carts release automatically. Two buyers cannot claim the same seat.
+- **Virtual waiting room.** Buyers who arrive before the sale are ordered by a random draw, later arrivals by arrival time, and admitted into checkout a bounded number at a time, so the services behind never see the full spike.
+- **Inventory that cannot oversell.** A reservation is one guarded `UPDATE` that succeeds only while stock remains, so the database itself refuses the seat that is not there. A timed hold returns abandoned carts to sale.
 - **Orchestrated saga.** A purchase spans three services and three databases, so no single ACID transaction can cover it. A durable Temporal workflow runs the steps and compensates precisely if any of them fails.
-- **Transactional outbox.** Payment writes its state change and its outgoing event in the same transaction, so a crash between the two cannot lose the event.
+- **Transactional outbox.** Payment writes its state change and its outgoing event in the same transaction, so a crash between the two cannot lose the event — and an event that can never be published pages someone.
 
 The platform is polyglot by design: Go for the concurrency- and latency-sensitive path, TypeScript/NestJS for the richer business domains.
 
@@ -53,6 +57,34 @@ The node group sits in private subnets and reaches the internet through a NAT ga
 which is the layout AWS recommends. Both are created by the ephemeral `envs/eks` stack,
 so `terraform destroy` takes the NAT's meter with it — see `private_nodes` under
 Deployment.
+
+---
+
+## How a purchase works
+
+### The waiting room
+
+![The waiting room: join, draw, bounded admission and slot release](assets/waitroom-admission.png)
+
+A buyer joins the queue for an event and is given a score once, at join: a random point in the second before the sale opens if they arrived early, their arrival time otherwise. Gathering early buys a place in the draw, not at the front of it, so an on-sale is not a race on round-trip time. A processor admits buyers each second, at most 10 at a time and never more than 100 in checkout per event, and each admitted buyer receives a checkout token valid for 15 minutes. The buyer learns this by polling: there is no push stream to hold open per waiter. A completed checkout frees the slot, and a slot that is never used expires on its own.
+
+### Inventory
+
+![Inventory: the guarded UPDATE and a reservation's life](assets/inventory-reserve.png)
+
+Availability is decided inside the `UPDATE` itself. Under `READ COMMITTED`, Postgres re-checks the `WHERE` clause against the newest committed row after taking the row lock, so a row count of zero is a correct "sold out" with no prior read and no `SELECT … FOR UPDATE`. A hold is keyed by order code, which makes `Reserve`, `Confirm` and `Release` safe to retry. It outlives the payment window by a grace period, and a payment that arrives after its hold was swept re-acquires the seat from free stock if any remains.
+
+### The purchase saga
+
+![The purchase saga: CreateOrder, then ConfirmOrder](assets/purchase-saga.png)
+
+`CreateOrder` runs synchronously inside the checkout request: reserve the tickets, write the order, create the payment intent, and on any failure undo the completed steps in reverse. Payment completes out of band. The provider's webhook flips the payment from `PENDING` with a compare-and-set and writes the outbox row in the same transaction; a long-lived relay publishes it to Kafka, and `ConfirmOrder` turns the hold into a sale. Delivery is at-least-once, so every step on this side is idempotent.
+
+A buyer who loses the race for the last ticket is refused by `Reserve` before any order is written. A buyer who paid after their hold was swept and resold becomes `REFUND_REQUIRED`, which pages: that is money owed, not a lost race.
+
+![A CreateOrder workflow in the Temporal UI: four activities in 888 ms](assets/temporal-createorder.png)
+
+*One `CreateOrder` run from a load test, in the Temporal UI. The payment intent, the one call that leaves the cluster, is the longest step.*
 
 ---
 
@@ -86,23 +118,6 @@ Seven services plus two workloads that carry the payment event path.
 
 ---
 
-## The purchase flow
-
-| # | Step | What happens | Where |
-|---|------|--------------|-------|
-| 1 | Join the queue | Buyer enters the waiting room and receives a fair position | Waitroom, Redis sorted set |
-| 2 | Get admitted | A background loop admits N buyers and issues a checkout token | Waitroom, `queue.ready` |
-| 3 | Create order | Gateway calls Order; the `CreateOrder` workflow begins | Order, Temporal |
-| 4 | Reserve tickets | Inventory takes the quantity only if it is still free, and holds it | Inventory, guarded `UPDATE` |
-| 5 | Payment intent | Payment creates the intent and returns a payment URL | Payment, gRPC |
-| 6 | Pay and call back | The provider webhook marks the payment paid; an outbox row is written in the same transaction | Payment, outbox |
-| 7 | Confirm | The relay publishes the outbox row to Kafka; `ConfirmOrder` confirms inventory and completes the order | Kafka, Temporal |
-| 8 | Free the slot | Order signals the waiting room to release the checkout slot | `checkout.completed` |
-
-**On failure.** A payment failure or timeout drives Temporal compensation: reserved tickets are released, the order is marked failed, and the checkout slot is freed. A buyer who loses the race for the last tickets is rejected by `Reserve` itself, under the row lock, before any order record is written.
-
----
-
 ## Communication patterns
 
 **gRPC — when the caller needs an answer.** Reserving inventory or creating a payment intent must return a result before the flow can continue. Protocol Buffers give typed contracts and generated stubs that keep every service in step with the contract.
@@ -113,9 +128,10 @@ Seven services plus two workloads that carry the payment event path.
 |-------|----------|----------|
 | `payment.completed`, `payment.failed`, `payment.cancelled` | Payment | Order |
 | `checkout.completed`, `checkout.failed`, `checkout.expired` | Order | Waitroom |
+| `order.refund_required` | Order | — (pages instead) |
 | `queue.joined`, `queue.left`, `queue.ready` | Waitroom | — |
 
-Delivery is at-least-once, so every consumer is idempotent. Messages that exhaust their retries are parked on a `<topic>.dlq` companion topic rather than dropped.
+Delivery is at-least-once, so every consumer is idempotent, and no consumer skips a message it failed to handle. Order leaves a failed message uncommitted, so it is delivered again; the waiting room retries in place and parks what still fails on a `<topic>.dlq` companion topic.
 
 **Temporal workflows — when the process is long-running and must survive a crash.** Workflow state is durable, steps are retried automatically, and compensation is explicit.
 
@@ -123,15 +139,35 @@ Delivery is at-least-once, so every consumer is idempotent. Messages that exhaus
 
 ## Design decisions
 
+Each of these is recorded in [`docs/decisions/`](docs/decisions/README.md) with the option not taken and what the choice costs.
+
 **Saga with Temporal, not two-phase commit.** A purchase touches three databases owned by three services. Temporal supplies durable execution, automatic retries, and an explicit compensation path; the cost is a workflow engine to operate and an idempotency requirement on every activity.
 
-**Transactional outbox in Payment.** Updating the database and publishing an event are two writes to two systems, and a crash between them loses the event. Writing the event into an outbox table inside the payment transaction removes that window; a long-lived relay drains the table to Kafka, claiming rows with `FOR UPDATE SKIP LOCKED` and waking on `LISTEN/NOTIFY`.
+**A guarded `UPDATE`, not a locked read, in Inventory.** The capacity check lives in the `UPDATE`'s own `WHERE` clause, so correctness needs no `SELECT … FOR UPDATE`; removing that read gained about 30%. The row lock the `UPDATE` takes still serializes one hot ticket class until `COMMIT`, so adding replicas buys nothing for a single class, and the service is deliberately not autoscaled.
 
-**Pessimistic locking in Inventory.** Under contention for the same rows, optimistic concurrency degrades into a retry storm. Row locks are the cheaper choice here, at the cost of reduced concurrency on a hot ticket class.
+**A draw, not a race, in the waiting room.** Ordering everyone who waited for the doors by arrival makes an on-sale a contest of network paths, which a bot always wins. The cost is that joining early buys a lottery ticket rather than the front of the line.
+
+**Polling, not push, for admission.** A push stream per waiter meant a connection, a gRPC stream and a Redis subscription each, and a stampede became quadratic in queue depth. A poll costs two Redis round trips; the cost is that admission is seen on the next poll, seconds into a 15-minute token.
+
+**Transactional outbox in Payment.** Updating the database and publishing an event are two writes to two systems, and a crash between them loses the event. Writing the event into an outbox table inside the payment transaction removes that window; a long-lived relay drains the table to Kafka, claiming rows with `FOR UPDATE SKIP LOCKED` and waking on `LISTEN/NOTIFY`.
 
 **Polyglot persistence.** PostgreSQL where locking and ACID matter (users, events, payments, inventory), DynamoDB for orders queried by known keys, Redis for the queue where latency dominates. The trade-off is several engines to operate and no cross-store joins.
 
 **One HTTP front door.** Centralizing authentication and validation at the gateway keeps internal services private and free of edge concerns, at the cost of a component that must stay available.
+
+---
+
+## Measured
+
+Claims about behaviour under load are measured, and the measurement is kept with its method.
+
+| What | Result | Method |
+|------|--------|--------|
+| One hot ticket class | About 1,300 reserves/s, peaking at four concurrent reservers | [Contention benchmark](docs/plans/2026-09-22-inventory-contention-benchmark.md) |
+| End-to-end purchases on k3s | 310 of 310 completed; a later 3-minute run of 20 buyers completed 286 with no failed request | `make -C deploy k3s-load` |
+| Checkout latency, 20 concurrent buyers on one node | 96.4% under 2 s (p50 1.4 s, p99 2.7 s) — short of the 99% objective | Gateway histogram, below |
+| Rolling restarts under 50 req/s | Zero refused or cut requests across ten rollouts | [Rollout drain](docs/plans/2026-09-27-rollout-drain-fixes.md) |
+| Kafka down, payment events waiting | About 13 minutes before an event stops retrying, and then it pages; a broker restart is back in 10 s | [Outbox measurement](docs/plans/2026-09-25-payment-outbox-tech-debt.md) |
 
 ---
 
@@ -209,6 +245,16 @@ See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure deta
 ---
 
 ## Observability and security
+
+**Metrics.** Every workload publishes the same three gRPC metrics on port 2112, labelled by `service`, `method` and gRPC `code` ([the contract](docs/METRICS.md)). Prometheus evaluates 5 recording and 10 alerting rules, and Grafana provisions three dashboards: the gateway, the saga, and the queue and outbox.
+
+**The error taxonomy is the alerting policy.** `INTERNAL` means we have a bug and pages on any sustained rate. `FAILED_PRECONDITION` — sold out, sale closed — never pages, because a buyer losing a race is not a fault and paging on it would turn a successful on-sale into an incident. The one exception is decided by the ledger rather than the code: an order that took money and holds no ticket pages.
+
+**The checkout objective** is 99% of `POST /api/orders` under 2 seconds, measured at the gateway because that is the request the buyer makes, with fast and slow multi-window burn-rate alerts.
+
+![Grafana during a 3-minute load run: request rate, checkout p99 against the 2 s objective, workflow completions and durations](assets/grafana-load-run.png)
+
+*A 3-minute run of 20 concurrent buyers on a single k3s node. The ramp breaches the 2 s objective and steady state sits just above it: 96.4% of checkouts finished under 2 s against a 99% target.*
 
 **Logging.** Structured logs throughout — Winston in the TypeScript services, Uber Zap in the Go services. Temporal contributes full workflow execution history for the saga.
 

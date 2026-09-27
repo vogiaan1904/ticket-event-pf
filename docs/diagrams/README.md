@@ -3,6 +3,12 @@
 | File | Shows |
 |---|---|
 | `eks-to-be.xml` | The EKS target architecture. Rendered to `assets/eks-arc.png`, which the root `README.md` embeds. Design: `docs/design/eks-stateful-tier.md`. |
+| `waitroom-admission.drawio` | Join, draw, admission and slot release in the waiting room. Owner of the mechanism: `services/waitroom-svc/CLAUDE.md`. |
+| `inventory-reserve.drawio` | `Reserve`'s guarded `UPDATE` and a reservation's states. Owner: `services/inventory-svc/CLAUDE.md`. |
+| `purchase-saga.drawio` | `CreateOrder` and `ConfirmOrder` as a sequence across the services. Owner: `.claude/skills/trace-purchase-flow/SKILL.md`. |
+
+The three mechanism diagrams show behaviour, so they go stale when the code changes:
+check them against their owner, not against the README.
 
 ## It is hand-edited, and that is the point
 
@@ -23,6 +29,9 @@ Two habits follow from that:
 
 ```bash
 drawio -x -f png --scale 1.7 -o ../../assets/eks-arc.png eks-to-be.xml
+for f in waitroom-admission inventory-reserve purchase-saga; do
+  drawio -x -f png --scale 1.5 -o ../../assets/$f.png $f.drawio
+done
 ```
 
 Export only reads the XML; it never writes it. Re-export in the same commit as the edit,
