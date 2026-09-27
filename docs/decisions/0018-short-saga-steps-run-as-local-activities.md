@@ -71,5 +71,8 @@ Whether the change is kept waits on the plan's before/after measurement.
   deterministic order-item IDs.
 - The `DefaultVersion` branch stays until no saga started before the deploy can
   replay; removing it is a later change with its own replay check.
+- The version makes rolling forward safe, not rolling back: the pre-change code
+  cannot replay a history that carries the version marker. Roll back only once no
+  saga started on the new build is still running.
 - `CreateOrderSlotBudget` is still an upper bound: a local step's retry budget,
   at 5s per attempt, is shorter than the regular one it was derived from.

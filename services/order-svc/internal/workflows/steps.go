@@ -10,12 +10,30 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// executeShortStep runs a short, idempotent step inside the workflow worker as a
+// local activity, keeping the context's retry policy. Sagas that started before
+// the change replay on the regular path. See docs/decisions/0018.
+func executeShortStep(ctx workflow.Context, activity interface{}, args ...interface{}) workflow.Future {
+	if workflow.GetVersion(ctx, shortStepsChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return workflow.ExecuteActivity(ctx, activity, args...)
+	}
+
+	ao := workflow.GetActivityOptions(ctx)
+	ao.StartToCloseTimeout = shortStepAttemptTimeout
+	lctx := workflow.WithLocalActivityOptions(ctx, workflow.LocalActivityOptions{
+		StartToCloseTimeout:    shortStepAttemptTimeout,
+		ScheduleToCloseTimeout: activityRetryBudget(ao),
+		RetryPolicy:            ao.RetryPolicy,
+	})
+	return workflow.ExecuteLocalActivity(lctx, activity, args...)
+}
+
 // validateOrder loads the order an event is about, passing the failure through
 // as it arrived. GetOrder already tags a genuinely missing order; relabelling
 // every failure that way would hide an unreachable datastore.
 func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 	var ord *models.Order
-	if err := workflow.ExecuteActivity(ctx, oActs.GetOrder, code).Get(ctx, &ord); err != nil {
+	if err := executeShortStep(ctx, oActs.GetOrder, code).Get(ctx, &ord); err != nil {
 		return nil, err
 	}
 
@@ -37,7 +55,7 @@ func createOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*models.Or
 	}
 
 	var o *models.Order
-	err := workflow.ExecuteActivity(ctx, oActs.CreateOrder, opt).Get(ctx, &o)
+	err := executeShortStep(ctx, oActs.CreateOrder, opt).Get(ctx, &o)
 	return o, err
 }
 
@@ -52,7 +70,7 @@ func createOrderItems(ctx workflow.Context, code string, ins []CreateOrderItemIn
 	}
 	var itms []models.OrderItem
 
-	err := workflow.ExecuteActivity(ctx, oActs.CreateOrderItems, code, opts).Get(ctx, &itms)
+	err := executeShortStep(ctx, oActs.CreateOrderItems, code, opts).Get(ctx, &itms)
 	return itms, err
 }
 
@@ -70,7 +88,7 @@ func reserveInventory(ctx workflow.Context, code string, expAt string, ins []Cre
 }
 
 func updateOrderStatus(ctx workflow.Context, code string, status models.OrderStatus) error {
-	err := workflow.ExecuteActivity(ctx, oActs.UpdateOrderStatus, code, status).Get(ctx, nil)
+	err := executeShortStep(ctx, oActs.UpdateOrderStatus, code, status).Get(ctx, nil)
 	return err
 }
 
@@ -98,7 +116,7 @@ func confirmInventory(ctx workflow.Context, code string) error {
 func releasePurchaseSlot(ctx workflow.Context, o *models.Order) error {
 	key := order.PurchaseSlotKey(o.SessionID, o.UserID, o.EventID)
 
-	return workflow.ExecuteActivity(ctx, oActs.ReleasePurchaseSlot, key, o.Code).Get(ctx, nil)
+	return executeShortStep(ctx, oActs.ReleasePurchaseSlot, key, o.Code).Get(ctx, nil)
 }
 
 func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string) error {
@@ -106,7 +124,7 @@ func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string
 		return nil
 	}
 
-	err := workflow.ExecuteActivity(ctx, epActs.PublishCheckoutCompleted,
+	err := executeShortStep(ctx, epActs.PublishCheckoutCompleted,
 		activities.PublishCheckoutCompletedInput{
 			SessionID: ssID,
 			UserID:    userID,

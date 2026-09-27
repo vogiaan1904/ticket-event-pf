@@ -13,6 +13,13 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`.
+- **Short steps run as local activities** through `executeShortStep`
+  ([0018](../../docs/decisions/0018-short-saga-steps-run-as-local-activities.md)):
+  `GetOrder`, `CreateOrder`, `CreateOrderItems`, `UpdateOrderStatus`,
+  `ReleasePurchaseSlot`, `PublishCheckoutCompleted`. A local step re-runs when the
+  workflow task that ran it fails, so a step routed there must be safe to run
+  twice. Their workflow tests run real activities over fakes
+  (`short_steps_test.go`); the SDK's test suite cannot mock them by name.
 
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.
