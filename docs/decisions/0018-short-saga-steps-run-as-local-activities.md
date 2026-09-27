@@ -51,14 +51,17 @@ decision stopped.
 
 ## Decision
 
-Proposed, not yet made. The architect asked for the plan and this record: "yes
-do it" (2026-09-27), in reply to the proposal to write up the local-activity
-split with a before/after measurement.
+The architect asked for the plan and this record: "yes do it" (2026-09-27), in
+reply to the proposal to write up the local-activity split with a before/after
+measurement.
 
-The split in that proposal also merged `CreateOrder` with `CreateOrderItems`.
-This record drops the merge — the agent's revision, not yet reviewed: a local
-activity removes the hand-off between the two without changing their
-compensation.
+The split in that proposal also merged `CreateOrder` with `CreateOrderItems`;
+the plan dropped the merge, because a local activity removes the hand-off
+between the two without changing their compensation. After an explanation that
+listed the six steps and the three that stay remote, the architect settled it:
+"ok the split is fine, start task 1" (2026-09-27).
+
+Whether the change is kept waits on the plan's before/after measurement.
 
 ## Consequences
 

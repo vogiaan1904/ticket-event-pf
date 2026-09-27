@@ -718,8 +718,27 @@ git commit -m "docs: record what the local saga steps saved per purchase"
 
 | Run | Purchases | Node core-s / purchase | Temporal | Postgres | History events | Burst first-task wait p50 / max |
 |---|---|---|---|---|---|---|
-| before-1 | | | | | | |
-| before-2 | | | | | | |
+| before-1 | 499 | 1.023 | 0.252 | 0.209 | 29 + 35 | 1.03s / 4.66s |
+| before-2 | 493 | 1.025 | 0.261 | 0.210 | 29 + 35 | 0.82s / 2.36s |
+
+Task 1, 2026-09-27, 14:35–14:47Z, 20 buyers, 5 minutes each, back to back.
+
+**Noise floor, same session:** Temporal core-s per purchase 3.5% between the two
+runs, node 0.2%, Postgres 0.5%. The burst's first-task wait varied twofold at
+its max, so one burst per build decides nothing.
+
+**The baseline drifted across the day, and Task 1 stopped on it.** All three
+costs are 7–10% above the 3-minute runs of 09:33Z (Temporal 0.235, Postgres
+0.192, node 0.936), with the box as busy as then: user plus system time about
+1.5 cores in both, and steal 0.03 cores. Throughput fell instead, from 1.72 to
+1.6 purchases a second. Not explained. One candidate: Temporal's database kept
+growing inside its 24-hour retention, to 5,208 executions and 85,845
+`history_node` rows by 14:50Z. Whatever it is, a drift of this size across hours
+would sit inside a small effect, so Task 6's comparison has to bracket time, not
+just builds.
+
+before-2's burst of 20 spanned three admission ticks, 3.1s, and was read with
+`--burst-secs 4`; a fixed time window does not define the burst reliably.
 | after-1 | | | | | | |
 | after-2 | | | | | | |
 
