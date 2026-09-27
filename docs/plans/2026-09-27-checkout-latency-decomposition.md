@@ -1,7 +1,8 @@
 # Checkout latency decomposition
 
-**Status: IN PROGRESS 2026-09-27.** The evidence from the 06:43Z run is in. Tasks
-1–5 are not started.
+**Status: COMPLETE 2026-09-27.** The box is the bottleneck: its 2 vCPUs saturate
+at ten buyers, and the opening burst queues in Temporal for up to 8s. See
+*What this says*.
 
 **Goal:** Say where a checkout's time goes at the load the waiting room admits
 today, and what makes the opening burst of an on-sale slow, measured before
@@ -564,11 +565,77 @@ git commit -m "docs: record where a checkout's time goes, and what slows the ope
 | Run | Burst | Idle before | Burst over 2s | First task wait p50 / max | Burst `vmstat` idle / r | Steady over 2s (client) | Payment ran p90, burst / steady | Gateway vs client over 2s |
 |---|---|---|---|---|---|---|---|---|
 | 06:43Z | 20 | ~10 min | 20 of 20 (saga) | 1.01s / 5.28s | not captured | not captured | 1.14s / 0.44s | 30 of 287 / not captured |
-| A | 20 | ≥10 min | | | | | | |
-| B | 20 | none | | | | | | |
-| N=10 | 10 | none | | | | | | |
-| N=40 | 40 | none | | | | | | |
+| A | 20 | ≥10 min | 20 of 20 | 0.95s / 2.71s | 2–12% / up to 13 | 23 of 301 | 0.90s / 0.59s | 42 / 43 of 321 |
+| B | 20 | none | 19 of 20 | 0.47s / 4.56s | 4–26% / up to 14 | 17 of 305 | 0.91s / 0.57s | 36 / 36 of 325 |
+| N=10 | 10 | ~2 min | 10 of 10 | 0.34s / 0.76s | 6–46% / up to 12 | 5 of 324 | 0.96s / 0.43s | 13 / 15 of 334 |
+| N=40 | 40 | ~4.5 min | 40 of 40 | 3.07s / 8.03s | 0–15% / up to 39 | 28 of 283 | 1.13s / 0.47s | 67 / 68 of 323 |
+
+Runs A, B, N=10 and N=40 were read with `--burst-secs 3`: a burst of 20 spans two
+admission ticks, 0–2.7s, and the default of 2 cut run A's in two. "Idle before"
+for N=10 and N=40 is the time since the previous run's last checkout; both ran
+right after the waiting room was rolled to change its release rate.
+
+Checkouts under 2s, from the gateway's raw counters: 06:43Z 89.5%, A 86.9%,
+B 88.9%, N=10 96.1%, N=40 79.3%. No run met the 99% SLO.
 
 ## What this says
 
-Not yet written.
+**The outcome is *H2 with H3*: the box is the bottleneck, and the burst is where
+it shows.**
+
+1. **The opening burst queues in Temporal, and the queue grows with the burst.**
+   The first workflow task's wait peaked at 0.76s, 4.56s and 8.03s for bursts of
+   10, 20 and 40. A warm burst (B) was as slow as a cold one (A), so this is not
+   a cold start. H1 is refuted for this wait.
+2. **The box is saturated at every load tried, not only in the burst.** The
+   node was 1.71–1.82 of 2 cores busy through the steady state at 10, 20 and 40
+   buyers, and each run completed the same ~1.8 purchases a second (334, 325,
+   323 in 3 minutes). Adding buyers added waiting, not throughput. A purchase
+   costs about one core-second on this box.
+3. **Temporal and its Postgres are the largest consumers.** At each load,
+   `temporal` used ~0.43 cores and `postgres` ~0.34: about 45% of the node's
+   busy CPU, against 0.34–0.50 for the seven services together and 0.02 for k6. Of
+   Postgres's row writes over the box's life, `temporal` has 587k and the four
+   app databases about 19k together. The Open row's suspect is now measured.
+4. **The payment call has its own cold path.** Its slow mode, 0.7–1.5s against
+   ~0.33s, is a new TLS connection to ZaloPay. It hit every call in a burst that
+   followed a pause of a minute or more, and ~11% of steady-state calls. It
+   carries about two thirds of the steady-state misses, none of which waited on
+   Temporal. H4 holds.
+5. **The SLO instrument is honest.** Across four runs the gateway's count of
+   checkouts over 2s matched the client's within two.
+
+**The limit of this testbed is reached.** The 2-vCPU box saturates at ten
+buyers, so any concurrency beyond that measures the box, not the design. What
+the runs do measure about the design is the cost per purchase: two workflows,
+each hand-off a persistence write, cost Temporal alone about as much CPU as the
+seven services spend doing the work, before its share of Postgres.
+
+### The architect's calls this raises
+
+- **Where to measure next.** A larger instance for a measurement session, or
+  the ephemeral EKS target with Temporal's database split out, or measuring
+  cost per purchase on this box and not throughput. Each answers a different
+  question.
+- **The orchestration cost per purchase.** Fewer hand-offs (merging
+  `CreateOrder` and `CreateOrderItems`, local activities for the DynamoDB
+  steps) against a separate database for Temporal. The first cuts the work;
+  the second moves it.
+- **Whether the payment call belongs inside the 2s budget.** The fresh
+  connection alone is ~1s from us-east-1.
+
+## Found, not fixed
+
+- **~11% of steady-state payment calls open a new connection.** Whether the
+  client's pool drops sockets or ZaloPay closes idle ones is unmeasured.
+- **`ticketbottle_event` has ~1.04M transactions against 1.1k row writes** over
+  the box's life, the most of any database. Nothing here says which path reads
+  it that often.
+- **The stateful-tier design calls Temporal's database idle at today's load.**
+  Finding 3 says otherwise; `docs/design/eks-stateful-tier.md` now points here.
+- **`saga-histories.sh` leaves a truncated file when the `kubectl exec` stream
+  drops** mid-copy, as it did once on the tunnel. The script exits non-zero and
+  prints no count, so the failure is visible; rerunning it succeeds.
+- **Forty buyers joining at once spike the box before the burst** (`vmstat` run
+  queue 29 at 09:41:19, before the first saga). The join path has not been
+  measured.

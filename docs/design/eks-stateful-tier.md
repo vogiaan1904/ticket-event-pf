@@ -69,6 +69,10 @@ survives, because nothing irreplaceable is left in the cluster.
 > `db.t4g.micro` at 2 burstable vCPU and 1 GiB, both invert. The split below is
 > sized for failure isolation; re-size it against measured load before any
 > on-sale admitting more than low hundreds concurrently.
+>
+> Measured on k3s 2026-09-27, `shared` is not idle even at ten to forty
+> concurrent checkouts: Temporal is Postgres's heaviest writer by far.
+> `docs/plans/2026-09-27-checkout-latency-decomposition.md#what-this-says`.
 
 Five instances (one per service) was considered and rejected: the two extra
 instances buy isolation between `user` and `event`, which have no meaningful
