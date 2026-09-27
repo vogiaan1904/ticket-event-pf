@@ -62,6 +62,7 @@ does not.
 | An alert fired | `docs/RUNBOOK.md`, one section per alert |
 | What runs where; Terraform, Helm, cost | `.claude/skills/deployment-architecture/SKILL.md`, then `deploy/README.md` |
 | A service's config values | `deploy/helm/ticketbottle/templates/apps/config.yaml` |
+| How a pod stops without refusing or cutting requests | `docs/decisions/0015-app-pods-sleep-before-sigterm.md`, `docs/decisions/0016-the-gateway-drains-for-up-to-65s.md`; re-measured with `deploy/scripts/rollout-drain.sh` |
 | Postgres, Redis, Redpanda, Temporal | `deploy/helm/ticketbottle/templates/infra/`; their limits in the deployment skill |
 | The stateful tier on EKS | `docs/design/eks-stateful-tier.md` |
 | Recording a decision | `.claude/skills/decision-records/SKILL.md` |

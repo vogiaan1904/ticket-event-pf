@@ -89,6 +89,11 @@ Namespace `ticketbottle`, from `deploy/helm/ticketbottle`.
 | `outbox-relay` | — | none (LISTEN/NOTIFY relay → Kafka) |
 | `payment-webhook` | — | ClusterIP (simulated provider webhook adapter) |
 
+Every workload with a Service sleeps in `preStop` before SIGTERM, and `app-gateway` alone gets a
+longer grace period to drain its keep-alive clients. Both come from `shutdown` in `values.yaml`;
+why and how long: `docs/decisions/0015-app-pods-sleep-before-sigterm.md`,
+`docs/decisions/0016-the-gateway-drains-for-up-to-65s.md`.
+
 Plus migration **Jobs** (`user-migrate`, `event-migrate`, `payment-migrate`) that run Prisma migrations before the services come up.
 
 **Infra tier — trimmed to fit one box:**

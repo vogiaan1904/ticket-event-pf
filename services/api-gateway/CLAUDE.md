@@ -35,4 +35,5 @@ Runs on port **3000**. Swagger is served at `/<globalPrefix>/<swaggerPath>` only
 ## Notes
 
 - gRPC client targets come from config/env (one address per downstream service) — update those, not hardcoded ports, when wiring a new service.
+- On SIGTERM, `main.ts` calls `drain.begin` before `app.close()`: `app.close()` returns only once every socket has closed, and the drain is what closes busy keep-alive sockets. The deadline and grace period: `docs/decisions/0016-the-gateway-drains-for-up-to-65s.md`.
 - gRPC errors become HTTP responses only in `common/filters/global-exception.filter.ts`, from the `GRPC_TO_HTTP` table in `src/shared/metrics/code.ts`. A new code gets a row in that table, never a mapping in a controller.

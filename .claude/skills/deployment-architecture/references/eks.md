@@ -217,6 +217,9 @@ which is what the cluster exists to make possible:
   evidence that the complexity bought something.
 - **HPA + load test** the virtual queue and inventory under real concurrency. Two ceilings are known
   in advance and neither is fixed by adding replicas — see § scaling limits below.
+- **Rollouts behind the ALB** — the `preStop` sleep was measured on k3s only, through kube-proxy;
+  the ALB deregisters targets on its own, slower clock. Measure through the ALB before EKS carries
+  traffic (`docs/decisions/0015-app-pods-sleep-before-sigterm.md`, *Consequences*).
 - **Observability** — metrics first (metrics-server is not installed by EKS); distributed tracing is
   a later, larger piece because it means instrumenting seven services in two languages.
 - Optional: ACM + Route 53 TLS on the ALB, External Secrets Operator + Secrets Manager, PITR/backups.
