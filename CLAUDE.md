@@ -39,6 +39,7 @@ describing it for a week — because the fact had been copied rather than linked
 | Where does an agent start to learn a part of the system, and which document wins? | `.claude/skills/system-map` | A map of documents, not a copy of them; CI fails on a gone path or an uncited document; 2026-09-23 |
 | Does the gateway rate-limit and set security headers? | `docs/decisions/0013` | Helmet everywhere; sign-in and sign-up throttled per client IP, purchase never; 2026-09-24 |
 | Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet |
+| How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; decided 2026-09-27, unbuilt — `docs/plans/2026-09-27-rollout-drain-fixes.md` |
 
 ### Open
 
@@ -48,6 +49,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
+| Why does one refused reconnect cost the gateway ~40s, and what bounds it when a backend crashes? | A rollout stops triggering it once 0015 lands; a crash, out-of-memory kill or eviction still does. On 2026-09-25 raw TCP to event-service recovered in 1.8s and the gateway's gRPC calls in 40.7s. grpc-js alone recovers at once and has no connect timeout, so the reading is a connection attempt stuck on the vanishing pod IP. The trace that settles it: `docs/plans/2026-09-27-rollout-drain-fixes.md`, Task 3 step 3. |
 | Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports

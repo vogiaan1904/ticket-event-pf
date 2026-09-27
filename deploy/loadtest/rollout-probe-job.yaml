@@ -1,0 +1,42 @@
+# Applied by rollout-drain.sh, which substitutes the ${...} values with envsubst.
+# In-cluster on purpose: the path under test is ClusterIP -> kube-proxy -> pod.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-rollout-probe
+  namespace: ticketbottle
+data:
+  rollout-probe.js: |
+${PROBE_JS}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-rollout-probe
+  namespace: ticketbottle
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: k6-rollout-probe }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:0.54.0
+          args: ["run", "--log-format=raw", "--quiet", "/scripts/rollout-probe.js"]
+          env:
+            - { name: GW,       value: "http://app-gateway:3000/api" }
+            - { name: EVENT_ID, value: "${EVENT_ID}" }
+            - { name: DURATION, value: "${DURATION}" }
+            - name: ACCESS_SECRET
+              valueFrom:
+                secretKeyRef: { name: gateway-secrets, key: JWT_ACCESS_SECRET }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 500m, memory: 256Mi }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+      volumes:
+        - name: scripts
+          configMap: { name: k6-rollout-probe }
