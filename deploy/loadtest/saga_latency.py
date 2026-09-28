@@ -2,7 +2,7 @@
 
 Reads the dump saga-histories.sh writes; a k6 log from purchase.js adds the
 client's view of each checkout, joined by order code.
-  python3 deploy/loadtest/saga_latency.py HISTORIES [K6_LOG] [--burst-secs 2]
+  python3 deploy/loadtest/saga_latency.py HISTORIES [K6_LOG] [--burst-secs 2 | --burst-first 20]
 """
 import argparse
 import json
@@ -59,14 +59,17 @@ def load_client(path):
         return [(code, float(ms) / 1000, int(status)) for code, ms, status in CHECKOUT.findall(f.read())]
 
 
-def split_burst(runs, secs=3.0):
-    """Splits sagas into the opening burst, started within secs of the first, and the rest.
+def split_burst(runs, secs=3.0, first=None):
+    """Splits sagas into the opening burst and the rest.
 
-    Why 3s: a burst of 20 spans two 1s admission ticks, up to 2.7s on k3s.
+    The burst is the first `first` sagas to start, one per buyer, or else those
+    started within secs of the first. Why 3s: two 1s admission ticks, up to 2.7s.
     """
-    first = min(r["start"] for r in runs)
-    burst = [r for r in runs if (r["start"] - first).total_seconds() < secs]
-    return burst, [r for r in runs if r not in burst]
+    ordered = sorted(runs, key=lambda r: r["start"])
+    if first is not None:
+        return ordered[:first], ordered[first:]
+    burst = [r for r in ordered if (r["start"] - ordered[0]["start"]).total_seconds() < secs]
+    return burst, ordered[len(burst):]
 
 
 def pct(xs, p):
@@ -104,10 +107,12 @@ def main():
     ap.add_argument("k6_log", nargs="?")
     ap.add_argument("--burst-secs", type=float, default=3.0,
                     help="sagas started this soon after the first are the opening burst")
+    ap.add_argument("--burst-first", type=int,
+                    help="the first N sagas to start are the opening burst; set N to the buyers")
     a = ap.parse_args()
     runs = load_histories(a.histories)
     client = load_client(a.k6_log) if a.k6_log else []
-    burst, steady = split_burst(runs, a.burst_secs)
+    burst, steady = split_burst(runs, a.burst_secs, a.burst_first)
     report("burst", burst, client)
     report("steady", steady, client)
     report("all", runs, client)
