@@ -19,7 +19,7 @@ delta() { python3 -c "print(float('$(at "$1" "$TO")') - float('$(at "$1" "$FROM"
 NODE=$(delta 'sum(node_cpu_seconds_total{mode!="idle"})')
 TEMPORAL=$(delta 'sum(container_cpu_usage_seconds_total{namespace="ticketbottle",pod=~"temporal-[a-z0-9]+-[a-z0-9]+",container!=""})')
 POSTGRES=$(delta 'sum(container_cpu_usage_seconds_total{namespace="ticketbottle",pod="postgres-0",container!=""})')
-PURCHASES=$(python3 -c "import re; s = open('$K6_LOG').read(); print(re.search(r'\"tb_orders_completed\":\s*\{\s*\"count\":\s*(\d+)', s).group(1))")
+PURCHASES=$(python3 -c "import re; s = open('$K6_LOG').read(); print(re.search(r'\"tb_orders_completed\":\s*\{[^}]*\"count\":\s*(\d+)', s).group(1))")
 
 events() {
   kubectl -n ticketbottle exec deploy/temporal -- temporal workflow list --limit 100000 -o jsonl \
