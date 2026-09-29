@@ -1,7 +1,8 @@
 # Tickets per order, per event
 
-**Status: PROPOSED 2026-09-29.** Not started. Decision:
-→ [0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md), proposed.
+**Status: COMPLETE 2026-09-29.** An order takes at most its event's limit, default 4;
+verified on k3s. Decision:
+→ [0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md), accepted.
 
 **Goal:** An order may take at most its event's `max_tickets_per_order` tickets.
 Organizers set the limit through the gateway, event-svc stores it (default 4), and
@@ -746,11 +747,28 @@ git commit -m "docs: record the tickets-per-order limit as built and verified"
 
 ## Results
 
-Not yet run.
+Built in `c53944f` (event-svc), `1ec0ee6` (gateway) and `be65603` (order-svc), pushed
+2026-09-29; CI green on `be65603`.
+
+- Every new test was seen failing first. Final runs: event-svc 27/27, gateway 37/37,
+  order-svc and waitroom-svc `go test ./...` ok with no SKIP.
+- Every mutation in Tasks 1–3 failed the test named for it.
+- On k3s, 2026-09-29, on `sha-be65603`, `make -C deploy k3s-gate2` passed:
+  - the config echoed `maxTicketsPerOrder: 2`;
+  - an order of 3 was refused with `400 ORD020`;
+  - order `TB-GATE1-20260929-637GKSXE` then completed on the same checkout token.
+- Step 4's count of existing configs was not observed. `ADD COLUMN … NOT NULL DEFAULT 4`
+  fills every existing row, and the gate read the column back.
+- The deploy ran the migration after the new code. event-service started at
+  16:01:04Z; the migration finished at 16:02:35Z. For 91s, event-svc served against a
+  table without the column. Nobody was buying. During a sale, every config read would
+  have failed, and every order create makes one.
 
 ## Found, not fixed
 
 - **No cap on one buyer's total across orders.** A buyer can finish an order, queue
   again and buy more. This is a separate anti-scalping rule.
+- **A migration runs after the code that needs it.** The migration Jobs are
+  `post-upgrade` hooks, which Helm runs only once every pod is Ready (*Results*).
 - **The gateway's `order.pb.ts` is still stale** (the register's open row), which is
   why Task 2 syncs `event.proto` alone.

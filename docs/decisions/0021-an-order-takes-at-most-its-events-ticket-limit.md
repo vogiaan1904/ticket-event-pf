@@ -1,7 +1,7 @@
 # 0021 — An order takes at most its event's ticket limit
 
 **Date:** 2026-09-29
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [design](../design/admission-sizing.md#tickets-per-order), [plan](../plans/2026-09-29-tickets-per-order.md)
 **Where it lives:** `proto/event.proto` (`EventConfig.max_tickets_per_order`), `services/order-svc/internal/order/service/order.go` (`Create`)
 
@@ -55,3 +55,22 @@ These came inside that plan and were never put as their own choice:
   more gets a 400 that names `ORD020`.
 - An order-svc reading 0 checks nothing, so a rolling deploy in either order refuses
   no order that it would not have refused before.
+
+## Outcome
+
+`c53944f`, `1ec0ee6` and `be65603`, pushed 2026-09-29:
+- Each new test was seen failing first: event-svc's DTO and mapper spec, the gateway's
+  DTO and mapper spec, and order-svc's three `Create` tests and its `mapError` test.
+- Breaking each check on purpose failed its test:
+  - in event-svc, dropping `|| undefined` or `@Max(10)`;
+  - in the gateway, dropping `@Min(1)`;
+  - in order-svc, turning `limit > 0` into `false` or `limit >= 0`, or removing the
+    `mapError` case.
+
+On k3s, 2026-09-29, `make -C deploy k3s-gate2` passed on `sha-be65603`:
+- the organizer's limit of 2 came back on the config;
+- an order of 3 was refused with `400 ORD020`;
+- the same buyer's order of 1 then completed on the same checkout token.
+
+The deploy found a gap outside this decision: the new column's migration finished 91s
+after the new event-svc started. See the plan's *Results*.

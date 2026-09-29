@@ -105,8 +105,8 @@ too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
 
 ## Tickets per order
 
-**Status:** specified 2026-09-29, unbuilt.
-[0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md), proposed.
+**Status:** built 2026-09-29; verified on k3s.
+[0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md), accepted.
 
 Today nothing caps an order. `quantity` must only be at least 1, the list of items has
 no length limit, and neither order-svc nor inventory checks a total. One buyer in one
@@ -139,7 +139,7 @@ not this one.
 
 Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 
-1. **Tickets per order.** The section above.
+1. **Tickets per order.** The section above; built 2026-09-29.
 2. **The waitroom knows when tickets run out.** It asks inventory each tick.
    - While every ticket left is held by someone paying, the door pauses: status
      `PAUSED`, with places kept.
