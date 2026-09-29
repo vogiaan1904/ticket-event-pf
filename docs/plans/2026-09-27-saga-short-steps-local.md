@@ -1,6 +1,7 @@
 # Short saga steps as local activities
 
-**Status: PROPOSED 2026-09-27.** Not started. Decision:
+**Status: MEASURED 2026-09-29.** Tasks 1–5 done; Task 6 through Step 3. Keeping
+or reverting the change is the architect's call. Decision:
 → [0018](../decisions/0018-short-saga-steps-run-as-local-activities.md), proposed.
 
 **Goal:** Cut what Temporal costs per purchase by running the six short,
@@ -716,10 +717,18 @@ git commit -m "docs: record what the local saga steps saved per purchase"
 
 ## Results
 
-| Run | Purchases | Node core-s / purchase | Temporal | Postgres | History events | Burst first-task wait p50 / max |
-|---|---|---|---|---|---|---|
-| before-1 | 499 | 1.023 | 0.252 | 0.209 | 29 + 35 | 1.03s / 4.66s |
-| before-2 | 493 | 1.025 | 0.261 | 0.210 | 29 + 35 | 0.82s / 2.36s |
+| Run | Build | Purchases | Node core-s / purchase | Temporal | Postgres | History events | Burst first-task wait p50 / max |
+|---|---|---|---|---|---|---|---|
+| before-1 | old | 499 | 1.023 | 0.252 | 0.209 | 29 + 35 | 1.03s / 4.66s |
+| before-2 | old | 493 | 1.025 | 0.261 | 0.210 | 29 + 35 | 0.82s / 2.36s |
+| after-1 | new | 913 | 0.593 | 0.116 | 0.118 | 21 + 17 | 0.97s / 3.31s |
+| after-2 | new | 669 | lost | lost | lost | — | 0.29s / 2.26s |
+| after-3 | new | 923 | 0.595 | 0.119 | 0.118 | 21 + 17 | 0.89s / 1.68s |
+| before-3 | old | 526 | 1.008 | 0.240 | 0.198 | 29 + 35 | 0.43s / 4.08s |
+| after-4 | new | 897 | 0.624 | 0.120 | 0.122 | 21 + 17 | 0.14s / 0.87s |
+
+Every run is 20 buyers for 5 minutes. The burst is the first 20 sagas to start
+(`saga_latency.py --burst-first 20`), which reproduces the before rows as first read.
 
 Task 1, 2026-09-27, 14:35–14:47Z, 20 buyers, 5 minutes each, back to back.
 
@@ -739,12 +748,81 @@ just builds.
 
 before-2's burst of 20 spanned three admission ticks, 3.1s, and was read with
 `--burst-secs 4`; a fixed time window does not define the burst reliably.
-| after-1 | | | | | | |
-| after-2 | | | | | | |
+
+**Task 6 bracketed time, not just builds.** after-1 and after-2 ran on
+2026-09-28, 02:48–02:59Z. after-3, before-3 and after-4 ran on 2026-09-29,
+01:21–02:00Z, in one session: new build, then a drain to no running saga and a
+rollback to `sha-11df387`, then the new build again, deployed under load as
+Task 5.
+
+**What went wrong, and why no number above rests on it.**
+- Task 5's first load never started: `GW` was unset. The first deploy ran with
+  no saga in flight, so Task 5 was repeated on 2026-09-29, after before-3.
+- after-2's costs were lost. Its Prometheus port-forward died, and Prometheus
+  keeps six hours.
+- after-2 also stalled for 100s on `CreatePaymentIntent`, which ran up to 43s
+  over six retries against the ZaloPay sandbox. The change does not touch that
+  step, which stays remote.
+- k6 does not keep its summary keys in order, and `purchase-cost.sh` could not
+  read after-1's count until `dbc46e8`.
+- A 12MB history fetch over `kubectl exec` cut off mid-stream in three of five
+  tries until `fdcfc87`.
+
+**Idle cost.** With nothing running, Temporal used 0.020–0.025 cores,
+Postgres 0.010 and the node 0.46–0.65. Temporal's idle is under 0.015 core-s
+per purchase at either build's rate. Subtracting it leaves the old build at
+0.228 and the new at 0.108–0.112. The node's 0.6 idle cores are spread over
+more purchases as throughput rises. Above idle, the node fell from 0.657 to
+0.374–0.398, close to the raw ratio.
+
+**Task 5, 2026-09-29.** Ten buyers ran on the old build, and the new build was
+deployed 90s in (revision 40, 01:47:33–01:51:23Z).
+- 544 purchases.
+- `TMPRL1100` or `nondeterministic` lines in `order-service` and
+  `order-consumer`: 0 and 0.
+- Running sagas fell to 0.
+- Of the 880 sagas started during the rollout, 557 carry the version marker.
+  One crossed builds: `ConfirmOrder:TB-4RGATE-20260929-Y8XVHQKM` ran five
+  workflow tasks on the old consumer and its last on the new one, and
+  completed on the `DefaultVersion` path.
+
+The replay test covers replaying an old history. This saga is the only
+evidence that a new worker can also continue one.
 
 ## What this says
 
-Not yet written.
+**The cut is real, and larger than predicted.** In one session, bracketed new,
+old, new, Temporal's cost per purchase went 0.119 → 0.240 → 0.120. The new build
+halves it: −50%, against a same-session noise floor of 3.5% and a prediction of
+30–45%. Postgres fell 40% (0.198 → 0.118–0.122) and the node 38–41%. History
+events fell from 64 to 38, not the predicted 36. `GetVersion` also records its
+change ID as a search attribute, one `UPSERT_WORKFLOW_SEARCH_ATTRIBUTES` event
+per saga, and the prediction left that out.
+
+**Temporal fell more than its events.** Events per purchase fell 41% and
+Temporal's CPU 50%. The likeliest reading: a remote activity costs the server
+more than its three events, because it takes a dispatch through the task queue
+and timers for its timeouts, and a local activity costs the server none of that.
+That reading was not measured.
+
+**The box turned the saving into throughput, not latency.** Every run kept the
+box saturated, with 1.6–1.8 of its 2 cores busy. So at 20 buyers the saving came
+back as purchases: 1.6–1.7 a second before, 2.9–3.0 after. Each buyer starts
+again as soon as a purchase completes, so the faster build also sent more
+checkouts at once into the same saturated box. The share of checkouts under 2s
+fell, from 90–91% to 78–86%. What the change does to latency at an equal arrival
+rate is not measured here; that needs a load defined by arrival rate, not by
+buyers.
+
+**The opening burst: suggestive, not shown.** The burst's longest first-task
+wait was 0.87–3.31s on the new build against 2.36–4.66s on the old. The ranges
+overlap, and each run has one burst.
+
+**The drift is not Temporal's stored history.** after-3 started with 3,182
+stored executions and after-4 with 7,168, and cost the same, 0.119 and 0.120;
+after-1 started at 5,196 and cost 0.116. The old build cost 0.240 on 2026-09-29,
+against 0.252–0.261 on the afternoon of 2026-09-27 and 0.235 that morning. That
+drift of up to 10% still has no cause. It is a fifth of the effect measured here.
 
 ## Found, not fixed
 
