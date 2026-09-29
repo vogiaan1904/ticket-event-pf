@@ -14,5 +14,6 @@ kubectl -n $NS exec deploy/temporal -- sh -c "
   temporal workflow list --query '$QUERY' --limit 100000 -o jsonl \
     | sed -n 's/.*\"workflowId\":\"\([^\"]*\)\".*/\1/p' > /tmp/saga-ids
   for id in \$(cat /tmp/saga-ids); do echo \"=== \$id\"; temporal workflow show -w \"\$id\" -o jsonl; done > /tmp/saga-histories"
-kubectl -n $NS exec deploy/temporal -- cat /tmp/saga-histories > "$OUT"
+# Gzipped: a run's ~12MB often cuts off mid-stream; a cut gzip fails gunzip, not silently.
+kubectl -n $NS exec deploy/temporal -- gzip -c /tmp/saga-histories | gunzip > "$OUT"
 echo "$(grep -c '^=== ' "$OUT") sagas -> $OUT"
