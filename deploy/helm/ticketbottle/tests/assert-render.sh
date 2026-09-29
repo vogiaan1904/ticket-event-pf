@@ -125,4 +125,14 @@ dr=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set w
 grep -q 'QUEUE_DEFAULT_RELEASE_RATE: "3"' <<<"$dr" || fail "waitroom.releaseRate does not reach waitroom-config"
 echo "OK  the waitroom's door speed comes from values"
 
+# A ConfigMap change must roll the app that reads it, and only that app: each app
+# carries a digest of its own ConfigMap. Change the waitroom's and compare.
+digest() { awk -v d="$2" '/^---/{k=0;f=0} /^kind: Deployment$/{k=1} k && $0=="  name: "d{f=1} f && /checksum\/config:/{print $2; exit}' <<<"$1"; }
+r7=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=7)
+r8=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=8)
+[ -n "$(digest "$r7" waitroom-service)" ] || fail "waitroom-service carries no checksum/config"
+[ "$(digest "$r7" waitroom-service)" != "$(digest "$r8" waitroom-service)" ] || fail "a waitroom config change does not roll the waitroom"
+[ "$(digest "$r7" order-service)" = "$(digest "$r8" order-service)" ] || fail "a waitroom config change rolls order-service too"
+echo "OK  a config change rolls the app that reads it, and only that app"
+
 echo "all render assertions passed"

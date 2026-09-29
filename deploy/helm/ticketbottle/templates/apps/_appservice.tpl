@@ -6,6 +6,16 @@ lifecycle:
     sleep: { seconds: {{ .Values.shutdown.preStopSleepSeconds }} }
 {{- end -}}
 
+{{- /* The digest of one app's own ConfigMap, so a change to it rolls that app alone. */}}
+{{- define "tb.configDigest" -}}
+{{- $want := printf "name: %s," .name -}}
+{{- $doc := "" -}}
+{{- range splitList "\n---" (include (print .ctx.Template.BasePath "/apps/config.yaml") .ctx) -}}
+{{- if contains $want . }}{{ $doc = . }}{{ end -}}
+{{- end -}}
+{{- required (printf "no ConfigMap named %s in apps/config.yaml" .name) $doc | sha256sum -}}
+{{- end -}}
+
 {{- define "tb.appService" -}}
 {{- $ := .ctx -}}
 {{- if $.Values.apps.enabled }}
@@ -27,12 +37,13 @@ spec:
     matchLabels: { app: {{ .name }} }
   template:
     metadata:
-      {{- if .secret }}
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: {{ include "tb.configDigest" (dict "ctx" $ "name" .config) }}
+        {{- if .secret }}
         checksum/secret: {{ include (print $.Template.BasePath "/apps/secrets.yaml") $ | sha256sum }}
-      {{- end }}
+        {{- end }}
       labels: { app: {{ .name }} }
     spec:
       {{- if $.Values.topologySpread.enabled }}
