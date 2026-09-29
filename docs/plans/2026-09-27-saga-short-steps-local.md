@@ -1,8 +1,7 @@
 # Short saga steps as local activities
 
-**Status: MEASURED 2026-09-29.** Tasks 1–5 done; Task 6 through Step 3. Keeping
-or reverting the change is the architect's call. Decision:
-→ [0018](../decisions/0018-short-saga-steps-run-as-local-activities.md), proposed.
+**Status: COMPLETE 2026-09-29.** The change is kept. Decision:
+→ [0018](../decisions/0018-short-saga-steps-run-as-local-activities.md), accepted.
 
 **Goal:** Cut what Temporal costs per purchase by running the six short,
 idempotent saga steps as local activities, and measure the cut on the same box
