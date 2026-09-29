@@ -54,6 +54,12 @@ had four parts:
 - EKS left unmeasured at the default;
 - the credit mode written into Terraform.
 
+After a review of how credit modes are usually pinned, the architect approved
+two refinements with "yes do it" (2026-09-29):
+- the credit mode is a `cpu_credits` module variable;
+- the design states that the t3.large is a testbed choice, and that a production
+  target sizes on a non-burstable instance.
+
 ## Consequences
 
 - Each target carries its own door speed, with the date, build and instance it was

@@ -53,13 +53,22 @@ were when it was measured:
 | | k3s, 2026-09-29 |
 |---|---|
 | Instance | t3.large, two vCPUs |
-| CPU credits | unlimited: a t3.large sustains 30% of each vCPU on its own credits and bills the surplus above that |
+| CPU credits | unlimited: a t3.large sustains 30% of each vCPU, 0.6 vCPUs, on its own credits and bills the surplus above that |
 | Cost per purchase | build `sha-b6d2971`: node 0.6, Temporal 0.12 core-seconds |
 
-Change any of the three and measure again. In standard credit mode, once its
-banked credits ran out, the box would be held to 0.6 vCPUs. That is about what it
-uses at idle (0.46–0.65 cores), so almost nothing would be left for purchases.
-0018 alone moved capacity from 1.7 to 3.0 purchases a second.
+Change any of the three and measure again. 0018 alone moved capacity from 1.7 to
+3.0 purchases a second.
+
+**Unlimited credits are required, not incidental.** The box uses 0.46–0.65 cores
+at idle, about the 0.6 vCPUs it earns, so it banks almost no credits. In standard
+mode a load test would be throttled to 0.6 vCPUs almost at once, leaving nearly
+nothing for purchases.
+
+**The t3.large is a testbed choice.** It is cheap because the box is stopped or
+idle most of the month, and at full CPU it costs more than a non-burstable
+instance of the same size. A production target sizes on a non-burstable instance,
+whose capacity does not depend on a credit balance. The EKS nodes are burstable
+too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
 
 ## How a target's door speed is found
 
@@ -104,7 +113,8 @@ uses at idle (0.46–0.65 cores), so almost nothing would be left for purchases.
 - The door speed reaches `config.yaml` from values: a default in
   `deploy/helm/ticketbottle/values.yaml`, and the measured k3s value in
   `deploy/helm/ticketbottle/values-k3s.yaml`.
-- The credit mode is written in `deploy/terraform/modules/ec2-k3s/`, not left to
-  the AWS default.
+- The credit mode is a `cpu_credits` variable on `deploy/terraform/modules/ec2-k3s/`,
+  default `unlimited`, instead of the account's default for the family, which an
+  account can change.
 - A render check under `deploy/helm/ticketbottle/tests/` shows k3s getting its own
   value.
