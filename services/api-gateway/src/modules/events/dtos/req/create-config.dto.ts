@@ -1,4 +1,4 @@
-import { IsBoolean, IsDateString, IsNotEmpty, IsNumber } from 'class-validator';
+import { IsBoolean, IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class CreateConfigDto {
   @IsNotEmpty()
@@ -16,6 +16,13 @@ export class CreateConfigDto {
   @IsNotEmpty()
   @IsNumber()
   maxAttendees: number;
+
+  // Left out: the event's default on create, unchanged on update.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  maxTicketsPerOrder?: number;
 
   @IsNotEmpty()
   @IsBoolean()

@@ -9,6 +9,7 @@ export class ConfigMapper {
       ticketSaleEndDate: new Date(config.ticketSaleEndDate),
       isFree: config.isFree,
       maxAttendees: config.maxAttendees,
+      maxTicketsPerOrder: config.maxTicketsPerOrder,
       isPublic: config.isPublic,
       requiresApproval: config.requiresApproval,
       allowWaitRoom: config.allowWaitRoom,

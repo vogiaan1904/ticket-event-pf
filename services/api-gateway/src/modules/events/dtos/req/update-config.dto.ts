@@ -1,5 +1,5 @@
 import { IsYYYYMMDD } from '@/common/decorators/isYYYYMMDD.decorator';
-import { IsBoolean, IsNotEmpty, IsNumber } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsOptional, Max, Min } from 'class-validator';
 
 export class UpdateConfigDto {
   @IsNotEmpty()
@@ -17,6 +17,13 @@ export class UpdateConfigDto {
   @IsNotEmpty()
   @IsNumber()
   maxAttendees: number;
+
+  // Left out: the event's default on create, unchanged on update.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  maxTicketsPerOrder?: number;
 
   @IsNotEmpty()
   @IsBoolean()
