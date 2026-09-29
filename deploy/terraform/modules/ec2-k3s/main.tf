@@ -111,6 +111,10 @@ resource "aws_instance" "k3s" {
     http_put_response_hop_limit = 2          # allow pods to reach IMDS if ever needed
   }
 
+  credit_specification {
+    cpu_credits = var.cpu_credits
+  }
+
   root_block_device {
     volume_type = "gp3"
     volume_size = var.root_volume_gb
