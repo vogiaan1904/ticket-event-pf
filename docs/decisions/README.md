@@ -156,4 +156,5 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0019](0019-the-waitroom-door-speed-is-sized-per-target.md) | What sets how fast the waitroom admits buyers? | A door speed per deployment target, measured on it at the checkout SLO | One global constant, or a door that adapts to latency | A number that is wrong as soon as the machine, its CPU credit mode or the cost per purchase changes, until someone measures again | proposed |
+| [0020](0020-a-config-change-rolls-the-app-that-reads-it.md) | How does a changed ConfigMap reach the pods that read it? | Each app's pod template carries a digest of its own ConfigMap, so `helm upgrade` rolls exactly the apps whose config changed | `kubectl rollout restart` after a deploy | A template helper that finds each app's ConfigMap in `apps/config.yaml`, and one roll of every app when the digests first appear | proposed |
 <!-- decisions:index:end -->
