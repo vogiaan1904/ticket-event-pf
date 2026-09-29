@@ -103,9 +103,59 @@ too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
 | k3s | 2 a second | 2026-09-29, `sha-8312562`: `docs/plans/2026-09-29-admission-sizing.md#results` |
 | EKS | 10, the chart default | unmeasured |
 
+## Tickets per order
+
+**Status:** specified 2026-09-29, unbuilt.
+[0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md), proposed.
+
+Today nothing caps an order. `quantity` must only be at least 1, the list of items has
+no length limit, and neither order-svc nor inventory checks a total. One buyer in one
+chair can reserve every ticket left.
+
+The rule: **each event carries `max_tickets_per_order`, and an order whose items add
+up to more is refused before anything is held.**
+
+| | |
+|---|---|
+| Where it lives | `EventConfig.max_tickets_per_order` (`proto/event.proto`), column `maxTicketsPerOrder` |
+| Default | 4, the column default, for new configs and every existing one |
+| Organizer's range | 1–10 at the gateway; event-svc also refuses more than 10 |
+| Counted | across every item of the order, not per item |
+| Refused with | `INVALID_ARGUMENT`, `ORD020`: the buyer fixes it by asking for fewer |
+| When | in order-svc's `Create`, after the event is known to be on sale and before the checkout token, the purchase slot or any hold |
+| 0 on the wire | means not set: create takes the default, update keeps the stored value, and order-svc checks nothing |
+
+**Why 0 means "not set".** proto3 sends an unset `int32` as 0. During a rolling deploy
+an event-svc that predates the field answers 0, and an order-svc that read 0 as a
+limit would refuse every order.
+
+Once each order is capped, chairs bound tickets held: tickets held ≤ chairs ×
+`max_tickets_per_order`.
+
+A cap on one buyer's total across several orders is a separate anti-scalping rule,
+not this one.
+
+## What comes next, in order
+
+Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
+
+1. **Tickets per order.** The section above.
+2. **The waitroom knows when tickets run out.** It asks inventory each tick.
+   - While every ticket left is held by someone paying, the door pauses: status
+     `PAUSED`, with places kept.
+   - Once sold equals total, the line closes: status `SOLD_OUT`, and new joins are
+     refused with 409.
+   - Why ask each tick rather than wait for a message: inventory has no outbox, and
+     a lost "tickets came back" message would leave the line paused forever.
+3. **A chair is freed when its hold expires.** The waitroom already consumes
+   `checkout.expired`, but no service publishes it. So an abandoned checkout holds its
+   chair for the token's 15 minutes, 6 minutes after its tickets went back on sale.
+4. **Room size per event:** the smaller of the event's size and door speed × time to
+   pay. It is only well defined once 1–3 exist.
+
 ## Not in scope
 
-- **Room size per event.** The register keeps it open.
+- **Room size per event.** Step 4 of *What comes next*; the register keeps it open.
 - **An adaptive door**, one that slows admission as checkout latency rises. It
   would follow capacity without being measured again, but it puts a control loop
   in the admission path, and such a loop can oscillate. It would still need a
