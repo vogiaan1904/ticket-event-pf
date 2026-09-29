@@ -120,4 +120,9 @@ if [ -f "$REAL" ]; then
   echo "OK  goldens carry no real secret"
 fi
 
+# Door speed is a per-target value, so it must reach the waitroom's ConfigMap.
+dr=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=3)
+grep -q 'QUEUE_DEFAULT_RELEASE_RATE: "3"' <<<"$dr" || fail "waitroom.releaseRate does not reach waitroom-config"
+echo "OK  the waitroom's door speed comes from values"
+
 echo "all render assertions passed"

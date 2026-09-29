@@ -75,6 +75,11 @@ order:
   dynamodbEndpoint: ""
   awsRegion: us-east-1
 
+waitroom:
+  # Door speed: buyers admitted a second. Sized per target from a measurement;
+  # 10 is unmeasured. See docs/design/admission-sizing.md.
+  releaseRate: 10
+
 temporal:
   image: temporalio/auto-setup:1.27.2
   enableElasticsearch: false   # SQL/Postgres visibility; Elasticsearch alone wants 1-2GB
