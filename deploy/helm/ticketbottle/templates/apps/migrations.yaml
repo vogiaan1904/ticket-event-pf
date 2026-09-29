@@ -9,7 +9,9 @@ metadata:
   namespace: {{ include "tb.namespace" $ }}
   labels: {{- include "tb.labels" $ | nindent 4 }}
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
+    # Before an upgrade's rollout, so new code never reads a schema that is not there
+    # yet; after a first install, when Postgres comes from this chart. See 0022.
+    "helm.sh/hook": pre-upgrade,post-install
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:

@@ -135,4 +135,15 @@ r8=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set w
 [ "$(digest "$r7" order-service)" = "$(digest "$r8" order-service)" ] || fail "a waitroom config change rolls order-service too"
 echo "OK  a config change rolls the app that reads it, and only that app"
 
+# A migration reaches the database before the code that reads it rolls (0022). On a
+# first install it cannot: Postgres itself comes from this chart.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" > "$actual"
+for svc in user event payment; do
+  hook=$(awk -v n="$svc-migrate" 'BEGIN { RS = "\n---\n" } /kind: Job/ && $0 ~ ("\n  name: " n "\n")' "$actual" \
+         | sed -n 's/^ *"helm.sh\/hook": *//p')
+  case ",$hook," in *,pre-upgrade,*) ;; *) fail "$svc-migrate runs as '$hook': an upgrade rolls new code before its schema";; esac
+  case ",$hook," in *,post-install,*) ;; *) fail "$svc-migrate runs as '$hook': a first install never migrates";; esac
+done
+echo "OK  migrations run before an upgrade's rollout, and after a first install"
+
 echo "all render assertions passed"

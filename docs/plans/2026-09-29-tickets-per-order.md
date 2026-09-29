@@ -770,5 +770,6 @@ Built in `c53944f` (event-svc), `1ec0ee6` (gateway) and `be65603` (order-svc), p
   again and buy more. This is a separate anti-scalping rule.
 - **A migration runs after the code that needs it.** The migration Jobs are
   `post-upgrade` hooks, which Helm runs only once every pod is Ready (*Results*).
+  → [0022](../decisions/0022-a-migration-runs-before-the-code-that-needs-it.md).
 - **The gateway's `order.pb.ts` is still stale** (the register's open row), which is
   why Task 2 syncs `event.proto` alone.
