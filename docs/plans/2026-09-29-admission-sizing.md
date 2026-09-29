@@ -295,7 +295,8 @@ temporal_idle() {
 n=0
 for RATE in "$@"; do
   n=$((n + 1)); L="r$RATE-$n"
-  make -C "$HERE/.." k3s-deploy HELM_EXTRA="--set waitroom.releaseRate=$RATE" > "$OUT/deploy-$L.txt" 2>&1
+  make -C "$HERE/.." k3s-deploy HELM_EXTRA="--set waitroom.releaseRate=$RATE" > "$OUT/deploy-$L.txt" 2>&1 ||
+    { echo "$L: deploy failed: $(tail -1 "$OUT/deploy-$L.txt")"; exit 1; }
   kubectl -n $NS rollout status deploy/waitroom-service --timeout=5m > /dev/null
   # The ConfigMap can say one rate while the pod still runs the last: ask the pod.
   started=$(kubectl -n $NS logs deploy/waitroom-service | grep 'Starting queue processor' | tail -1)
@@ -314,17 +315,21 @@ for RATE in "$@"; do
   OPEN=$(python3 "$HERE/../loadtest/saga_latency.py" "$OUT/h-$L.txt" --burst-first 20 |
     awk '/first workflow task queued/ { print $5 "/" $8; exit }')
 
-  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" <<'PY'
-import re, sys
+  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" "$HERE" <<'PY'
+import os, re, sys
 from datetime import datetime
-L, rate, frm, to, out, qmin, smax, opening = sys.argv[1:]
+L, rate, frm, to, out, qmin, smax, opening, here = sys.argv[1:]
+sys.path.insert(0, os.path.join(here, "..", "loadtest"))
+import saga_latency
 log = open(f"{out}/k6-{L}.log").read()
 ok = sorted(float(ms) / 1000 for ms, st in re.findall(r'msg="CHECKOUT \S+ ([\d.]+) (\d+)"', log) if int(st) < 400)
 q = lambda p: ok[min(len(ok) - 1, round(p / 100 * (len(ok) - 1)))]
 secs = (datetime.fromisoformat(to.replace("Z", "+00:00")) - datetime.fromisoformat(frm.replace("Z", "+00:00"))).total_seconds()
 temporal = re.search(r"temporal\s+\S+ core-s\s+(\S+)", open(f"{out}/cost-{L}.txt").read()).group(1)
+calm, stalled = saga_latency.without_stalls(saga_latency.load_histories(f"{out}/h-{L}.txt"), saga_latency.load_client(f"{out}/k6-{L}.log"))
 print(f"{L:<7} rate {rate}/s | {len(ok)} purchases, {len(ok) / secs:.2f}/s | checkout p50 {q(50):.2f}s p99 {q(99):.2f}s,"
-      f" {100 * sum(x <= 2 for x in ok) / len(ok):.1f}% under 2s | temporal {temporal} core-s | queue min {float(qmin):.0f},"
+      f" {100 * sum(x <= 2 for x in ok) / len(ok):.1f}% under 2s | without payment stalls p99 {saga_latency.pct(calm, 99):.2f}s, {stalled} stalled"
+      f" | temporal {temporal} core-s | queue min {float(qmin):.0f},"
       f" slots max {float(smax):.0f} | opening first-task wait p50/max {opening}s")
 PY
 done
@@ -435,8 +440,35 @@ git commit -m "feat(k3s): admit buyers at the rate the box was measured to serve
 
 ## Results
 
-| Run | Rate | Purchases/s | Checkout p50 / p99 | Under 2s | Temporal core-s | Queue min | Slots max | Opening wait p50 / max |
-|---|---|---|---|---|---|---|---|---|
+| Run | Rate | Purchases/s | Checkout p50 / p99 | Under 2s | p99 without payment stalls, stalled | Temporal core-s | Queue min | Slots max | Opening wait p50 / max |
+|---|---|---|---|---|---|---|---|---|---|
+| r1-1 | 1 | 0.99 | 0.56 / 1.39s | 99.4% | 1.39s, 0 | 0.129 | 25 | 2 | 0.02 / 0.09s |
+| r2-2 | 2 | 1.92 | 0.70 / **24.54s** | 93.0% | 1.59s, 40 | 0.120 | 32 | 11 | 0.04 / 0.11s |
+| r3-3 | 3 | 2.95 | 1.11 / 2.49s | 95.1% | 2.49s, 0 | 0.115 | 27 | 10 | 0.08 / 0.32s |
+| r4-4 | 4 | 3.15 | 1.35 / 3.38s | 82.2% | 3.38s, 0 | 0.111 | 1 | 37 | 0.14 / 2.51s |
+| r4-5 | 4 | 3.15 | 1.25 / 3.24s | 87.1% | 3.24s, 0 | 0.118 | 1 | 38 | 0.10 / 0.35s |
+| r3-6 | 3 | 2.96 | 1.04 / 2.42s | 95.6% | 2.42s, 0 | 0.116 | 22 | 14 | 0.09 / 0.18s |
+| r2-7 | 2 | 1.98 | 0.68 / 1.56s | 100.0% | 1.56s, 0 | 0.126 | 31 | 4 | 0.03 / 0.11s |
+| r1-8 | 1 | 0.99 | 0.56 / 1.51s | 99.7% | 1.51s, 0 | 0.140 | 29 | 2 | 0.02 / 0.06s |
+
+2026-09-29, 05:53–07:17Z, build `sha-8312562`, 40 buyers for 5 minutes a run, rates
+up then down. The door was the limit in every run: the queue never emptied. At rate
+4 it came within one buyer of emptying, because the box tops out at 3.15 purchases a
+second.
+
+**One run in eight met an external stall.** In r2-2, `CreatePaymentIntent` (the
+payment service's call to the ZaloPay sandbox) ran up to 25s for 40 checkouts
+inside 25 seconds, while every Temporal queue wait stayed under 0.4s. The same
+step stalled on 2026-09-28 at 20 buyers.
+
+**The rule, amended by the architect.** Given raw p99, and the same p99 with every
+checkout whose payment call ran past 5s left out and counted, the architect chose
+the second: "A" (2026-09-29). The normal payment call peaks at 1.8s. A slower door
+cannot shorten a provider stall, so raw p99 would size the box on ZaloPay.
+`saga_latency.without_stalls` computes it, and the sweep prints it.
+
+**Door speed: 2.** Rate 2 holds p99 under 2s in both runs (1.59s and 1.56s without
+stalls). Rate 3 fails both, at 2.49s and 2.42s, with no stall in either.
 
 ## What this says
 

@@ -68,6 +68,23 @@ class ParseTest(unittest.TestCase):
         self.assertEqual([r["code"] for r in burst], ["TB-1", "TB-2", "TB-0"])
         self.assertEqual([r["code"] for r in steady], ["TB-3"])
 
+    def test_a_checkout_caught_in_a_payment_stall_is_counted_not_kept(self):
+        def saga(code, pay_secs):
+            return saga_latency.parse(f"CreateOrder:{code}", [
+                event(1, 0.0, "WORKFLOW_EXECUTION_STARTED"),
+                event(5, 0.1, "ACTIVITY_TASK_SCHEDULED",
+                      activityTaskScheduledEventAttributes={"activityType": {"name": "CreatePaymentIntent"}}),
+                event(6, 0.2, "ACTIVITY_TASK_STARTED",
+                      activityTaskStartedEventAttributes={"scheduledEventId": "5", "attempt": 1}),
+                event(7, 0.2 + pay_secs, "ACTIVITY_TASK_COMPLETED",
+                      activityTaskCompletedEventAttributes={"scheduledEventId": "5"}),
+            ])
+        runs = [saga("TB-1", 6.0), saga("TB-2", 0.4)]
+        client = [("TB-1", 6.5, 201), ("TB-2", 0.9, 201), ("-", 0.1, 409)]
+        kept, stalled = saga_latency.without_stalls(runs, client)
+        self.assertEqual(kept, [0.9])
+        self.assertEqual(stalled, 1)
+
     def test_percentile_is_nearest_rank(self):
         xs = [float(x) for x in range(1, 101)]
         self.assertEqual(saga_latency.pct(xs, 50), 51.0)

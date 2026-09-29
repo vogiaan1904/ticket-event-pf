@@ -72,6 +72,18 @@ def split_burst(runs, secs=3.0, first=None):
     return burst, ordered[len(burst):]
 
 
+def without_stalls(runs, client, limit=5.0):
+    """Returns the accepted checkouts' client seconds, less those caught in a payment stall, and the count left out.
+
+    A provider stall is not the box's doing, and a slower door cannot shorten it:
+    docs/design/admission-sizing.md.
+    """
+    by_code = {r["code"]: r for r in runs}
+    joined = [(secs, by_code[c]) for c, secs, status in client if status < 400 and c in by_code]
+    kept = [secs for secs, r in joined if r["ran"].get("CreatePaymentIntent", 0) <= limit]
+    return kept, len(joined) - len(kept)
+
+
 def pct(xs, p):
     xs = sorted(xs)
     return xs[min(len(xs) - 1, round(p / 100 * (len(xs) - 1)))]
