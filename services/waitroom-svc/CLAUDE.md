@@ -155,6 +155,13 @@ Nothing consumes the `.dlq` topics yet. A dead-lettered slot-release is therefor
 tolerable because slots self-expire (above) — the two mechanisms are load-bearing for
 each other. Add DLQ-depth alerting before relying on either alone.
 
+## Door speed is set per deployment target
+
+`QUEUE_DEFAULT_RELEASE_RATE` is how fast buyers are admitted, and so how fast work
+reaches the box. It comes from the chart's `waitroom.releaseRate`, measured per target
+(`docs/design/admission-sizing.md`); the chart default of 10 is unmeasured. Room size,
+`QUEUE_DEFAULT_MAX_CONCURRENT`, is a separate, per-event question.
+
 ## Single-replica constraint
 
 The admission loop is **not safe above `replicas: 1`** (which is what

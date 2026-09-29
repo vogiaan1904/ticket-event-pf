@@ -43,13 +43,14 @@ describing it for a week — because the fact had been copied rather than linked
 | How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; built; measured on k3s 2026-09-27 |
 | How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; built; verified on k3s 2026-09-27 |
 | Should the short saga steps run as local activities? | `docs/decisions/0018` | Yes: six steps local behind a workflow version; Temporal's CPU per purchase halved; measured on k3s 2026-09-29 |
+| How fast may the waitroom admit buyers, and what sets the rate? | `docs/design/admission-sizing.md` | Per deployment target, from a sweep at the checkout SLO; k3s admits 2 a second, measured 2026-09-29; EKS runs the unmeasured default of 10 |
+| How does a changed ConfigMap reach the pods that read it? | `docs/decisions/0020` | A digest of each app's own ConfigMap in its pod template; built and verified on k3s 2026-09-29 |
 
 ### Open
 
 | Question | Why it is open |
 |---|---|
-| How fast may the waitroom admit buyers, and what sets the rate? | Proposed in `docs/decisions/0019-the-waitroom-door-speed-is-sized-per-target.md`, with `docs/design/admission-sizing.md`: a door speed per deployment target, measured at the checkout SLO. Unmeasured; both targets run the chart default of 10 a second, more than three times what the k3s box serves. |
-| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. The per-event config path now exists (`internal/service/event_gate.go`), so this is a field and a knob, not a new mechanism. How fast buyers are admitted is the separate row above. |
+| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. The per-event config path now exists (`internal/service/event_gate.go`), so this is a field and a knob, not a new mechanism. How fast buyers are admitted is decided: `docs/design/admission-sizing.md`. |
 | What fails first as concurrent checkouts rise into the thousands? | Not measurable on the k3s box: its 2 vCPUs saturate at ten buyers, so higher concurrency measures the box. What the box did measure is cost per purchase: Temporal and its Postgres (`templates/infra/temporal.yaml:28`) were the largest consumers until 0018 halved Temporal's share, and no per-workload breakdown has been taken since. Which testbed answers it is the architect's call: `docs/plans/2026-09-27-checkout-latency-decomposition.md#the-architects-calls-this-raises`. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
@@ -102,7 +103,7 @@ make -C deploy k3s-gate2       # full purchase-flow acceptance test
 make -C deploy stop-ec2-k3s    # the cost switch
 ```
 
-Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` through the tunnel (NodePort 30000).
+Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. A config change rolls the app that reads it (0020); never hand-edit a chart-managed object, or the next deploy that changes the edited field fails. The API Gateway is reachable at `localhost:3000` through the tunnel (NodePort 30000).
 
 ## Branches
 

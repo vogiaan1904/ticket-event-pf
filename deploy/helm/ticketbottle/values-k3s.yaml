@@ -13,6 +13,11 @@ paymentEvents:
 outboxRelay:
   enabled: true
 
+waitroom:
+  # Measured 2026-09-29 on a t3.large with unlimited CPU credits at sha-8312562.
+  # Re-measure when either changes: docs/design/admission-sizing.md.
+  releaseRate: 2
+
 # Modest PVCs sized for the real box.
 postgres:
   storage: 5Gi

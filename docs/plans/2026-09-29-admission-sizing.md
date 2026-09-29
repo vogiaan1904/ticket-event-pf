@@ -1,7 +1,8 @@
 # The waitroom's door speed, sized on the k3s box
 
-**Status: PROPOSED 2026-09-29.** Not started. Decision:
-→ [0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md), proposed.
+**Status: COMPLETE 2026-09-29.** The k3s box admits 2 buyers a second. Decisions:
+→ [0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md),
+[0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md), both accepted.
 
 **Goal:** The waitroom admits buyers at a rate the deployment target was measured to
 serve within the checkout SLO. For k3s, that rate comes from a sweep on the box.
@@ -472,7 +473,32 @@ stalls). Rate 3 fails both, at 2.49s and 2.42s, with no stall in either.
 
 ## What this says
 
-Not yet written.
+**The k3s box admits 2 buyers a second.**
+- Rate 2 holds checkout p99 under 2s.
+- Rate 3 does not, though it serves 2.95 purchases a second.
+- The box tops out at 3.15.
+
+What the box serves within the SLO is about two thirds of what it serves
+saturated. The old door, 10 a second, admitted five times what the box serves
+inside the SLO.
+
+**The prediction held.** Rate 2 passed and rate 3 failed. At rate 2 the opening's
+first-task wait stays at about 0.1s. On 2026-09-27, with 20 buyers admitted at
+once, it reached 4.66s.
+
+**The wait moved to the queue, as designed.** At rate 2, at least 31 of the 40 buyers
+were in the queue at every sample, so each waited about 16s there (depth ÷ rate),
+not in a slow checkout. A queue costs a Redis entry; a checkout costs the box.
+
+**Where the design was wrong.** A slot is held about 2–4s, not the 6s of a buyer's
+loop: at most 2, 4 and 10–14 slots were in use at rates 1, 2 and 3. The room of 100
+still never fills under this load.
+
+**What the plan did not foresee.**
+- A config-only deploy never reached a running pod. Now 0020 fixes it.
+- One provider stall could fail a rate on its own. The architect amended the rule.
+- A hand edit to a chart-managed object blocks the next Helm deploy that changes
+  the edited field.
 
 ## Found, not fixed
 

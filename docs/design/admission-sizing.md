@@ -1,7 +1,8 @@
 # Admission sizing — design
 
-**Status:** specified 2026-09-29, unbuilt. Decision:
-[0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md), proposed.
+**Status:** built 2026-09-29; k3s measured, EKS not. Decisions:
+[0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md),
+[0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md).
 **Applies to:** `waitroom-service` and the chart's per-target values.
 
 ## The problem
@@ -26,7 +27,7 @@ Little's law ties the two together: buyers inside = door speed × how long each
 one stays. Which knob is the limit depends on the stay:
 
 ```
-load test    stay ~6s     3/s x 6s = 18 inside; the room never fills, the door is the limit
+load test    stay ~2-4s   3/s x ~4s = ~12 inside; the room never fills, the door is the limit
 real buyers  stay minutes the room fills first; the machine idles
 sale opens   room empty   every tick admits a full batch; the door is the limit
 ```
@@ -54,7 +55,8 @@ were when it was measured:
 |---|---|
 | Instance | t3.large, two vCPUs |
 | CPU credits | unlimited: a t3.large sustains 30% of each vCPU, 0.6 vCPUs, on its own credits and bills the surplus above that |
-| Cost per purchase | build `sha-b6d2971`: node 0.6, Temporal 0.12 core-seconds |
+| Cost per purchase | build `sha-8312562` (service code as `sha-b6d2971`): node 0.6, Temporal 0.12 core-seconds |
+| What it serves | 3.15 purchases a second saturated; 2 within the checkout SLO |
 
 Change any of the three and measure again. 0018 alone moved capacity from 1.7 to
 3.0 purchases a second.
@@ -87,12 +89,18 @@ too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
    - the opening's first-task wait (`deploy/loadtest/saga_latency.py --burst-first 20`).
 4. **The door speed is the highest speed whose checkout p99 stays under 2s in two
    runs.** The next step up, which fails, is the headroom.
+5. **The p99 leaves out checkouts caught in a payment-provider stall,** those whose
+   `CreatePaymentIntent` ran past 5s, and counts them beside it with the raw p99.
+   A slower door cannot shorten a provider stall, so the raw p99 would size the box
+   on the provider (`saga_latency.without_stalls`).
+
+`deploy/scripts/door-sweep.sh` runs steps 2–3 and prints one line per run.
 
 ## Current values
 
 | Target | Door speed | Source |
 |---|---|---|
-| k3s | 10, the chart default | unmeasured |
+| k3s | 2 a second | 2026-09-29, `sha-8312562`: `docs/plans/2026-09-29-admission-sizing.md#results` |
 | EKS | 10, the chart default | unmeasured |
 
 ## Not in scope
@@ -108,7 +116,7 @@ too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
   (`services/waitroom-svc/CLAUDE.md`, *Single-replica constraint*); with more,
   door speed would multiply by the replica count.
 
-## Where it lives, once built
+## Where it lives
 
 - The door speed reaches `config.yaml` from values: a default in
   `deploy/helm/ticketbottle/values.yaml`, and the measured k3s value in

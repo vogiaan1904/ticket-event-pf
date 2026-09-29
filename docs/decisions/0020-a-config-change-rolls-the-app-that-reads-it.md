@@ -1,7 +1,7 @@
 # 0020 — A config change rolls the app that reads it
 
 **Date:** 2026-09-29
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [plan](../plans/2026-09-29-admission-sizing.md)
 **Where it lives:** `deploy/helm/ticketbottle/templates/apps/_appservice.tpl` (`tb.configDigest`, `checksum/config`)
 
@@ -55,3 +55,28 @@ and was never put as its own choice.
 - `outbox-relay`, `payment-webhook` and the migration Jobs are not built from
   `tb.appService` and carry no config digest yet.
 - A comment inside an app's ConfigMap block changes its digest and restarts it.
+
+## Outcome
+
+`9efebe7`:
+- The render check failed with `waitroom-service carries no checksum/config`, then
+  passed.
+- A whole-file digest failed it with `a waitroom config change rolls order-service
+  too`.
+- A ConfigMap name that does not exist failed the render.
+
+On k3s, 2026-09-29:
+- The first deploy with the digests rolled every app once.
+- From then on, a change to the waitroom's config restarted the waitroom and
+  nothing else. The other seven apps still run the pods started by that first
+  deploy, at 05:37Z.
+- Before each of the sweep's eight runs, the sweep read the rate from the running
+  pod, not from the ConfigMap. The final `values-k3s.yaml` deploy left it at
+  `batch_size: 2`.
+
+It found one trap. The live test's `kubectl patch` made kubectl a co-owner of the
+patched field. Helm deploys with server-side apply, so its next upgrade refused to
+change that field. A forced apply at a different value
+(`HELM_EXTRA="--force-conflicts"`) handed the field back; a forced apply at the
+same value did not. A hand edit to a chart-managed object blocks the next deploy
+that changes the edited field.

@@ -1,7 +1,7 @@
 # 0019 — The waitroom's door speed is sized per deployment target
 
 **Date:** 2026-09-29
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [design](../design/admission-sizing.md)
 **Where it lives:** `deploy/helm/ticketbottle/templates/apps/config.yaml` (`QUEUE_DEFAULT_RELEASE_RATE`), `deploy/helm/ticketbottle/values-k3s.yaml`
 
@@ -60,6 +60,11 @@ two refinements with "yes do it" (2026-09-29):
 - the design states that the t3.large is a testbed choice, and that a production
   target sizes on a non-burstable instance.
 
+The sweep met a stall the design had not named: the payment provider's call ran
+up to 25s in one run in eight. Offered raw p99, the p99 without checkouts caught in
+such a stall, or voiding the run and running it again, the architect chose the
+second: "A" (2026-09-29).
+
 ## Consequences
 
 - Each target carries its own door speed, with the date, build and instance it was
@@ -69,3 +74,28 @@ two refinements with "yes do it" (2026-09-29):
 - EKS runs the unmeasured default until it is measured.
 - Door speed and room size stop sharing one register question. Room size per
   event stays open.
+
+## Outcome
+
+Commits:
+- `d1341c3`: the door speed comes from `waitroom.releaseRate`.
+- `9efebe7`: a config-only deploy reaches the pod
+  ([0020](0020-a-config-change-rolls-the-app-that-reads-it.md)).
+- `87921bb`: `cpu_credits` on the k3s module.
+- `ed1310b`: the sweep, and the stall rule in `saga_latency.without_stalls`.
+
+Tests:
+- The render check for the door speed failed until the value was templated.
+- The stall test failed until `without_stalls` existed, and fails again without
+  its filter.
+- `terraform plan` showed no change to the box, and an in-place update when the
+  default was set to `standard`.
+
+On k3s, 2026-09-29, 40 queued buyers, rates 1 2 3 4 4 3 2 1:
+- Rate 2 held checkout p99 at 1.59s and 1.56s, with 40 stalled checkouts counted
+  in the first run.
+- Rate 3 failed at 2.49s and 2.42s, with no stall.
+- The box tops out at 3.15 purchases a second.
+
+`values-k3s.yaml` sets 2. A deploy without `--set` left the running waitroom at
+`batch_size: 2`. Results: `docs/plans/2026-09-29-admission-sizing.md#results`.
