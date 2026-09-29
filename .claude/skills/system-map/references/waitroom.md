@@ -27,7 +27,8 @@ the waitroom's Kafka consumer.
 |---|---|---|
 | Who is admitted next, and when | service `CLAUDE.md`, *Order is a draw…* | `services/waitroom-svc/internal/models/session.go`, `services/waitroom-svc/internal/repository/redis/queue_repository.go` |
 | What admission does to a queue entry | service `CLAUDE.md`, *Admission is claim/ack* | `services/waitroom-svc/internal/service/queue_processor.go` |
-| How many buyers may check out at once | root `CLAUDE.md`, register — **open** | `services/waitroom-svc/internal/service/queue_processor.go`, `services/waitroom-svc/config/config.go` |
+| How fast buyers are admitted, and what sets it | `docs/design/admission-sizing.md` — specified, unmeasured | `services/waitroom-svc/internal/service/queue_processor.go`, `deploy/helm/ticketbottle/templates/apps/config.yaml` |
+| How many buyers may hold a slot at once | root `CLAUDE.md`, register — **open** | `services/waitroom-svc/internal/service/queue_processor.go`, `services/waitroom-svc/config/config.go` |
 | What a join asks event-svc | service `CLAUDE.md`, *JoinQueue asks event-svc…* | `services/waitroom-svc/internal/service/event_gate.go` |
 | How a client learns its position and token | service `CLAUDE.md`, *Admission is discovered by polling* | `services/waitroom-svc/internal/service/waitroom_service.go` |
 | Who may read or leave a session | `docs/decisions/0008-the-waitroom-enforces-session-ownership.md`, `docs/decisions/0009-a-strangers-request-reads-as-not-found.md` | `services/waitroom-svc/internal/service/waitroom_service.go` |

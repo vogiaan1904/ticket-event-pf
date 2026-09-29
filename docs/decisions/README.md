@@ -150,4 +150,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0018](0018-short-saga-steps-run-as-local-activities.md) | Which saga steps pay a Temporal task-queue hand-off? | Six short, idempotent steps run as local activities behind a workflow version; reserve, confirm and the payment intent stay remote | Merging steps into fewer regular activities | A local step re-runs when the workflow task that ran it fails, so every such step must be idempotent, and its workflow tests run real activities over fakes | accepted |
+
+### admission-sizing
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0019](0019-the-waitroom-door-speed-is-sized-per-target.md) | What sets how fast the waitroom admits buyers? | A door speed per deployment target, measured on it at the checkout SLO | One global constant, or a door that adapts to latency | A number that is wrong as soon as the machine, its CPU credit mode or the cost per purchase changes, until someone measures again | proposed |
 <!-- decisions:index:end -->
