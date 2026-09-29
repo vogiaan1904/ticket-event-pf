@@ -14,7 +14,10 @@ func TestReplay_RecordedHistories(t *testing.T) {
 	r.RegisterWorkflow(CreateOrder)
 	r.RegisterWorkflow(ConfirmOrder)
 
-	for _, f := range []string{"testdata/create_order.json", "testdata/confirm_order.json"} {
+	for _, f := range []string{
+		"testdata/create_order.json", "testdata/confirm_order.json",
+		"testdata/create_order_v1.json", "testdata/confirm_order_v1.json",
+	} {
 		if err := r.ReplayWorkflowHistoryFromJSONFile(nil, f); err != nil {
 			t.Errorf("replay %s: %v", f, err)
 		}
