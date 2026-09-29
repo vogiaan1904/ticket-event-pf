@@ -7,6 +7,7 @@ export class EventConfigEntity implements EventConfig {
   ticketSaleEndDate: Date;
   isFree: boolean;
   maxAttendees: number;
+  maxTicketsPerOrder: number;
   isPublic: boolean;
   requiresApproval: boolean;
   allowWaitRoom: boolean;

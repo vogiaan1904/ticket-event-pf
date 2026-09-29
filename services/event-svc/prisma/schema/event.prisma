@@ -40,6 +40,7 @@ model EventConfig {
   ticketSaleEndDate   DateTime
   isFree              Boolean
   maxAttendees        Int
+  maxTicketsPerOrder  Int         @default(4)
   isPublic            Boolean     @default(true)
   requiresApproval    Boolean     @default(false)
   allowWaitRoom       Boolean     @default(true)

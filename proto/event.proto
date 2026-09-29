@@ -76,6 +76,8 @@ message EventConfig {
     bool requires_approval = 7;
     bool allow_wait_room = 8;
     bool is_new_trending = 9;
+    // Tickets one order may take; 0 means not set.
+    int32 max_tickets_per_order = 10;
 }
 
 message EventLocation {
@@ -213,6 +215,8 @@ message CreateEventConfigRequest {
     bool requires_approval = 8;
     bool allow_wait_room = 9;
     bool is_new_trending = 10;
+    // 0 leaves it unset: the default on create, unchanged on update.
+    int32 max_tickets_per_order = 11;
 }
 
 message CreateEventConfigResponse {
@@ -239,6 +243,8 @@ message UpdateEventConfigRequest {
     bool requires_approval = 8;
     bool allow_wait_room = 9;
     bool is_new_trending = 10;
+    // 0 leaves it unset: the default on create, unchanged on update.
+    int32 max_tickets_per_order = 11;
 }
 
 message UpdateEventConfigResponse {

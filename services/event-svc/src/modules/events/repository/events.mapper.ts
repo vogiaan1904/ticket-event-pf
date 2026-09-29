@@ -94,6 +94,7 @@ function mapToEventConfigEntity(config: EventConfig): EventConfigEntity {
   entity.ticketSaleEndDate = config.ticketSaleEndDate;
   entity.isFree = config.isFree;
   entity.maxAttendees = config.maxAttendees;
+  entity.maxTicketsPerOrder = config.maxTicketsPerOrder;
   entity.isPublic = config.isPublic;
   entity.requiresApproval = config.requiresApproval;
   entity.allowWaitRoom = config.allowWaitRoom;
