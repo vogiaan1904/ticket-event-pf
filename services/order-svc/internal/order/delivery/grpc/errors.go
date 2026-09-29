@@ -27,6 +27,8 @@ var (
 	ErrGRPCTicketSoldOut        = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD012", "Ticket sold out")
 	ErrGRPCNotEnoughTickets     = pkgErrors.NewGRPCError(codes.FailedPrecondition, "ORD013", "Not enough tickets available")
 	ErrGRPCEventConfigNotFound  = pkgErrors.NewGRPCError(codes.NotFound, "ORD014", "Event config not found")
+	// InvalidArgument: the buyer fixes the request by asking for fewer.
+	ErrGRPCTooManyTicketsInOrder = pkgErrors.NewGRPCError(codes.InvalidArgument, "ORD020", "Too many tickets in one order for this event")
 
 	// Checkout errors
 	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError(codes.Unauthenticated, "ORD016", "Invalid checkout token")
@@ -77,6 +79,8 @@ func (s *grpcService) mapError(err error) error {
 		return ErrGRPCNotEnoughTickets
 	case errors.Is(err, order.ErrEventConfigNotFound):
 		return ErrGRPCEventConfigNotFound
+	case errors.Is(err, order.ErrTooManyTicketsInOrder):
+		return ErrGRPCTooManyTicketsInOrder
 	case errors.Is(err, order.ErrInvalidCheckoutToken):
 		return ErrGRPCInvalidCheckoutToken
 	case errors.Is(err, order.ErrRequestTimeout):

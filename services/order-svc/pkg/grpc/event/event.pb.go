@@ -343,8 +343,10 @@ type EventConfig struct {
 	RequiresApproval    bool                   `protobuf:"varint,7,opt,name=requires_approval,json=requiresApproval,proto3" json:"requires_approval,omitempty"`
 	AllowWaitRoom       bool                   `protobuf:"varint,8,opt,name=allow_wait_room,json=allowWaitRoom,proto3" json:"allow_wait_room,omitempty"`
 	IsNewTrending       bool                   `protobuf:"varint,9,opt,name=is_new_trending,json=isNewTrending,proto3" json:"is_new_trending,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Tickets one order may take; 0 means not set.
+	MaxTicketsPerOrder int32 `protobuf:"varint,10,opt,name=max_tickets_per_order,json=maxTicketsPerOrder,proto3" json:"max_tickets_per_order,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *EventConfig) Reset() {
@@ -438,6 +440,13 @@ func (x *EventConfig) GetIsNewTrending() bool {
 		return x.IsNewTrending
 	}
 	return false
+}
+
+func (x *EventConfig) GetMaxTicketsPerOrder() int32 {
+	if x != nil {
+		return x.MaxTicketsPerOrder
+	}
+	return 0
 }
 
 type EventLocation struct {
@@ -1621,8 +1630,10 @@ type CreateEventConfigRequest struct {
 	RequiresApproval    bool                   `protobuf:"varint,8,opt,name=requires_approval,json=requiresApproval,proto3" json:"requires_approval,omitempty"`
 	AllowWaitRoom       bool                   `protobuf:"varint,9,opt,name=allow_wait_room,json=allowWaitRoom,proto3" json:"allow_wait_room,omitempty"`
 	IsNewTrending       bool                   `protobuf:"varint,10,opt,name=is_new_trending,json=isNewTrending,proto3" json:"is_new_trending,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// 0 leaves it unset: the default on create, unchanged on update.
+	MaxTicketsPerOrder int32 `protobuf:"varint,11,opt,name=max_tickets_per_order,json=maxTicketsPerOrder,proto3" json:"max_tickets_per_order,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *CreateEventConfigRequest) Reset() {
@@ -1723,6 +1734,13 @@ func (x *CreateEventConfigRequest) GetIsNewTrending() bool {
 		return x.IsNewTrending
 	}
 	return false
+}
+
+func (x *CreateEventConfigRequest) GetMaxTicketsPerOrder() int32 {
+	if x != nil {
+		return x.MaxTicketsPerOrder
+	}
+	return 0
 }
 
 type CreateEventConfigResponse struct {
@@ -1877,8 +1895,10 @@ type UpdateEventConfigRequest struct {
 	RequiresApproval    bool                   `protobuf:"varint,8,opt,name=requires_approval,json=requiresApproval,proto3" json:"requires_approval,omitempty"`
 	AllowWaitRoom       bool                   `protobuf:"varint,9,opt,name=allow_wait_room,json=allowWaitRoom,proto3" json:"allow_wait_room,omitempty"`
 	IsNewTrending       bool                   `protobuf:"varint,10,opt,name=is_new_trending,json=isNewTrending,proto3" json:"is_new_trending,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// 0 leaves it unset: the default on create, unchanged on update.
+	MaxTicketsPerOrder int32 `protobuf:"varint,11,opt,name=max_tickets_per_order,json=maxTicketsPerOrder,proto3" json:"max_tickets_per_order,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *UpdateEventConfigRequest) Reset() {
@@ -1979,6 +1999,13 @@ func (x *UpdateEventConfigRequest) GetIsNewTrending() bool {
 		return x.IsNewTrending
 	}
 	return false
+}
+
+func (x *UpdateEventConfigRequest) GetMaxTicketsPerOrder() int32 {
+	if x != nil {
+		return x.MaxTicketsPerOrder
+	}
+	return 0
 }
 
 type UpdateEventConfigResponse struct {
@@ -2497,7 +2524,7 @@ const file_event_proto_rawDesc = "" +
 	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"3\n" +
 	"\rEventCategory\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xdb\x02\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\"\x8e\x03\n" +
 	"\vEventConfig\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x123\n" +
 	"\x16ticket_sale_start_date\x18\x02 \x01(\tR\x13ticketSaleStartDate\x12/\n" +
@@ -2507,7 +2534,9 @@ const file_event_proto_rawDesc = "" +
 	"\tis_public\x18\x06 \x01(\bR\bisPublic\x12+\n" +
 	"\x11requires_approval\x18\a \x01(\bR\x10requiresApproval\x12&\n" +
 	"\x0fallow_wait_room\x18\b \x01(\bR\rallowWaitRoom\x12&\n" +
-	"\x0fis_new_trending\x18\t \x01(\bR\risNewTrending\"O\n" +
+	"\x0fis_new_trending\x18\t \x01(\bR\risNewTrending\x121\n" +
+	"\x15max_tickets_per_order\x18\n" +
+	" \x01(\x05R\x12maxTicketsPerOrder\"O\n" +
 	"\rEventLocation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05venue\x18\x02 \x01(\tR\x05venue\x12\x18\n" +
@@ -2639,7 +2668,7 @@ const file_event_proto_rawDesc = "" +
 	"\x11ListEventResponse\x12$\n" +
 	"\x06events\x18\x01 \x03(\v2\f.event.EventR\x06events\"$\n" +
 	"\x12DeleteEventRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"\x8c\x03\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\xbf\x03\n" +
 	"\x18CreateEventConfigRequest\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x123\n" +
@@ -2651,14 +2680,15 @@ const file_event_proto_rawDesc = "" +
 	"\x11requires_approval\x18\b \x01(\bR\x10requiresApproval\x12&\n" +
 	"\x0fallow_wait_room\x18\t \x01(\bR\rallowWaitRoom\x12&\n" +
 	"\x0fis_new_trending\x18\n" +
-	" \x01(\bR\risNewTrending\"R\n" +
+	" \x01(\bR\risNewTrending\x121\n" +
+	"\x15max_tickets_per_order\x18\v \x01(\x05R\x12maxTicketsPerOrder\"R\n" +
 	"\x19CreateEventConfigResponse\x125\n" +
 	"\fevent_config\x18\x01 \x01(\v2\x12.event.EventConfigR\veventConfig\"K\n" +
 	"\x15GetEventConfigRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"O\n" +
 	"\x16GetEventConfigResponse\x125\n" +
-	"\fevent_config\x18\x01 \x01(\v2\x12.event.EventConfigR\veventConfig\"\x8c\x03\n" +
+	"\fevent_config\x18\x01 \x01(\v2\x12.event.EventConfigR\veventConfig\"\xbf\x03\n" +
 	"\x18UpdateEventConfigRequest\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x123\n" +
@@ -2670,7 +2700,8 @@ const file_event_proto_rawDesc = "" +
 	"\x11requires_approval\x18\b \x01(\bR\x10requiresApproval\x12&\n" +
 	"\x0fallow_wait_room\x18\t \x01(\bR\rallowWaitRoom\x12&\n" +
 	"\x0fis_new_trending\x18\n" +
-	" \x01(\bR\risNewTrending\"R\n" +
+	" \x01(\bR\risNewTrending\x121\n" +
+	"\x15max_tickets_per_order\x18\v \x01(\x05R\x12maxTicketsPerOrder\"R\n" +
 	"\x19UpdateEventConfigResponse\x125\n" +
 	"\fevent_config\x18\x01 \x01(\v2\x12.event.EventConfigR\veventConfig\"I\n" +
 	"\x13ApproveEventRequest\x12\x19\n" +

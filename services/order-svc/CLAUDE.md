@@ -12,6 +12,11 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
+- **An order takes at most its event's `max_tickets_per_order` tickets**, counted across
+  its items and checked in `Create` before the purchase slot or any hold
+  ([0021](../../docs/decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md)).
+  Over it: `INVALID_ARGUMENT`, `ORD020`. 0 means no limit is set, which is what an
+  event-svc that predates the field sends.
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`.
 - **Short steps run as local activities** through `executeShortStep`
   ([0018](../../docs/decisions/0018-short-saga-steps-run-as-local-activities.md)):

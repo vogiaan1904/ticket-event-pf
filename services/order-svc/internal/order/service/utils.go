@@ -42,3 +42,12 @@ func (s *implService) validateCheckoutToken(ctx context.Context, in order.Create
 
 	return p.CheckoutTokenClaim, nil
 }
+
+// ticketsInOrder is how many tickets an order takes, across all its items.
+func ticketsInOrder(items []order.OrderItemInput) int32 {
+	var n int32
+	for _, item := range items {
+		n += item.Quantity
+	}
+	return n
+}

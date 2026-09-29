@@ -31,7 +31,8 @@ const (
 
 type stubEventClient struct {
 	event.EventServiceClient
-	allowWaitRoom bool
+	allowWaitRoom      bool
+	maxTicketsPerOrder int32
 }
 
 func (c stubEventClient) FindOne(ctx context.Context, in *event.FindOneEventRequest, opts ...grpc.CallOption) (*event.FindOneEventResponse, error) {
@@ -44,8 +45,9 @@ func (c stubEventClient) FindOne(ctx context.Context, in *event.FindOneEventRequ
 
 func (c stubEventClient) GetConfig(ctx context.Context, in *event.GetEventConfigRequest, opts ...grpc.CallOption) (*event.GetEventConfigResponse, error) {
 	return &event.GetEventConfigResponse{EventConfig: &event.EventConfig{
-		Id:            in.EventId,
-		AllowWaitRoom: c.allowWaitRoom,
+		Id:                 in.EventId,
+		AllowWaitRoom:      c.allowWaitRoom,
+		MaxTicketsPerOrder: c.maxTicketsPerOrder,
 	}}, nil
 }
 

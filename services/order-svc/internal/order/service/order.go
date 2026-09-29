@@ -123,6 +123,11 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, order.ErrEventNotReadyForSale
 	}
 
+	// Checked before the slot or any hold is taken; 0 is an event with no limit set.
+	if limit := eCfg.GetMaxTicketsPerOrder(); limit > 0 && ticketsInOrder(in.Items) > limit {
+		return order.CreateOrderOutput{}, order.ErrTooManyTicketsInOrder
+	}
+
 	code := util.GenerateOrderCodeWithEventPrefix(e.Name)
 
 	var ssID string
