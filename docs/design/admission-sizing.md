@@ -135,12 +135,77 @@ Once each order is capped, chairs bound tickets held: tickets held ≤ chairs ×
 A cap on one buyer's total across several orders is a separate anti-scalping rule,
 not this one.
 
+## When tickets run out
+
+**Status:** specified 2026-09-30; not built.
+[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), proposed.
+
+The door admits at its speed whatever inventory has left. Once every ticket is held
+or sold, each buyer it admits costs the box a checkout that inventory refuses and
+holds a chair for the token's 15 minutes, while everyone behind waits for nothing.
+
+The rule: **before it admits anyone, each tick asks inventory what the event has
+left, and the answer sets the door.**
+
+| Inventory's counts | Door | The waitroom |
+|---|---|---|
+| no class that can still sell | open | admits as before: there is nothing to judge by |
+| sold = total | sold out | ends the line's queued sessions; a join or a status poll gets 409 `WTR012` |
+| nothing available now | paused | admits nobody and keeps every place; a status poll says `paused: true` |
+| some available now | open | admits as before |
+
+What inventory counts, in `GetEventStock` (`proto/inventory.proto`):
+- `total` and `sold`: over the classes that can still sell, `ACTIVE` and not past
+  their sale end.
+- `available`: over those on sale now, the tickets neither held nor sold.
+
+So a door pauses both while every ticket left is held and while the rest are not on
+sale yet. `sold` never goes down, so only an organizer can reopen a sold-out door, by
+raising `total` or re-activating a class.
+
+**One answer per event, half a tick old at most.** The waitroom caches each event's
+door for half of `QUEUE_PROCESS_INTERVAL`, so every tick asks afresh and every join
+and status poll in between reads the same answer. Concurrent misses collapse into one
+call, as the event gate's do. The tick asks only when someone in line is due, so an
+event whose line is empty costs inventory nothing. Inventory's read takes no lock, so
+it never waits on a `Reserve` holding a hot row.
+
+**It fails open.** If inventory does not answer within 1s, the door is open until
+the next answer, and the waitroom admits exactly as it did before this rule. The door
+only saves wasted checkouts; what stops an oversell is inventory's guarded `UPDATE`.
+The failed answer is cached like any other, so a down inventory is asked once per
+half tick, not once per join. `tb_waitroom_stock_checks_total{result="unavailable"}`
+counts them.
+
+**Closing a sold-out line:**
+- A queued session is set to `sold_out` before its entry leaves the line, 100 per
+  tick. A failure between the two leaves an ended session in line, which the next
+  tick removes.
+- An admitted session is never removed by closing. It holds a token, and its checkout
+  gets inventory's own answer.
+- A status poll sees sold out from the cached answer at once. Closing only stops the
+  line being kept.
+- Ended is final for that session. If the door reopens, its buyer joins again.
+
+**Any rollout order is safe.** Each part is additive:
+- a waitroom whose inventory lacks `GetEventStock` gets `UNIMPLEMENTED` and fails
+  open;
+- a gateway that predates `paused` ignores it;
+- `WTR012` is `FAILED_PRECONDITION`, which every gateway maps to 409.
+
+Not in this step:
+- a sale that is over, every class past its end with tickets unsold: the door stays
+  open, as today;
+- chairs that outnumber the tickets left: step 4, room size per event;
+- a chair freed when its hold expires: step 3.
+
 ## What comes next, in order
 
 Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 
 1. **Tickets per order.** The section above; built 2026-09-29.
-2. **The waitroom knows when tickets run out.** It asks inventory each tick.
+2. **The waitroom knows when tickets run out.** It asks inventory each tick. Specified
+   in *When tickets run out* above, 2026-09-30.
    - While every ticket left is held by someone paying, the door pauses: status
      `PAUSED`, with places kept.
    - Once sold equals total, the line closes: status `SOLD_OUT`, and new joins are
