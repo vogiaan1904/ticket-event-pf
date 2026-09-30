@@ -204,6 +204,59 @@ Not in this step:
 - chairs that outnumber the tickets left: step 4, room size per event;
 - a chair freed when its hold expires: step 3.
 
+## When a checkout is abandoned
+
+**Status:** specified 2026-09-30; not built; its three calls are with the architect.
+[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), proposed.
+
+A buyer who takes a hold and never pays is noticed by nothing that tells anyone else.
+payment-svc records a failure only when a provider's webhook reports one, and a buyer
+who walks away sends nothing:
+
+| What | Today | Because |
+|---|---|---|
+| The inventory hold | released at about 9m | inventory's expiry worker, which tells no one |
+| The waitroom chair | freed at 15m | the slot's own TTL; nobody publishes `checkout.expired` |
+| The order | `PENDING` for ever | nothing times an order out |
+| The buyer, with no waiting room | locked out of the event for 30 days | the purchase slot is keyed by buyer and event, and a retry resumes the `PENDING` order and its dead payment link until the slot's TTL |
+
+The rule: **order-svc times out an order nobody has paid for when its hold expires.**
+Every order the saga creates starts a workflow, `ExpireOrder`, delayed by
+`PaymentTimeout + ReservationHoldGrace`, the hold's own length:
+
+```
+order still PENDING -> TIMEOUT; release the hold, free the purchase slot, publish checkout.expired
+anything else       -> nothing: it was paid, failed or cancelled first
+```
+
+- **Why order-svc.** It sets the hold's length and owns the checkout's statuses.
+  `ConfirmOrder` already has a branch for a payment on a `TIMEOUT` order, which
+  nothing could reach until now.
+- **Why a delayed workflow.** A timer that survives restarts, one per order, with
+  nothing to poll. Temporal's delayed start costs nothing until it fires. It adds one
+  start call to each checkout; that and the run at 9m are unmeasured on k3s.
+- **The flip is conditional.** `PENDING` to `TIMEOUT` is a DynamoDB conditional
+  write, so a timeout never overwrites a payment that confirmed first.
+- **A payment that lands after the timeout** is still confirmed if inventory can
+  re-acquire the ticket, and marked `REFUND_REQUIRED` only if it cannot. That keeps
+  the backstop in `services/order-svc/docs/RESERVATION_HOLD.md`: a payment made
+  inside the provider's 6-minute window whose confirmation ran long.
+- **On the wire a `TIMEOUT` order reads `CANCELED`.** The order contract has no
+  expired status, and adding one means regenerating the gateway's stale
+  `order.pb.ts`, which the register's open row covers.
+- **Rollout.** An order already `PENDING` at the deploy has no timer and behaves as
+  today. The consumer registers `ExpireOrder` long before the first one fires, 9
+  minutes after the first new checkout.
+
+`tb_order_checkouts_expired_total` counts timed-out orders: the abandonment rate that
+step 4 sizes the room by.
+
+Not in this step:
+- a chair whose buyer is admitted and never starts a checkout: it holds for the
+  token's 15 minutes, since there is no hold to expire;
+- `REFUND_REQUIRED` and `REFUNDED` orders read `UNSPECIFIED` on the wire, as they
+  already do.
+
 ## What comes next, in order
 
 Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
@@ -220,6 +273,7 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 3. **A chair is freed when its hold expires.** The waitroom already consumes
    `checkout.expired`, but no service publishes it. So an abandoned checkout holds its
    chair for the token's 15 minutes, 6 minutes after its tickets went back on sale.
+   Specified in *When a checkout is abandoned* above, 2026-09-30.
 4. **Room size per event:** the smaller of the event's size and door speed × time to
    pay. It is only well defined once 1–3 exist.
 

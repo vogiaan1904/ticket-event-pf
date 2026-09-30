@@ -1,0 +1,55 @@
+# 0024 — An unpaid order times out when its hold expires
+
+**Date:** 2026-09-30
+**Status:** proposed
+**Arc:** admission-sizing — [design](../design/admission-sizing.md#when-a-checkout-is-abandoned), [plan](../plans/2026-09-30-an-abandoned-checkout-expires.md)
+**Where it lives:** `services/order-svc/internal/workflows/expire_order.go`, `services/order-svc/internal/order/service/order.go` (`Create`)
+
+| Question | Chose | Instead of | Cost |
+|---|---|---|---|
+| Who notices a checkout nobody pays for, and when? | order-svc, from a Temporal workflow delayed by the hold's length, which times the order out and publishes `checkout.expired` | The chair's TTL following the hold; a payment-svc sweeper; nothing, as today | One more Temporal workflow per order, and one start call on the checkout path, both unmeasured |
+
+## Context
+
+A buyer who takes a hold and never pays is noticed by nothing that tells anyone
+else:
+- inventory's expiry worker releases the hold at about 9 minutes and tells no one;
+- the waitroom frees the chair at 15 minutes, from the slot's own TTL;
+- the order stays `PENDING` for ever.
+
+With no waiting room, the buyer is locked out of the event for 30 days. The
+purchase slot is keyed by buyer and event, and each retry resumes the `PENDING`
+order and its dead payment link.
+
+The waitroom already consumes `checkout.expired`, and `ConfirmOrder` already has a
+branch for a payment on a `TIMEOUT` order. Nothing produces either.
+
+## Options
+
+**Who runs the clock.**
+- *order-svc, with a delayed Temporal workflow at the hold's expiry* (recommended).
+  order-svc sets the hold's length and owns the checkout's statuses, so the order,
+  the purchase slot and the chair are fixed together. The timer survives restarts.
+- *The chair's TTL follows the hold.* order-svc publishes the hold's expiry when the
+  checkout starts, and the waitroom shortens the chair to match. No timer anywhere,
+  but the order stays `PENDING` and the lockout stays.
+- *A payment-svc sweeper* turns overdue intents into `payment.failed`. It reuses the
+  failure path, but calls an abandoned checkout a failed payment, and adds a
+  periodic job that must be safe across replicas.
+
+**What a payment that lands after the timeout gets.**
+- *Confirmed if inventory can re-acquire the ticket; refunded only if it cannot*
+  (recommended). This keeps the backstop in
+  `services/order-svc/docs/RESERVATION_HOLD.md`, for a payment made inside the
+  provider's window whose confirmation ran long.
+- *Always refunded*, as `ConfirmOrder`'s switch does today. Simpler, but a buyer who
+  paid in time loses a seat that is still there.
+
+**What the buyer sees for a timed-out order.**
+- *`CANCELED`* (recommended). No contract change, and every gateway understands it.
+- *A new `EXPIRED` status.* That needs `proto/order.proto` and the gateway's
+  `order.pb.ts`, which is stale; regenerating it breaks `src/modules/orders/`.
+
+## Decision
+
+Put to the architect with the plan on 2026-09-30; not yet answered.
