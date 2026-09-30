@@ -46,7 +46,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How fast may the waitroom admit buyers, and what sets the rate? | `docs/design/admission-sizing.md` | Per deployment target, from a sweep at the checkout SLO; k3s admits 2 a second, measured 2026-09-29; EKS runs the unmeasured default of 10 |
 | How does a changed ConfigMap reach the pods that read it? | `docs/decisions/0020` | A digest of each app's own ConfigMap in its pod template; built and verified on k3s 2026-09-29 |
 | How many tickets may one order take? | `docs/decisions/0021` | A limit per event, default 4; refused before anything is held; built and verified on k3s 2026-09-29 |
-| When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built 2026-09-29, not yet run on a cluster |
+| When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
 
 ### Open
 

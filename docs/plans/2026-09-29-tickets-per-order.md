@@ -757,8 +757,8 @@ Built in `c53944f` (event-svc), `1ec0ee6` (gateway) and `be65603` (order-svc), p
   - the config echoed `maxTicketsPerOrder: 2`;
   - an order of 3 was refused with `400 ORD020`;
   - order `TB-GATE1-20260929-637GKSXE` then completed on the same checkout token.
-- Step 4's count of existing configs was not observed. `ADD COLUMN … NOT NULL DEFAULT 4`
-  fills every existing row, and the gate read the column back.
+- Step 4's count was not observed on the day. On 2026-09-30, all 30 configs created
+  before the migration read 4.
 - The deploy ran the migration after the new code. event-service started at
   16:01:04Z; the migration finished at 16:02:35Z. For 91s, event-svc served against a
   table without the column. Nobody was buying. During a sale, every config read would

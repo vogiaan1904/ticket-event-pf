@@ -163,5 +163,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0022](0022-a-migration-runs-before-the-code-that-needs-it.md) | When does a schema migration run, relative to the code that reads it? | Before an upgrade's rollout (`pre-upgrade`); after a first install (`post-install`) | After the rollout, as before; an init container in each service | Every migration must work with the code already running, and the Job reads the ConfigMap and Secret from before the upgrade | proposed |
+| [0022](0022-a-migration-runs-before-the-code-that-needs-it.md) | When does a schema migration run, relative to the code that reads it? | Before an upgrade's rollout (`pre-upgrade`); after a first install (`post-install`) | After the rollout, as before; an init container in each service | Every migration must work with the code already running, and the Job reads the ConfigMap and Secret from before the upgrade | accepted |
 <!-- decisions:index:end -->

@@ -1,7 +1,7 @@
 # 0022 — A migration runs before the code that needs it
 
 **Date:** 2026-09-29
-**Status:** proposed
+**Status:** accepted
 **Arc:** schema-migrations — found by the [tickets-per-order deploy](../plans/2026-09-29-tickets-per-order.md#results)
 **Where it lives:** `deploy/helm/ticketbottle/templates/apps/migrations.yaml` (`helm.sh/hook`)
 
@@ -58,3 +58,21 @@ it after too would migrate a database that the release moves to.
   Postgres that does not exist yet. It fails at `--timeout`.
 - `deploy/helm/ticketbottle/tests/assert-render.sh` fails if a migration Job loses
   `pre-upgrade` or `post-install`.
+
+## Outcome
+
+`b11095a`:
+- The new render check failed on the old hooks (`post-install,post-upgrade`), then
+  passed.
+- It also failed on `pre-upgrade` alone. Running the Job before and after the rollout
+  passes, since `prisma migrate deploy` is safe to run twice.
+
+On k3s, 2026-09-30, revision 55 deployed `sha-b11095a`. That build was started by hand,
+because a chart-only push builds no images. Every pod rolled. The cluster's events:
+
+| | Before (revision 54) | After (revision 55) |
+|---|---|---|
+| Migrations finished | 16:02:35Z, 91s after the new event-service started | event 02:07:08Z, payment 02:07:20Z, user 02:07:33Z |
+| First new pod | event-service, 16:01:04Z | event-service's new ReplicaSet, 02:08:13Z, 40s after the last migration |
+
+`make -C deploy k3s-gate2` then passed on revision 55.
