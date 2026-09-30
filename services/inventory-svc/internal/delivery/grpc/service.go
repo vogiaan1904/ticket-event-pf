@@ -191,6 +191,26 @@ func (s *grpcService) GetAvailability(ctx context.Context, req *invpb.GetAvailab
 	}, nil
 }
 
+func (s *grpcService) GetEventStock(ctx context.Context, req *invpb.GetEventStockRequest) (*invpb.GetEventStockResponse, error) {
+	if err := s.validateGetEventStockRequest(req); err != nil {
+		s.l.Errorf(ctx, "internal.delivery.grpc.GetEventStock.validateGetEventStockRequest: %v", err)
+		return nil, response.GrpcError(err)
+	}
+
+	st, err := s.tcSvc.GetEventStock(ctx, req.GetEventId())
+	if err != nil {
+		err = s.mapError(err)
+		s.l.Errorf(ctx, "internal.delivery.grpc.GetEventStock.GetEventStock: %v", err)
+		return nil, response.GrpcError(err)
+	}
+
+	return &invpb.GetEventStockResponse{
+		Total:     st.Total,
+		Sold:      st.Sold,
+		Available: st.Available,
+	}, nil
+}
+
 func (s *grpcService) Reserve(ctx context.Context, req *invpb.ReserveRequest) (*emptypb.Empty, error) {
 	if err := s.validateReserveRequest(req); err != nil {
 		s.l.Errorf(ctx, "internal.delivery.grpc.Reserve.validateReserveRequest: %v", err)

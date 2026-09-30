@@ -926,6 +926,112 @@ func (x *GetAvailabilityResponse) GetAvailableQuantity() int32 {
 	return 0
 }
 
+type GetEventStockRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventStockRequest) Reset() {
+	*x = GetEventStockRequest{}
+	mi := &file_inventory_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventStockRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventStockRequest) ProtoMessage() {}
+
+func (x *GetEventStockRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_inventory_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventStockRequest.ProtoReflect.Descriptor instead.
+func (*GetEventStockRequest) Descriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetEventStockRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+// Counted over the event's classes that can still sell: ACTIVE, not past their end.
+type GetEventStockResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Total int64                  `protobuf:"varint,1,opt,name=total,proto3" json:"total,omitempty"`
+	Sold  int64                  `protobuf:"varint,2,opt,name=sold,proto3" json:"sold,omitempty"`
+	// On sale now, and neither held nor sold.
+	Available     int64 `protobuf:"varint,3,opt,name=available,proto3" json:"available,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEventStockResponse) Reset() {
+	*x = GetEventStockResponse{}
+	mi := &file_inventory_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEventStockResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEventStockResponse) ProtoMessage() {}
+
+func (x *GetEventStockResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_inventory_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEventStockResponse.ProtoReflect.Descriptor instead.
+func (*GetEventStockResponse) Descriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetEventStockResponse) GetTotal() int64 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *GetEventStockResponse) GetSold() int64 {
+	if x != nil {
+		return x.Sold
+	}
+	return 0
+}
+
+func (x *GetEventStockResponse) GetAvailable() int64 {
+	if x != nil {
+		return x.Available
+	}
+	return 0
+}
+
 type CheckAvailabilityItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TicketClassId string                 `protobuf:"bytes,1,opt,name=ticket_class_id,json=ticketClassId,proto3" json:"ticket_class_id,omitempty"`
@@ -936,7 +1042,7 @@ type CheckAvailabilityItem struct {
 
 func (x *CheckAvailabilityItem) Reset() {
 	*x = CheckAvailabilityItem{}
-	mi := &file_inventory_proto_msgTypes[16]
+	mi := &file_inventory_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +1054,7 @@ func (x *CheckAvailabilityItem) String() string {
 func (*CheckAvailabilityItem) ProtoMessage() {}
 
 func (x *CheckAvailabilityItem) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[16]
+	mi := &file_inventory_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1067,7 @@ func (x *CheckAvailabilityItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAvailabilityItem.ProtoReflect.Descriptor instead.
 func (*CheckAvailabilityItem) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{16}
+	return file_inventory_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CheckAvailabilityItem) GetTicketClassId() string {
@@ -987,7 +1093,7 @@ type CheckAvailabilityRequest struct {
 
 func (x *CheckAvailabilityRequest) Reset() {
 	*x = CheckAvailabilityRequest{}
-	mi := &file_inventory_proto_msgTypes[17]
+	mi := &file_inventory_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -999,7 +1105,7 @@ func (x *CheckAvailabilityRequest) String() string {
 func (*CheckAvailabilityRequest) ProtoMessage() {}
 
 func (x *CheckAvailabilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[17]
+	mi := &file_inventory_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1012,7 +1118,7 @@ func (x *CheckAvailabilityRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAvailabilityRequest.ProtoReflect.Descriptor instead.
 func (*CheckAvailabilityRequest) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{17}
+	return file_inventory_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CheckAvailabilityRequest) GetItems() []*CheckAvailabilityItem {
@@ -1031,7 +1137,7 @@ type CheckAvailabilityResponse struct {
 
 func (x *CheckAvailabilityResponse) Reset() {
 	*x = CheckAvailabilityResponse{}
-	mi := &file_inventory_proto_msgTypes[18]
+	mi := &file_inventory_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1043,7 +1149,7 @@ func (x *CheckAvailabilityResponse) String() string {
 func (*CheckAvailabilityResponse) ProtoMessage() {}
 
 func (x *CheckAvailabilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_inventory_proto_msgTypes[18]
+	mi := &file_inventory_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1056,7 +1162,7 @@ func (x *CheckAvailabilityResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAvailabilityResponse.ProtoReflect.Descriptor instead.
 func (*CheckAvailabilityResponse) Descriptor() ([]byte, []int) {
-	return file_inventory_proto_rawDescGZIP(), []int{18}
+	return file_inventory_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *CheckAvailabilityResponse) GetAccept() bool {
@@ -1137,14 +1243,20 @@ const file_inventory_proto_rawDesc = "" +
 	"\x16GetAvailabilityRequest\x12&\n" +
 	"\x0fticket_class_id\x18\x01 \x01(\tR\rticketClassId\"H\n" +
 	"\x17GetAvailabilityResponse\x12-\n" +
-	"\x12available_quantity\x18\x01 \x01(\x05R\x11availableQuantity\"[\n" +
+	"\x12available_quantity\x18\x01 \x01(\x05R\x11availableQuantity\"1\n" +
+	"\x14GetEventStockRequest\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\"_\n" +
+	"\x15GetEventStockResponse\x12\x14\n" +
+	"\x05total\x18\x01 \x01(\x03R\x05total\x12\x12\n" +
+	"\x04sold\x18\x02 \x01(\x03R\x04sold\x12\x1c\n" +
+	"\tavailable\x18\x03 \x01(\x03R\tavailable\"[\n" +
 	"\x15CheckAvailabilityItem\x12&\n" +
 	"\x0fticket_class_id\x18\x01 \x01(\tR\rticketClassId\x12\x1a\n" +
 	"\bquantity\x18\x02 \x01(\x05R\bquantity\"N\n" +
 	"\x18CheckAvailabilityRequest\x122\n" +
 	"\x05items\x18\x01 \x03(\v2\x1c.event.CheckAvailabilityItemR\x05items\"3\n" +
 	"\x19CheckAvailabilityResponse\x12\x16\n" +
-	"\x06accept\x18\x01 \x01(\bR\x06accept2\xa1\x06\n" +
+	"\x06accept\x18\x01 \x01(\bR\x06accept2\xed\x06\n" +
 	"\x10InventoryService\x12V\n" +
 	"\x11CreateTicketClass\x12\x1f.event.CreateTicketClassRequest\x1a .event.CreateTicketClassResponse\x12V\n" +
 	"\x11UpdateTicketClass\x12\x1f.event.UpdateTicketClassRequest\x1a .event.UpdateTicketClassResponse\x12Y\n" +
@@ -1152,7 +1264,8 @@ const file_inventory_proto_rawDesc = "" +
 	"\x13FindManyTicketClass\x12!.event.FindManyTicketClassRequest\x1a\".event.FindManyTicketClassResponse\x12L\n" +
 	"\x11DeleteTicketClass\x12\x1f.event.DeleteTicketClassRequest\x1a\x16.google.protobuf.Empty\x12V\n" +
 	"\x11CheckAvailability\x12\x1f.event.CheckAvailabilityRequest\x1a .event.CheckAvailabilityResponse\x12P\n" +
-	"\x0fGetAvailability\x12\x1d.event.GetAvailabilityRequest\x1a\x1e.event.GetAvailabilityResponse\x128\n" +
+	"\x0fGetAvailability\x12\x1d.event.GetAvailabilityRequest\x1a\x1e.event.GetAvailabilityResponse\x12J\n" +
+	"\rGetEventStock\x12\x1b.event.GetEventStockRequest\x1a\x1c.event.GetEventStockResponse\x128\n" +
 	"\aReserve\x12\x15.event.ReserveRequest\x1a\x16.google.protobuf.Empty\x128\n" +
 	"\aConfirm\x12\x15.event.ConfirmRequest\x1a\x16.google.protobuf.Empty\x128\n" +
 	"\aRelease\x12\x15.event.ReleaseRequest\x1a\x16.google.protobuf.EmptyB;Z9github.com/vogiaan1904/ticketbottle-proto/proto/inventoryb\x06proto3"
@@ -1169,7 +1282,7 @@ func file_inventory_proto_rawDescGZIP() []byte {
 	return file_inventory_proto_rawDescData
 }
 
-var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_inventory_proto_goTypes = []any{
 	(*TicketClass)(nil),                 // 0: event.TicketClass
 	(*CreateTicketClassRequest)(nil),    // 1: event.CreateTicketClassRequest
@@ -1187,10 +1300,12 @@ var file_inventory_proto_goTypes = []any{
 	(*ReleaseRequest)(nil),              // 13: event.ReleaseRequest
 	(*GetAvailabilityRequest)(nil),      // 14: event.GetAvailabilityRequest
 	(*GetAvailabilityResponse)(nil),     // 15: event.GetAvailabilityResponse
-	(*CheckAvailabilityItem)(nil),       // 16: event.CheckAvailabilityItem
-	(*CheckAvailabilityRequest)(nil),    // 17: event.CheckAvailabilityRequest
-	(*CheckAvailabilityResponse)(nil),   // 18: event.CheckAvailabilityResponse
-	(*emptypb.Empty)(nil),               // 19: google.protobuf.Empty
+	(*GetEventStockRequest)(nil),        // 16: event.GetEventStockRequest
+	(*GetEventStockResponse)(nil),       // 17: event.GetEventStockResponse
+	(*CheckAvailabilityItem)(nil),       // 18: event.CheckAvailabilityItem
+	(*CheckAvailabilityRequest)(nil),    // 19: event.CheckAvailabilityRequest
+	(*CheckAvailabilityResponse)(nil),   // 20: event.CheckAvailabilityResponse
+	(*emptypb.Empty)(nil),               // 21: google.protobuf.Empty
 }
 var file_inventory_proto_depIdxs = []int32{
 	0,  // 0: event.CreateTicketClassResponse.ticket_class:type_name -> event.TicketClass
@@ -1198,29 +1313,31 @@ var file_inventory_proto_depIdxs = []int32{
 	0,  // 2: event.FindOneTicketClassResponse.ticket_class:type_name -> event.TicketClass
 	0,  // 3: event.FindManyTicketClassResponse.ticket_classes:type_name -> event.TicketClass
 	10, // 4: event.ReserveRequest.items:type_name -> event.ReserveItem
-	16, // 5: event.CheckAvailabilityRequest.items:type_name -> event.CheckAvailabilityItem
+	18, // 5: event.CheckAvailabilityRequest.items:type_name -> event.CheckAvailabilityItem
 	1,  // 6: event.InventoryService.CreateTicketClass:input_type -> event.CreateTicketClassRequest
 	3,  // 7: event.InventoryService.UpdateTicketClass:input_type -> event.UpdateTicketClassRequest
 	5,  // 8: event.InventoryService.FindOneTicketClass:input_type -> event.FindOneTicketClassRequest
 	7,  // 9: event.InventoryService.FindManyTicketClass:input_type -> event.FindManyTicketClassRequest
 	9,  // 10: event.InventoryService.DeleteTicketClass:input_type -> event.DeleteTicketClassRequest
-	17, // 11: event.InventoryService.CheckAvailability:input_type -> event.CheckAvailabilityRequest
+	19, // 11: event.InventoryService.CheckAvailability:input_type -> event.CheckAvailabilityRequest
 	14, // 12: event.InventoryService.GetAvailability:input_type -> event.GetAvailabilityRequest
-	11, // 13: event.InventoryService.Reserve:input_type -> event.ReserveRequest
-	12, // 14: event.InventoryService.Confirm:input_type -> event.ConfirmRequest
-	13, // 15: event.InventoryService.Release:input_type -> event.ReleaseRequest
-	2,  // 16: event.InventoryService.CreateTicketClass:output_type -> event.CreateTicketClassResponse
-	4,  // 17: event.InventoryService.UpdateTicketClass:output_type -> event.UpdateTicketClassResponse
-	6,  // 18: event.InventoryService.FindOneTicketClass:output_type -> event.FindOneTicketClassResponse
-	8,  // 19: event.InventoryService.FindManyTicketClass:output_type -> event.FindManyTicketClassResponse
-	19, // 20: event.InventoryService.DeleteTicketClass:output_type -> google.protobuf.Empty
-	18, // 21: event.InventoryService.CheckAvailability:output_type -> event.CheckAvailabilityResponse
-	15, // 22: event.InventoryService.GetAvailability:output_type -> event.GetAvailabilityResponse
-	19, // 23: event.InventoryService.Reserve:output_type -> google.protobuf.Empty
-	19, // 24: event.InventoryService.Confirm:output_type -> google.protobuf.Empty
-	19, // 25: event.InventoryService.Release:output_type -> google.protobuf.Empty
-	16, // [16:26] is the sub-list for method output_type
-	6,  // [6:16] is the sub-list for method input_type
+	16, // 13: event.InventoryService.GetEventStock:input_type -> event.GetEventStockRequest
+	11, // 14: event.InventoryService.Reserve:input_type -> event.ReserveRequest
+	12, // 15: event.InventoryService.Confirm:input_type -> event.ConfirmRequest
+	13, // 16: event.InventoryService.Release:input_type -> event.ReleaseRequest
+	2,  // 17: event.InventoryService.CreateTicketClass:output_type -> event.CreateTicketClassResponse
+	4,  // 18: event.InventoryService.UpdateTicketClass:output_type -> event.UpdateTicketClassResponse
+	6,  // 19: event.InventoryService.FindOneTicketClass:output_type -> event.FindOneTicketClassResponse
+	8,  // 20: event.InventoryService.FindManyTicketClass:output_type -> event.FindManyTicketClassResponse
+	21, // 21: event.InventoryService.DeleteTicketClass:output_type -> google.protobuf.Empty
+	20, // 22: event.InventoryService.CheckAvailability:output_type -> event.CheckAvailabilityResponse
+	15, // 23: event.InventoryService.GetAvailability:output_type -> event.GetAvailabilityResponse
+	17, // 24: event.InventoryService.GetEventStock:output_type -> event.GetEventStockResponse
+	21, // 25: event.InventoryService.Reserve:output_type -> google.protobuf.Empty
+	21, // 26: event.InventoryService.Confirm:output_type -> google.protobuf.Empty
+	21, // 27: event.InventoryService.Release:output_type -> google.protobuf.Empty
+	17, // [17:28] is the sub-list for method output_type
+	6,  // [6:17] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1237,7 +1354,7 @@ func file_inventory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inventory_proto_rawDesc), len(file_inventory_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

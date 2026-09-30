@@ -127,6 +127,14 @@ func (s *grpcService) validateGetAvailabilityRequest(req *invpb.GetAvailabilityR
 	return nil
 }
 
+func (s *grpcService) validateGetEventStockRequest(req *invpb.GetEventStockRequest) error {
+	if req.GetEventId() == "" {
+		return ErrValidationFailed
+	}
+
+	return nil
+}
+
 func (s *grpcService) validateCheckAvailabilityRequest(req *invpb.CheckAvailabilityRequest) error {
 	if len(req.GetItems()) == 0 {
 		return ErrValidationFailed

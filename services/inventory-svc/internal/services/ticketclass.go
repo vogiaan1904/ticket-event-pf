@@ -20,6 +20,7 @@ type TicketClassService interface {
 	Delete(ctx context.Context, id int64) error
 	GetAvailableCount(ctx context.Context, id int64) (int, error)
 	CheckAvailability(ctx context.Context, ins []CheckAvailabilityInput) (bool, error)
+	GetEventStock(ctx context.Context, eventID string) (EventStock, error)
 }
 
 type implTicketClassService struct {
@@ -239,4 +240,29 @@ func (s *implTicketClassService) CheckAvailability(ctx context.Context, ins []Ch
 	}
 
 	return true, nil
+}
+
+// GetEventStock counts what an event has left to sell.
+// total, sold: classes that can still sell (ACTIVE, not past their end).
+// available: of those, on sale now, neither held nor sold. Bounds as Reserve's.
+// Unlocked: a plain read never waits on Reserve's row lock.
+func (s *implTicketClassService) GetEventStock(ctx context.Context, eventID string) (EventStock, error) {
+	now := time.Now().UTC()
+
+	var st EventStock
+	err := s.repo.WithContext(ctx).
+		Model(&models.TicketClass{}).
+		Select(`COALESCE(SUM(total), 0)::bigint AS total,
+		        COALESCE(SUM(sold), 0)::bigint AS sold,
+		        COALESCE(SUM(total - reserved - sold)
+		          FILTER (WHERE sale_start_at IS NULL OR sale_start_at <= ?), 0)::bigint AS available`, now).
+		Where("event_id = ? AND status = ? AND (sale_end_at IS NULL OR sale_end_at >= ?)",
+			eventID, models.TicketClassStatusActive, now).
+		Scan(&st).Error
+	if err != nil {
+		s.l.Errorf(ctx, "service.ticketclass.GetEventStock: %v", err)
+		return EventStock{}, err
+	}
+
+	return st, nil
 }

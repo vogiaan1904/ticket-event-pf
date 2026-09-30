@@ -27,6 +27,7 @@ const (
 	InventoryService_DeleteTicketClass_FullMethodName   = "/event.InventoryService/DeleteTicketClass"
 	InventoryService_CheckAvailability_FullMethodName   = "/event.InventoryService/CheckAvailability"
 	InventoryService_GetAvailability_FullMethodName     = "/event.InventoryService/GetAvailability"
+	InventoryService_GetEventStock_FullMethodName       = "/event.InventoryService/GetEventStock"
 	InventoryService_Reserve_FullMethodName             = "/event.InventoryService/Reserve"
 	InventoryService_Confirm_FullMethodName             = "/event.InventoryService/Confirm"
 	InventoryService_Release_FullMethodName             = "/event.InventoryService/Release"
@@ -43,6 +44,7 @@ type InventoryServiceClient interface {
 	DeleteTicketClass(ctx context.Context, in *DeleteTicketClassRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	CheckAvailability(ctx context.Context, in *CheckAvailabilityRequest, opts ...grpc.CallOption) (*CheckAvailabilityResponse, error)
 	GetAvailability(ctx context.Context, in *GetAvailabilityRequest, opts ...grpc.CallOption) (*GetAvailabilityResponse, error)
+	GetEventStock(ctx context.Context, in *GetEventStockRequest, opts ...grpc.CallOption) (*GetEventStockResponse, error)
 	Reserve(ctx context.Context, in *ReserveRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Confirm(ctx context.Context, in *ConfirmRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	Release(ctx context.Context, in *ReleaseRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -126,6 +128,16 @@ func (c *inventoryServiceClient) GetAvailability(ctx context.Context, in *GetAva
 	return out, nil
 }
 
+func (c *inventoryServiceClient) GetEventStock(ctx context.Context, in *GetEventStockRequest, opts ...grpc.CallOption) (*GetEventStockResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetEventStockResponse)
+	err := c.cc.Invoke(ctx, InventoryService_GetEventStock_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *inventoryServiceClient) Reserve(ctx context.Context, in *ReserveRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
@@ -167,6 +179,7 @@ type InventoryServiceServer interface {
 	DeleteTicketClass(context.Context, *DeleteTicketClassRequest) (*emptypb.Empty, error)
 	CheckAvailability(context.Context, *CheckAvailabilityRequest) (*CheckAvailabilityResponse, error)
 	GetAvailability(context.Context, *GetAvailabilityRequest) (*GetAvailabilityResponse, error)
+	GetEventStock(context.Context, *GetEventStockRequest) (*GetEventStockResponse, error)
 	Reserve(context.Context, *ReserveRequest) (*emptypb.Empty, error)
 	Confirm(context.Context, *ConfirmRequest) (*emptypb.Empty, error)
 	Release(context.Context, *ReleaseRequest) (*emptypb.Empty, error)
@@ -200,6 +213,9 @@ func (UnimplementedInventoryServiceServer) CheckAvailability(context.Context, *C
 }
 func (UnimplementedInventoryServiceServer) GetAvailability(context.Context, *GetAvailabilityRequest) (*GetAvailabilityResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetAvailability not implemented")
+}
+func (UnimplementedInventoryServiceServer) GetEventStock(context.Context, *GetEventStockRequest) (*GetEventStockResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetEventStock not implemented")
 }
 func (UnimplementedInventoryServiceServer) Reserve(context.Context, *ReserveRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Reserve not implemented")
@@ -357,6 +373,24 @@ func _InventoryService_GetAvailability_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _InventoryService_GetEventStock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetEventStockRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InventoryServiceServer).GetEventStock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: InventoryService_GetEventStock_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InventoryServiceServer).GetEventStock(ctx, req.(*GetEventStockRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _InventoryService_Reserve_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReserveRequest)
 	if err := dec(in); err != nil {
@@ -445,6 +479,10 @@ var InventoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetAvailability",
 			Handler:    _InventoryService_GetAvailability_Handler,
+		},
+		{
+			MethodName: "GetEventStock",
+			Handler:    _InventoryService_GetEventStock_Handler,
 		},
 		{
 			MethodName: "Reserve",
