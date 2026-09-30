@@ -78,12 +78,13 @@ echo "  sessionId=$SESSION"
 echo "== 7. poll status until admitted, as a client does =="
 CHECKOUT=""
 for i in $(seq 1 30); do
-  ST=$(curl -s "$GW/waitroom/status/$SESSION" -H "$AUTH")
+  CODE=$(curl -s -o /tmp/g1-status.json -w '%{http_code}' "$GW/waitroom/status/$SESSION" -H "$AUTH")
+  ST=$(cat /tmp/g1-status.json)
+  # An ended session answers 4xx (409 expired or sold out), never a status: stop.
+  # A 5xx means retry.
+  case "$CODE" in 4*) fail "session ended before admission ($CODE): $ST" ;; esac
   CHECKOUT=$(echo "$ST" | getval data.checkoutToken)
   [ -n "$CHECKOUT" ] && break
-  case "$(echo "$ST" | getval data.status)" in
-    EXPIRED|CANCELLED|FAILED) fail "session ended before admission: $ST" ;;
-  esac
   sleep 1
 done
 [ -n "$CHECKOUT" ] || fail "not admitted within 30s: $ST"
