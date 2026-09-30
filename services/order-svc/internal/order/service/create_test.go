@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -128,9 +129,19 @@ type fakeTemporalClient struct {
 
 	startedInput *workflows.CreateOrderWorkflowInput
 	cancelCalls  int
+
+	expireOpts     *temporalCli.StartWorkflowOptions
+	expireInput    *workflows.ExpireOrderWorkflowInput
+	expireStartErr error
 }
 
 func (c *fakeTemporalClient) ExecuteWorkflow(ctx context.Context, options temporalCli.StartWorkflowOptions, workflow any, args ...any) (temporalCli.WorkflowRun, error) {
+	if len(args) > 0 {
+		if in, ok := args[0].(*workflows.ExpireOrderWorkflowInput); ok {
+			c.expireOpts, c.expireInput = &options, in
+			return &fakeWorkflowRun{id: options.ID}, c.expireStartErr
+		}
+	}
 	if len(args) > 0 {
 		if in, ok := args[0].(*workflows.CreateOrderWorkflowInput); ok {
 			c.startedInput = in
@@ -309,5 +320,49 @@ func TestCreate_AWorkflowThatNeverStartedGivesTheSlotBack(t *testing.T) {
 
 	if held := slotHolder(t, r, testUserEventSlotKey); held != "" {
 		t.Fatalf("slot %s is still held by %q after the workflow failed to start", testUserEventSlotKey, held)
+	}
+}
+
+// The clock runs as long as the hold, and lives on the worker that has the producer.
+func TestCreate_StartsTheCheckoutClockForTheHoldsLength(t *testing.T) {
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{}}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	if _, err := s.Create(context.Background(), createInput()); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	code := tprCli.startedInput.OrderCode
+	if tprCli.expireOpts == nil {
+		t.Fatal("no clock was started for the order")
+	}
+	if o := tprCli.expireOpts; o.StartDelay != workflows.CheckoutLifetime ||
+		o.ID != workflows.GetExpireOrderWorkflowID(code) || o.TaskQueue != temporal.ConfirmOrderTaskQueue ||
+		tprCli.expireInput.OrderCode != code {
+		t.Fatalf("clock = %+v for %+v; want %s on %s after %s", *o, tprCli.expireInput,
+			workflows.GetExpireOrderWorkflowID(code), temporal.ConfirmOrderTaskQueue, workflows.CheckoutLifetime)
+	}
+}
+
+// The order is live; without its clock it only ends as it did before one existed.
+func TestCreate_AFailedClockDoesNotFailThePurchase(t *testing.T) {
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{}, expireStartErr: errors.New("frontend unavailable")}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	if _, err := s.Create(context.Background(), createInput()); err != nil {
+		t.Fatalf("a failed clock start failed the purchase: %v", err)
+	}
+}
+
+func TestCreate_ALostRaceStartsNoClock(t *testing.T) {
+	tprCli := &fakeTemporalClient{
+		run: &fakeWorkflowRun{getErr: workflows.NewInsufficientInventoryError(workflows.ErrInsufficientInventory)},
+	}
+	s, _ := newCreateService(t, tprCli, false, "")
+
+	_, _ = s.Create(context.Background(), createInput())
+
+	if tprCli.expireOpts != nil {
+		t.Fatal("an order that was never written got a clock")
 	}
 }

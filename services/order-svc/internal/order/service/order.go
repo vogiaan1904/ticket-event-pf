@@ -266,12 +266,27 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 
+	s.startCheckoutClock(ctx, code)
 	observeDuration("completed")
 	return order.CreateOrderOutput{
 		Order:      wfRes.Order,
 		OrderItems: wfRes.OrderItems,
 		PaymentUrl: wfRes.PaymentUrl,
 	}, nil
+}
+
+// startCheckoutClock schedules ExpireOrder for when the order's hold expires.
+// Logged, not returned: the order is live, and without its clock it ends as it did
+// before one existed -- chair at its TTL, order left PENDING.
+func (s *implService) startCheckoutClock(ctx context.Context, code string) {
+	_, err := s.temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:         workflows.GetExpireOrderWorkflowID(code),
+		TaskQueue:  temporal.ConfirmOrderTaskQueue,
+		StartDelay: workflows.CheckoutLifetime,
+	}, workflows.ExpireOrder, &workflows.ExpireOrderWorkflowInput{OrderCode: code})
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.startCheckoutClock: order %s will not time out: %v", code, err)
+	}
 }
 
 // claimPurchaseSlot takes the buyer's slot for this request: a non-nil order
