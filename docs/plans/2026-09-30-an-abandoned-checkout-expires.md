@@ -1,9 +1,8 @@
 # An abandoned checkout expires
 
-**Status: Tasks 1–5 built 2026-09-30; Task 6, the k3s run, waits on the architect's
-go-ahead.** The architect answered the three calls below on 2026-09-30, choosing the
-recommended option each time, so every task stands as written. Decision:
-→ [0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), proposed.
+**Status: COMPLETE 2026-09-30.** An unpaid order times out at its hold's expiry and
+frees its chair at about 9 minutes; verified on k3s. Decision:
+→ [0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), accepted.
 
 **Goal:** An order nobody pays for times out when its hold expires. At that point it
 releases the hold, frees the buyer's purchase slot, and publishes `checkout.expired`,
@@ -984,3 +983,44 @@ This needs the architect's go-ahead: it pushes `dev` and starts the box.
    - the register row reads verified;
    - this plan reads COMPLETE, with *Results*;
    - regenerate the decisions index, commit, and push on the go-ahead.
+
+## Results
+
+Tasks 1–5 landed as `4d66ae6`, `5fbf456`, `8e7fc30`, `df53d87` and `4c17427`. Every
+test the tasks name went red first, then green, and every deliberate break the tasks
+call for failed. The final review was a self-review, with no fresh reviewer. It found
+one Important defect, fixed in `ab36c06`: the clock's start shared the request's
+deadline, so a saga finishing near `createTimeout`, or a caller hanging up as it
+returned, left a live order with no clock. It now starts on its own 5s deadline, and
+`TestCreate_TheClockOutlivesTheCallersDeadline` failed before the fix.
+
+Where the run departs from the tasks as written:
+- The gate script also checks that A holds a chair before it waits, so a chair that was
+  never taken cannot pass as freed.
+- Its log check counts matches with `grep -c`. Under `pipefail`, an early `grep -q`
+  exit can fail a pipe that matched.
+- `ts-tests` did not run on the push: its path filter saw no TypeScript change.
+
+Task 6, on k3s on 2026-09-30, revision 57 (`sha-0b0d097`, every app rolled):
+
+| Check | Result |
+|---|---|
+| `make -C deploy k3s-gate2` | passed: order `COMPLETED` |
+| `make -C deploy k3s-gate-sold-out` | passed: B paused at position 1; 409 `WTR012` for B's poll and C's join |
+| `make -C deploy k3s-gate-checkout-expiry` | passed on its first run: A's chair freed 556s after the order |
+| A, after the timeout | `CANCELED` on the wire, `TIMEOUT` in DynamoDB, session `expired`, reservation `CANCELLED` (released by `ExpireOrder`, not swept) |
+| B, paid | `COMPLETED`; its clock logged `nothing to expire` |
+| The other two clocks | gate 2's and the sold-out gate's paid orders each logged `nothing to expire` |
+| `tb_order_checkouts_expired_total` | 1 on order-consumer |
+| Inventory `Release` | 1 call, `OK` |
+
+Found, not fixed:
+- **The clock's local-activity path has no unit test.** `ExpireOrder`, the slot release
+  and the publish run as local activities in production; the workflow tests pin the
+  regular path. The k3s run exercised the local path end to end.
+- **A release refused because the ticket was confirmed is retried.** `ReleaseInventory`
+  retries a `FAILED_PRECONDITION` five times, about 15s, before `ExpireOrder` logs it
+  and moves on. The classification predates this plan.
+- **A `CANCELED` filter on the orders list misses timed-out orders.** Each reads
+  `CANCELED` on its own, but the filter maps one wire status to one stored status.
+- **The CreateOrder duration histogram now includes the clock's start call.**

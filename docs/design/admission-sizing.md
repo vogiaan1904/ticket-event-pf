@@ -4,7 +4,8 @@
 [0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md),
 [0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md),
 [0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md),
-[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md).
+[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md),
+[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md).
 **Applies to:** `waitroom-service` and the chart's per-target values.
 
 ## The problem
@@ -206,8 +207,8 @@ Not in this step:
 
 ## When a checkout is abandoned
 
-**Status:** specified 2026-09-30; its three calls answered the same day; built; not yet verified on k3s.
-[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), proposed.
+**Status:** built and verified on k3s 2026-09-30.
+[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), accepted.
 
 A buyer who takes a hold and never pays is noticed by nothing that tells anyone else.
 payment-svc records a failure only when a provider's webhook reports one, and a buyer
@@ -273,7 +274,8 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 3. **A chair is freed when its hold expires.** The waitroom already consumes
    `checkout.expired`, but no service publishes it. So an abandoned checkout holds its
    chair for the token's 15 minutes, 6 minutes after its tickets went back on sale.
-   Specified in *When a checkout is abandoned* above, 2026-09-30.
+   The section *When a checkout is abandoned* above; built and verified on k3s
+   2026-09-30: an abandoned chair frees at about 9 minutes.
 4. **Room size per event:** the smaller of the event's size and door speed × time to
    pay. It is only well defined once 1–3 exist.
 

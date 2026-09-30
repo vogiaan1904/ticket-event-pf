@@ -1,7 +1,7 @@
 # 0024 — An unpaid order times out when its hold expires
 
 **Date:** 2026-09-30
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [design](../design/admission-sizing.md#when-a-checkout-is-abandoned), [plan](../plans/2026-09-30-an-abandoned-checkout-expires.md)
 **Where it lives:** `services/order-svc/internal/workflows/expire_order.go`, `services/order-svc/internal/order/service/order.go` (`Create`)
 
@@ -60,3 +60,37 @@ answered: "for the decision, 1 A, 2 A, 3 A" (2026-09-30). That means:
 2. a payment on a `TIMEOUT` order is confirmed if inventory can re-acquire the
    ticket, and refunded if not;
 3. a `TIMEOUT` order reads `CANCELED` on the wire.
+
+## Outcome
+
+Built in `4d66ae6`, `5fbf456`, `8e7fc30` and `df53d87`; the acceptance run in `4c17427`.
+The review then found that the clock's start shared the request's deadline, so a saga
+finishing near `createTimeout`, or a caller hanging up as it returned, left a live
+order with no clock. `ab36c06` starts it on its own 5s deadline.
+
+Each test below failed before its code existed, and fails again when the code it guards
+is broken:
+- `TestExpireIfPending_LeavesAPaidOrderAlone`. Without the condition, a `COMPLETED`
+  order was overwritten with `TIMEOUT`.
+- `TestPublishCheckoutExpired_GoesWhereTheWaitroomReads`, against a renamed topic.
+- `TestConfirmOrder_APaymentOnATimedOutOrderStillGetsItsTicket`. Without the `TIMEOUT`
+  branch, the payment was refused as already processed.
+- `TestExpireOrder_AFailedReleaseStillFreesTheChair`, against a release error returned.
+- `TestCreate_ALostRaceStartsNoClock` (clock started before the saga's result) and
+  `TestCreate_AFailedClockDoesNotFailThePurchase` (its error returned).
+- `TestCreate_TheClockOutlivesTheCallersDeadline`. The clock was started on a
+  cancelled context.
+
+On k3s, 2026-09-30, revision 57 deployed `sha-0b0d097` to every app:
+- `make -C deploy k3s-gate2` and `make -C deploy k3s-gate-sold-out` passed, so the
+  purchase flow and the door are unchanged.
+- `make -C deploy k3s-gate-checkout-expiry` passed on its first run. A's chair was freed
+  556s after the order: the hold is 540s and the chair's own TTL 900s. A's order read
+  `CANCELED` through the gateway and `TIMEOUT` in DynamoDB, and its session read
+  `expired`. Its reservation read `CANCELLED`, which is `ExpireOrder`'s release, not
+  `EXPIRED` from inventory's sweep. B's order stayed `COMPLETED`.
+- Four clocks fired. The three on paid orders (gate 2's, the sold-out gate's, and B's)
+  each logged `nothing to expire`; A's logged `Order timed out unpaid`. Every step
+  except `ReleaseInventory` ran as a local activity, the path no unit test covers.
+- `tb_order_checkouts_expired_total` read 1 on order-consumer. Inventory counted one
+  `Release`, `OK`.
