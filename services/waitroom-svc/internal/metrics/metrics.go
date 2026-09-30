@@ -63,6 +63,16 @@ var (
 		},
 		[]string{"event_id"},
 	)
+
+	// One per question asked of inventory, not per cached read. "unavailable"
+	// is the door failing open. See docs/design/admission-sizing.md#when-tickets-run-out.
+	StockChecks = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tb_waitroom_stock_checks_total",
+			Help: "Questions asked of inventory about an event's tickets, by answer.",
+		},
+		[]string{"result"},
+	)
 )
 
 // codeNames is gRPC's canonical code spelling. codes.Code.String() returns the

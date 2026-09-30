@@ -14,7 +14,6 @@ import (
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/delivery/kafka/producer"
 	"github.com/vogiaan1904/ticketbottle-waitroom/internal/models"
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/logger"
-	"github.com/vogiaan1904/ticketbottle-waitroom/protogen/event"
 )
 
 type QueueProcessor interface {
@@ -36,7 +35,7 @@ type ProcessorStatus struct {
 type queueProcessor struct {
 	qSvc          QueueService
 	ssSvc         SessionService
-	eSvc          event.EventServiceClient
+	stock         *StockGate
 	prod          producer.Producer
 	l             logger.Logger
 	cfg           ProcessorConfig
@@ -66,7 +65,7 @@ type ProcessorConfig struct {
 func NewQueueProcessor(
 	qSvc QueueService,
 	ssSvc SessionService,
-	eSvc event.EventServiceClient,
+	stock *StockGate,
 	prod producer.Producer,
 	l logger.Logger,
 	cfg config.QueueConfig,
@@ -75,7 +74,7 @@ func NewQueueProcessor(
 	return &queueProcessor{
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
-		eSvc:  eSvc,
+		stock: stock,
 		prod:  prod,
 		l:     l,
 		cfg: ProcessorConfig{
@@ -210,6 +209,28 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	processingCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
+	// Claim/ack, not pop: an entry leaves the queue only on a terminal outcome,
+	// so a transient failure retries the same user at the same position.
+	// Invariant: a session is never in neither the queue nor the processing set.
+	ssIDs, err := qp.qSvc.PeekQueue(processingCtx, eventID, qp.cfg.BatchSize)
+	if err != nil {
+		return fmt.Errorf("failed to peek queue: %w", err)
+	}
+
+	if len(ssIDs) == 0 {
+		qp.l.Debugf(processingCtx, "No sessions to process in queue, event_id: %s", eventID)
+		return nil
+	}
+
+	// Asked only with someone due, so an empty line costs inventory nothing.
+	switch qp.stock.Get(processingCtx, eventID) {
+	case DoorPaused:
+		qp.l.Debugf(processingCtx, "Door paused, no ticket available - event_id: %s", eventID)
+		return nil
+	case DoorSoldOut:
+		return qp.closeLine(processingCtx, eventID)
+	}
+
 	processingCount, err := qp.qSvc.GetProcessingCount(processingCtx, eventID)
 	if err != nil {
 		return fmt.Errorf("failed to get processing count: %w", err)
@@ -220,21 +241,7 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 		qp.l.Debugf(processingCtx, "No available slots for event, event_id: %s, processing_count: %d, max_concurrent: %d", eventID, processingCount, qp.cfg.MaxConcurrentPerEvent)
 		return nil
 	}
-
-	batchSize := min(availableSlots, int64(qp.cfg.BatchSize))
-
-	// Claim/ack, not pop: an entry leaves the queue only on a terminal outcome,
-	// so a transient failure retries the same user at the same position.
-	// Invariant: a session is never in neither the queue nor the processing set.
-	ssIDs, err := qp.qSvc.PeekQueue(processingCtx, eventID, int(batchSize))
-	if err != nil {
-		return fmt.Errorf("failed to peek queue: %w", err)
-	}
-
-	if len(ssIDs) == 0 {
-		qp.l.Debugf(processingCtx, "No sessions to process in queue, event_id: %s", eventID)
-		return nil
-	}
+	ssIDs = ssIDs[:min(int64(len(ssIDs)), availableSlots)]
 
 	qp.l.Infof(processingCtx, "Starting batch admission, event_id: %s, session_count: %d", eventID, len(ssIDs))
 
@@ -279,6 +286,56 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	qp.l.Infof(processingCtx, "Batch processing completed - event_id: %s, attempted: %d, admitted: %d",
 		eventID, len(ssIDs), admittedCount)
 
+	return nil
+}
+
+// closeBatchSize is how many sessions one tick ends on a sold-out line.
+// Ending one costs two Redis writes and no checkout, so it need not wait on door speed.
+const closeBatchSize = 100
+
+// closeLine ends a sold-out event's queued sessions, a batch per tick.
+//
+//	queued        -> sold_out, then leaves the line
+//	gone or ended -> leaves the line
+//	admitted      -> stays: it holds a token; its checkout gets inventory's answer
+//
+// Ordering: status before removal, so a failure between leaves an ended entry to remove next tick.
+func (qp *queueProcessor) closeLine(ctx context.Context, eventID string) error {
+	ssIDs, err := qp.qSvc.PeekQueue(ctx, eventID, closeBatchSize)
+	if err != nil {
+		return fmt.Errorf("failed to peek queue: %w", err)
+	}
+
+	leaving := make([]string, 0, len(ssIDs))
+	for _, id := range ssIDs {
+		ss, err := qp.ssSvc.GetSession(ctx, id)
+		switch {
+		case errors.Is(err, ErrSessionNotFound):
+			leaving = append(leaving, id)
+		case err != nil:
+			qp.l.Errorf(ctx, "Failed to read session while closing the line, leaving it for the next tick - event_id: %s, session_id: %s, error: %v", eventID, id, err)
+		case ss.Status == models.SessionStatusQueued:
+			if err := qp.ssSvc.UpdateSessionStatus(ctx, id, models.SessionStatusSoldOut); err != nil {
+				qp.l.Errorf(ctx, "Failed to end session while closing the line, leaving it for the next tick - event_id: %s, session_id: %s, error: %v", eventID, id, err)
+				continue
+			}
+			leaving = append(leaving, id)
+		case ss.IsTerminal():
+			leaving = append(leaving, id)
+		}
+	}
+
+	if len(leaving) == 0 {
+		return nil
+	}
+
+	if err := qp.qSvc.RemoveFromQueue(ctx, eventID, leaving...); err != nil {
+		// Self-correcting: the next tick finds them ended and removes them.
+		qp.l.Errorf(ctx, "Failed to remove ended sessions from a sold-out line - event_id: %s, count: %d, error: %v", eventID, len(leaving), err)
+		return nil
+	}
+
+	qp.l.Infof(ctx, "Closed sold-out line - event_id: %s, sessions: %d", eventID, len(leaving))
 	return nil
 }
 

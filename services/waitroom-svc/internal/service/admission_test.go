@@ -23,6 +23,7 @@ import (
 type admissionRig struct {
 	svc    WaitroomService
 	proc   *queueProcessor
+	inv    *fakeInventoryClient
 	cli    *redis.Client
 	eID    string
 	owners map[string]string
@@ -68,9 +69,12 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 
 	ssSvc := NewSessionService(repo.NewRedisSessionRepository(cli, l), config.JWTConfig{Secret: "test", Expiry: 15 * time.Minute}, l)
 	qSvc := NewQueueService(repo.NewRedisQueueRepository(cli, l), l)
+	inv := plentyOfStock()
+	stock := NewStockGate(inv, time.Millisecond, l)
 	proc := &queueProcessor{
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
+		stock: stock,
 		prod:  prod,
 		l:     l,
 		cfg: ProcessorConfig{
@@ -96,6 +100,7 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 	return &admissionRig{
 		svc:    NewWaitroomService(qSvc, ssSvc, ev, prod, l, proc, time.Minute),
 		proc:   proc,
+		inv:    inv,
 		cli:    cli,
 		eID:    eID,
 		owners: make(map[string]string),

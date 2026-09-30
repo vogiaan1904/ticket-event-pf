@@ -186,11 +186,13 @@ func queuedSession(id string) *models.Session {
 }
 
 func newTestProcessor(q *fakeQueue, s *fakeSessions, p *fakeProducer) *queueProcessor {
+	l := logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"})
 	return &queueProcessor{
 		qSvc:  q,
 		ssSvc: s,
+		stock: NewStockGate(plentyOfStock(), time.Minute, l),
 		prod:  p,
-		l:     logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"}),
+		l:     l,
 		cfg: ProcessorConfig{
 			MaxConcurrentPerEvent: 10,
 			BatchSize:             10,

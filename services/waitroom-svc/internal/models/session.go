@@ -40,6 +40,7 @@ const (
 	SessionStatusAbandoned SessionStatus = "abandoned"
 	SessionStatusFailed    SessionStatus = "failed"
 	SessionStatusEvicted   SessionStatus = "evicted"
+	SessionStatusSoldOut   SessionStatus = "sold_out"
 )
 
 func (s *Session) IsActive() bool {
@@ -51,7 +52,8 @@ func (s *Session) IsTerminal() bool {
 		s.Status == SessionStatusExpired ||
 		s.Status == SessionStatusAbandoned ||
 		s.Status == SessionStatusFailed ||
-		s.Status == SessionStatusEvicted
+		s.Status == SessionStatusEvicted ||
+		s.Status == SessionStatusSoldOut
 }
 
 func (s *Session) CanAdmit() bool {

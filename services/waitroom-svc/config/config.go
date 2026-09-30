@@ -66,7 +66,8 @@ type KafkaConfig struct {
 }
 
 type MicroserviceConfig struct {
-	Event string
+	Event     string
+	Inventory string
 }
 
 type JWTConfig struct {
@@ -128,7 +129,8 @@ func Load() (*Config, error) {
 			ConsumerRetryBackoff: getEnvAsDuration("KAFKA_CONSUMER_RETRY_BACKOFF", 500*time.Millisecond),
 		},
 		Microservice: MicroserviceConfig{
-			Event: getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),
+			Event:     getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),
+			Inventory: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50057"),
 		},
 	}
 
