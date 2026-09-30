@@ -18,13 +18,17 @@ const (
 	// inventory's Confirm re-acquiring a swept hold.
 	// See docs/RESERVATION_HOLD.md.
 	ReservationHoldGrace = 3 * time.Minute
+
+	// CheckoutLifetime is how long an unpaid checkout lives: the hold's length, and
+	// the delay before ExpireOrder times the order out.
+	CheckoutLifetime = PaymentTimeout + ReservationHoldGrace
 )
 
 // reservationExpiry returns the instant the inventory hold for an order must
 // live until: the full payment window plus the grace that covers the
 // post-payment confirmation chain.
 func reservationExpiry(now time.Time) time.Time {
-	return now.Add(PaymentTimeout + ReservationHoldGrace)
+	return now.Add(CheckoutLifetime)
 }
 
 type Compensations struct {

@@ -61,16 +61,18 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 		return err
 	}
 
-	if o.Status != models.OrderStatusPending {
+	// TIMEOUT is confirmed like PENDING: the provider only takes money inside its
+	// window, and inventory re-acquires the ticket or it is refunded below.
+	if o.Status != models.OrderStatusPending && o.Status != models.OrderStatusTimeout {
 		logger.Warn("Order already processed", "orderCode", in.OrderCode, "status", o.Status)
 
 		switch o.Status {
 		case models.OrderStatusCompleted:
 			return nil
-		case models.OrderStatusCancelled, models.OrderStatusPaymentFailed, models.OrderStatusTimeout:
+		case models.OrderStatusCancelled, models.OrderStatusPaymentFailed:
 			// The payment landed on an order that had already been
-			// cancelled, timed out or failed. The money is real; the order
-			// will not be fulfilled.
+			// cancelled or failed. The money is real; the order will not
+			// be fulfilled.
 			markForRefund(ctx, o, "payment settled on an order in status "+string(o.Status))
 		case models.OrderStatusRefundRequired, models.OrderStatusRefunded:
 			// A redelivered payment event. REFUND_REQUIRED already recorded

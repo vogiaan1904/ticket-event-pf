@@ -12,6 +12,7 @@ var GrpcOrderStatusValue = map[models.OrderStatus]orderpb.OrderStatus{
 	models.OrderStatusCompleted:     orderpb.OrderStatus_ORDER_STATUS_COMPLETED,
 	models.OrderStatusCancelled:     orderpb.OrderStatus_ORDER_STATUS_CANCELED,
 	models.OrderStatusPaymentFailed: orderpb.OrderStatus_ORDER_STATUS_FAILED,
+	models.OrderStatusTimeout:       orderpb.OrderStatus_ORDER_STATUS_CANCELED, // No expired status on the wire; see 0024.
 }
 
 var OrderStatus = map[orderpb.OrderStatus]models.OrderStatus{

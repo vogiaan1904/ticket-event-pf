@@ -133,6 +133,19 @@ func publishCheckoutCompleted(ctx workflow.Context, ssID, userID, eventID string
 	return err
 }
 
+func publishCheckoutExpired(ctx workflow.Context, o *models.Order) error {
+	if o.SessionID == "" {
+		return nil
+	}
+
+	return executeShortStep(ctx, epActs.PublishCheckoutExpired,
+		activities.PublishCheckoutExpiredInput{
+			SessionID: o.SessionID,
+			UserID:    o.UserID,
+			EventID:   o.EventID,
+		}).Get(ctx, nil)
+}
+
 func publishRefundRequired(ctx workflow.Context, o *models.Order, reason string) error {
 	return workflow.ExecuteActivity(ctx, epActs.PublishRefundRequired,
 		activities.PublishRefundRequiredInput{

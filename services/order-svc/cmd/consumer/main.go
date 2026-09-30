@@ -104,6 +104,7 @@ func main() {
 	w := temporal.NewOrderWorker(tCli, temporal.ConfirmOrderTaskQueue)
 
 	w.RegisterWorkflow(workflows.ConfirmOrder)
+	w.RegisterWorkflow(workflows.ExpireOrder)
 	w.RegisterActivity(oActs)
 	w.RegisterActivity(pActs)
 	w.RegisterActivity(iActs)
