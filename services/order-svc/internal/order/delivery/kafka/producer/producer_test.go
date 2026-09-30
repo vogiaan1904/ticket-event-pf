@@ -85,6 +85,14 @@ func TestPublishedCheckoutTimestampsAreRFC3339(t *testing.T) {
 			},
 		},
 		{
+			name: "checkout expired",
+			publish: func(p Producer, ctx context.Context) error {
+				return p.PublishCheckoutExpired(ctx, kafka.CheckoutExpiredEvent{
+					SessionID: "ss-1", UserID: "u-1", EventID: "e-1",
+				})
+			},
+		},
+		{
 			name: "refund required",
 			publish: func(p Producer, ctx context.Context) error {
 				return p.PublishRefundRequired(ctx, kafka.RefundRequiredEvent{
@@ -121,5 +129,28 @@ func TestPublishedCheckoutTimestampsAreRFC3339(t *testing.T) {
 				t.Errorf("timestamp %q is not the current instant (now=%s)", ts, time.Now().UTC().Format(time.RFC3339))
 			}
 		})
+	}
+}
+
+// The waitroom subscribes to checkout.expired and reads these names; a rename
+// strands every chair it was meant to free.
+func TestPublishCheckoutExpired_GoesWhereTheWaitroomReads(t *testing.T) {
+	cap := &captureProducer{}
+	p := NewProducer(cap, logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"}))
+
+	if err := p.PublishCheckoutExpired(context.Background(), kafka.CheckoutExpiredEvent{
+		SessionID: "ss-1", UserID: "u-1", EventID: "e-1",
+	}); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+
+	if got := cap.sent[0].Topic; got != "checkout.expired" {
+		t.Fatalf("topic = %q, want checkout.expired", got)
+	}
+	body := cap.lastBody(t)
+	for _, k := range []string{"session_id", "user_id", "event_id", "expired_at", "timestamp"} {
+		if v, _ := body[k].(string); v == "" {
+			t.Errorf("%s is missing or empty in %v", k, body)
+		}
 	}
 }

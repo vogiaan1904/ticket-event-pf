@@ -62,6 +62,15 @@ var (
 		},
 	)
 
+	// CheckoutsExpired counts orders timed out unpaid: the abandonment rate the
+	// waitroom's room size is sized by. See docs/design/admission-sizing.md.
+	CheckoutsExpired = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "tb_order_checkouts_expired_total",
+			Help: "Orders timed out because nobody paid before their hold expired.",
+		},
+	)
+
 	Compensations = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "tb_order_compensations_total",

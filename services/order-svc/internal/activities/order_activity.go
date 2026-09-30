@@ -110,6 +110,35 @@ func (a *OrderActivities) UpdateOrderStatus(ctx context.Context, code string, st
 	return nil
 }
 
+// ExpireOrderResult is the order after a timeout attempt; Expired says it is TIMEOUT.
+type ExpireOrderResult struct {
+	Order   *models.Order
+	Expired bool
+}
+
+// ExpireOrder times out an order nobody paid for; see Repository.ExpireIfPending.
+// A re-run after a landed write answers Expired again and counts again: the rate,
+// not the exact count, is what is read.
+func (a *OrderActivities) ExpireOrder(ctx context.Context, code string) (ExpireOrderResult, error) {
+	o, expired, err := a.Repo.ExpireIfPending(ctx, code)
+	if err != nil {
+		if errors.Is(err, repo.ErrOrderNotFound) {
+			notFoundErr := temporal.NewNonRetryableApplicationError(
+				order.ErrOrderNotFound.Error(), order.ErrTypeOrderNotFound, err,
+			)
+			metrics.RecordActivityFailure("ExpireOrder", notFoundErr)
+			return ExpireOrderResult{}, notFoundErr
+		}
+		metrics.RecordActivityFailure("ExpireOrder", err)
+		return ExpireOrderResult{}, err
+	}
+
+	if expired {
+		metrics.CheckoutsExpired.Inc()
+	}
+	return ExpireOrderResult{Order: &o, Expired: expired}, nil
+}
+
 // ReleasePurchaseSlot gives a buyer's slot back once their purchase has an
 // outcome. The repository refuses to delete a claim that has moved on to another
 // order, so a late release cannot strip a create that started behind it.
