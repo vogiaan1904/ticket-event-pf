@@ -48,6 +48,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How many tickets may one order take? | `docs/decisions/0021` | A limit per event, default 4; refused before anything is held; built and verified on k3s 2026-09-29 |
 | When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
 | What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
+| What happens to an order nobody pays for? | `docs/decisions/0024` | Times out at its hold's expiry, frees the chair; built, not yet verified on k3s |
 
 ### Open
 
@@ -78,7 +79,7 @@ Ports below are the **authoritative** values (from each service's config/`main`)
 
 ## Architecture in one paragraph
 
-The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (dotted topic names: `queue.ready`, `payment.completed`, `checkout.completed`, `order.refund_required`, and their failure counterparts). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory, writes the order, then creates a payment intent → payment webhook → Payment writes an outbox row → the relay publishes it to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
+The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (dotted topic names: `queue.ready`, `payment.completed`, `checkout.completed`, `checkout.expired`, `order.refund_required`, and their failure counterparts). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory, writes the order, then creates a payment intent → payment webhook → Payment writes an outbox row → the relay publishes it to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
 
 ## Communication patterns (where to look when tracing a flow)
 
