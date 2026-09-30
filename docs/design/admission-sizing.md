@@ -167,8 +167,11 @@ raising `total` or re-activating a class.
 door for half of `QUEUE_PROCESS_INTERVAL`, so every tick asks afresh and every join
 and status poll in between reads the same answer. Concurrent misses collapse into one
 call, as the event gate's do. The tick asks only when someone in line is due, so an
-event whose line is empty costs inventory nothing. Inventory's read takes no lock, so
-it never waits on a `Reserve` holding a hot row.
+event whose line is empty costs inventory nothing. A paused door drops the entries at
+the front of its line whose sessions are gone, ended or expired, up to the first live
+one. Nothing else would drop them while it admits nobody, and a line left with only
+dead entries would go on asking. Inventory's read takes no lock, so it never waits on a
+`Reserve` holding a hot row.
 
 **It fails open.** If inventory does not answer within 1s, the door is open until
 the next answer, and the waitroom admits exactly as it did before this rule. The door

@@ -143,3 +143,49 @@ func TestAnEmptyLineAsksInventoryNothing(t *testing.T) {
 		t.Fatalf("inventory asked %d times for an empty line", n)
 	}
 }
+
+func expiredSession(id string) *models.Session {
+	ss := queuedSession(id)
+	ss.ExpiresAt = time.Now().Add(-time.Minute)
+	return ss
+}
+
+// A paused door admits nobody, so nothing else would ever drop these.
+func TestAPausedDoorDropsDeadEntriesUpToTheFirstLiveOne(t *testing.T) {
+	inv := &fakeInventoryClient{}
+	inv.set(10, 7, 0)
+	q := newFakeQueue("ss-gone", "ss-expired", "ss-live", "ss-gone-2")
+	s := &fakeSessions{sessions: map[string]*models.Session{
+		"ss-expired": expiredSession("ss-expired"),
+		"ss-live":    queuedSession("ss-live"),
+	}}
+	qp, _ := newDoorProcessor(q, s, inv)
+
+	tick(t, qp)
+
+	if want := []string{"ss-live", "ss-gone-2"}; !slices.Equal(q.queued, want) {
+		t.Errorf("queue = %v, want %v", q.queued, want)
+	}
+	if len(s.statusUpdatesSeen) != 0 {
+		t.Errorf("dropping dead entries touched sessions: %v", s.statusUpdatesSeen)
+	}
+}
+
+// Once only dead entries are left, the line empties and inventory is asked no more.
+func TestALineOfOnlyDeadEntriesStopsAskingInventory(t *testing.T) {
+	inv := &fakeInventoryClient{}
+	inv.set(10, 7, 0)
+	q := newFakeQueue("ss-gone-1", "ss-gone-2")
+	qp, _ := newDoorProcessor(q, &fakeSessions{sessions: map[string]*models.Session{}}, inv)
+	qp.stock = NewStockGate(inv, 0, qp.l)
+
+	tick(t, qp)
+	tick(t, qp)
+
+	if len(q.queued) != 0 {
+		t.Errorf("queue = %v, want empty", q.queued)
+	}
+	if n := inv.calls.Load(); n != 1 {
+		t.Errorf("inventory asked %d times, want 1", n)
+	}
+}

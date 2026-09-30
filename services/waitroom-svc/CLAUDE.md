@@ -132,6 +132,9 @@ tickets run out*. The mechanism is `internal/service/stock_gate.go`:
 - **It fails open, and caches the failure.** An unanswered question reads as open, so
   the waitroom admits as before this existed. `tb_waitroom_stock_checks_total{result}`
   counts each question, and `unavailable` is a fail-open.
+- **A paused door drops its dead head** (`dropDeadHead`): entries whose session is
+  gone, ended or expired, from the front up to the first live one. Admission is what
+  normally drops them, and a paused door admits nobody.
 - **Closing a line** (`closeLine`) sets a queued session to `sold_out` *before*
   removing its entry, 100 per tick. **Invariant: closing never removes an admitted
   session.** It holds a token, and its checkout gets inventory's own answer.

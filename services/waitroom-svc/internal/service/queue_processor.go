@@ -226,7 +226,7 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	switch qp.stock.Get(processingCtx, eventID) {
 	case DoorPaused:
 		qp.l.Debugf(processingCtx, "Door paused, no ticket available - event_id: %s", eventID)
-		return nil
+		return qp.dropDeadHead(processingCtx, eventID)
 	case DoorSoldOut:
 		return qp.closeLine(processingCtx, eventID)
 	}
@@ -289,9 +289,9 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	return nil
 }
 
-// closeBatchSize is how many sessions one tick ends on a sold-out line.
-// Ending one costs two Redis writes and no checkout, so it need not wait on door speed.
-const closeBatchSize = 100
+// sweepBatchSize is how many entries one tick may end or drop while the door is shut.
+// Each costs a Redis read or two and no checkout, so it need not wait on door speed.
+const sweepBatchSize = 100
 
 // closeLine ends a sold-out event's queued sessions, a batch per tick.
 //
@@ -301,7 +301,7 @@ const closeBatchSize = 100
 //
 // Ordering: status before removal, so a failure between leaves an ended entry to remove next tick.
 func (qp *queueProcessor) closeLine(ctx context.Context, eventID string) error {
-	ssIDs, err := qp.qSvc.PeekQueue(ctx, eventID, closeBatchSize)
+	ssIDs, err := qp.qSvc.PeekQueue(ctx, eventID, sweepBatchSize)
 	if err != nil {
 		return fmt.Errorf("failed to peek queue: %w", err)
 	}
@@ -336,6 +336,43 @@ func (qp *queueProcessor) closeLine(ctx context.Context, eventID string) error {
 	}
 
 	qp.l.Infof(ctx, "Closed sold-out line - event_id: %s, sessions: %d", eventID, len(leaving))
+	return nil
+}
+
+// dropDeadHead removes entries from the front of a paused line whose sessions can
+// never be admitted -- gone, ended or expired -- stopping at the first that can.
+// Why: a paused door admits nobody, so nothing else drops them, and a line of only
+// dead entries would ask inventory every tick. Front first: sessions die in join order.
+func (qp *queueProcessor) dropDeadHead(ctx context.Context, eventID string) error {
+	ssIDs, err := qp.qSvc.PeekQueue(ctx, eventID, sweepBatchSize)
+	if err != nil {
+		return fmt.Errorf("failed to peek queue: %w", err)
+	}
+
+	dead := make([]string, 0, len(ssIDs))
+	for _, id := range ssIDs {
+		ss, err := qp.ssSvc.GetSession(ctx, id)
+		if errors.Is(err, ErrSessionNotFound) {
+			dead = append(dead, id)
+			continue
+		}
+		if err != nil || !(ss.IsTerminal() || ss.IsExpired()) {
+			break
+		}
+		dead = append(dead, id)
+	}
+
+	if len(dead) == 0 {
+		return nil
+	}
+
+	if err := qp.qSvc.RemoveFromQueue(ctx, eventID, dead...); err != nil {
+		// Harmless: they are still dead next tick.
+		qp.l.Errorf(ctx, "Failed to drop dead entries from a paused line - event_id: %s, count: %d, error: %v", eventID, len(dead), err)
+		return nil
+	}
+
+	qp.l.Infof(ctx, "Dropped dead entries from a paused line - event_id: %s, count: %d", eventID, len(dead))
 	return nil
 }
 
