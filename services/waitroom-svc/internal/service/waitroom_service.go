@@ -72,14 +72,13 @@ func NewWaitroomService(
 }
 
 func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*JoinQueueOutput, error) {
+	// Refusals are logged once, by the gRPC handler, at the level their code earns.
 	eInfo, err := s.eGate.Get(ctx, in.EventID)
 	if err != nil {
-		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 		return nil, err
 	}
 
 	if !eInfo.AllowWaitRoom {
-		s.l.Warnf(ctx, "service.waitroomService.JoinQueue: %v", ErrWaitRoomNotAllowed)
 		return nil, ErrWaitRoomNotAllowed
 	}
 
@@ -155,7 +154,6 @@ func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID strin
 func (s *waitroomService) LeaveQueue(ctx context.Context, ssID, userID string) error {
 	ss, err := s.ssSvc.GetSession(ctx, ssID)
 	if err != nil {
-		s.l.Errorf(ctx, "waitroomService.LeaveQueue: %v", err)
 		return err
 	}
 	if ss.UserID != userID {

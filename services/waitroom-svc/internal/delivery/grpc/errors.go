@@ -55,3 +55,15 @@ func (svc *grpcService) mapGRPCError(err error) error {
 		return err
 	}
 }
+
+// isFault reports whether a call failed on our side, rather than being refused.
+// A refusal (sold out, not found) is the caller's outcome, and the metric's code
+// label already counts it; logging it as an error buries the real failures.
+func isFault(c codes.Code) bool {
+	switch c {
+	case codes.Internal, codes.Unknown, codes.Unavailable, codes.DeadlineExceeded, codes.DataLoss:
+		return true
+	default:
+		return false
+	}
+}

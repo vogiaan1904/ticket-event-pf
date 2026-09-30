@@ -72,3 +72,21 @@ func TestAPausedLineReachesTheWire(t *testing.T) {
 		t.Fatal("paused did not reach the response")
 	}
 }
+
+// A refusal is the caller's outcome and logs quietly; only our own failure is an error.
+func TestOnlyAFaultCodeIsLoggedAsAnError(t *testing.T) {
+	for code, want := range map[codes.Code]bool{
+		codes.FailedPrecondition: false,
+		codes.NotFound:           false,
+		codes.AlreadyExists:      false,
+		codes.InvalidArgument:    false,
+		codes.Internal:           true,
+		codes.Unknown:            true,
+		codes.Unavailable:        true,
+		codes.DeadlineExceeded:   true,
+	} {
+		if got := isFault(code); got != want {
+			t.Errorf("isFault(%s) = %v, want %v", code, got, want)
+		}
+	}
+}
