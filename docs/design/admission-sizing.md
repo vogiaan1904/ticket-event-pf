@@ -137,7 +137,7 @@ not this one.
 
 ## When tickets run out
 
-**Status:** specified 2026-09-30; not built.
+**Status:** built 2026-09-30; not yet verified on k3s.
 [0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), proposed.
 
 The door admits at its speed whatever inventory has left. Once every ticket is held
@@ -204,8 +204,8 @@ Not in this step:
 Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 
 1. **Tickets per order.** The section above; built 2026-09-29.
-2. **The waitroom knows when tickets run out.** It asks inventory each tick. Specified
-   in *When tickets run out* above, 2026-09-30.
+2. **The waitroom knows when tickets run out.** It asks inventory each tick. The
+   section *When tickets run out* above; built 2026-09-30.
    - While every ticket left is held by someone paying, the door pauses: status
      `PAUSED`, with places kept.
    - Once sold equals total, the line closes: status `SOLD_OUT`, and new joins are

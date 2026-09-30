@@ -12,6 +12,7 @@ Key behaviors (`internal/service/queue_processor.go`):
 - Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
 - Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
+- Asks the **Inventory** service (`INVENTORY_SERVICE_ADDR`, default `localhost:50057`) what each event has left, through `StockGate`, and pauses or closes the door on the answer.
 
 ## Commands (Makefile is the source of truth — `make help`)
 
@@ -31,7 +32,7 @@ make protoc / make update-proto
 
 ## Layout
 
-- `cmd/api/main.go` — wiring: config → logger → Redis → repos → Kafka producer/consumer → Event gRPC client → services → queue processor → gRPC server.
+- `cmd/api/main.go` — wiring: config → logger → Redis → repos → Kafka producer/consumer → Event and Inventory gRPC clients → stock gate → services → queue processor → gRPC server.
 - `internal/service/` — `session` (Redis-backed sessions + JWT), `queue` (sorted-set ops), `waitroom` (facade), `queue_processor` (admission loop).
 - `internal/delivery/{grpc,http,kafka}` — transports; `internal/repository/redis`, `internal/infra/redis`.
 - `pkg/` — shared `kafka`, `redis`, `grpc`, `logger`, `errors`, `response`, `util`.
@@ -116,6 +117,27 @@ convenience:
 
 The shared fetch runs on a detached context, because every joiner collapsed behind it
 shares its result and one of them hanging up must not fail the others.
+
+### The door asks inventory whether tickets are left
+
+The rule, and why it fails open, is owned by `docs/design/admission-sizing.md`, *When
+tickets run out*. The mechanism is `internal/service/stock_gate.go`:
+
+- **One answer per event, cached for half a tick.** The tick, `JoinQueue` and
+  `GetQueueStatus` share one `StockGate`, built in `main.go` with TTL
+  `QUEUE_PROCESS_INTERVAL / 2`. Half, because a TTL of a full tick is always still fresh
+  when the next tick reads it, so the tick would ask only every other tick.
+- **The tick asks only with someone due**, before it counts chairs. So a sold-out line
+  closes even when every chair is taken, and an empty line costs inventory nothing.
+- **It fails open, and caches the failure.** An unanswered question reads as open, so
+  the waitroom admits as before this existed. `tb_waitroom_stock_checks_total{result}`
+  counts each question, and `unavailable` is a fail-open.
+- **Closing a line** (`closeLine`) sets a queued session to `sold_out` *before*
+  removing its entry, 100 per tick. **Invariant: closing never removes an admitted
+  session.** It holds a token, and its checkout gets inventory's own answer.
+- `sold_out` is terminal. `ActiveSession` answers it with `ErrSoldOut`, which is
+  `FAILED_PRECONDITION` `WTR012`, a 409. So a closed waiter hears "sold out", not
+  "invalid session status".
 
 ### Admission is discovered by polling, never pushed
 
