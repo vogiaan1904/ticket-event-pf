@@ -1,7 +1,8 @@
 # The waitroom knows when tickets run out
 
-**Status: in progress, 2026-09-30.** Decision:
-→ [0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), proposed.
+**Status: COMPLETE 2026-09-30.** The door pauses while no ticket is available and
+closes a sold-out line with 409 `WTR012`; verified on k3s. Decision:
+→ [0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), accepted.
 
 **Goal:** Before it admits anyone, each waitroom tick asks inventory what the event has
 left. While nothing is available the door pauses, and every place is kept. Once sold
@@ -1481,3 +1482,37 @@ asked.
    - Regenerate the decisions index.
    - Commit `docs: record the waitroom's stock check as verified on k3s`, then push on
      the go-ahead.
+
+## Results
+
+Tasks 1–4 landed as `45d9581`, `840f666`, `48d780a` and `cd354a0`. Every test the
+tasks name went red first, then green, and every deliberate break the tasks call for
+failed. The final review was a self-review, with no fresh reviewer. It found nothing
+Critical or Important, and four follow-ups were fixed after it:
+
+| Found | Fixed in |
+|---|---|
+| A paused door kept the entries of expired sessions, so a line of only dead entries asked inventory every tick | `9cc0daa`: it drops them from the front, up to the first live one |
+| Every waitroom handler logged a refusal (sold out, not found) at error level | `ca80801`: logged once, at debug; only a fault code logs as an error |
+| `event.proto` copies in user-svc and payment-svc had drifted since 0021 | `da75531`: synced, and CI (`proto-copies.yml`) now fails on any drifted copy |
+| Gate 1's `EXPIRED\|CANCELLED\|FAILED` branch could never match: an ended session answers 4xx | `7f7d5ee`: it stops on the first 4xx and still retries a 5xx |
+
+Task 5, on k3s on 2026-09-30, revision 56 (`sha-9cc0daa`, every app rolled):
+
+| Check | Result |
+|---|---|
+| `make -C deploy k3s-gate2` | passed: 400 `ORD020`, then order `COMPLETED` |
+| `make -C deploy k3s-gate-sold-out` | passed on its first run: B paused 3s at position 1; 409 `WTR012` for B's poll and C's join; B's session `sold_out` and out of the line |
+| `tb_waitroom_stock_checks_total` | open 5, paused 9, sold out 2, no `unavailable`; 16 answers against 16 `OK` `GetEventStock` calls on inventory |
+| Waitroom error-level logs | none for the two refusals |
+
+Found, not fixed:
+- **The waitroom's chart log keys are ignored.** The chart sets
+  `LOGGER_LEVEL`/`LOGGER_MODE`/`LOGGER_ENCODING`, but the waitroom reads `LOG_*`, so it
+  runs at `info`. Fixing it means choosing k3s's log level.
+- **A door reopening after a hold expires was not run end to end.** A hold lasts 9
+  minutes. `TestStockGateAsksAgainOnceTheAnswerIsStale` covers the door following a
+  changed answer.
+- **The stock cache keeps one entry per event asked, as the event gate does.** It was
+  left as it is: about 150 bytes each, reset on every deploy.
+

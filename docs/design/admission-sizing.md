@@ -2,7 +2,9 @@
 
 **Status:** built 2026-09-29; k3s measured, EKS not. Decisions:
 [0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md),
-[0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md).
+[0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md),
+[0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md),
+[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md).
 **Applies to:** `waitroom-service` and the chart's per-target values.
 
 ## The problem
@@ -137,8 +139,8 @@ not this one.
 
 ## When tickets run out
 
-**Status:** built 2026-09-30; not yet verified on k3s.
-[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), proposed.
+**Status:** built 2026-09-30; verified on k3s.
+[0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md), accepted.
 
 The door admits at its speed whatever inventory has left. Once every ticket is held
 or sold, each buyer it admits costs the box a checkout that inventory refuses and
@@ -208,7 +210,7 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 
 1. **Tickets per order.** The section above; built 2026-09-29.
 2. **The waitroom knows when tickets run out.** It asks inventory each tick. The
-   section *When tickets run out* above; built 2026-09-30.
+   section *When tickets run out* above; built and verified on k3s 2026-09-30.
    - While every ticket left is held by someone paying, the door pauses: status
      `PAUSED`, with places kept.
    - Once sold equals total, the line closes: status `SOLD_OUT`, and new joins are

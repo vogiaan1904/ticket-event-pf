@@ -47,7 +47,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How does a changed ConfigMap reach the pods that read it? | `docs/decisions/0020` | A digest of each app's own ConfigMap in its pod template; built and verified on k3s 2026-09-29 |
 | How many tickets may one order take? | `docs/decisions/0021` | A limit per event, default 4; refused before anything is held; built and verified on k3s 2026-09-29 |
 | When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
-| What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built 2026-09-30, not yet verified on k3s |
+| What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
 
 ### Open
 
