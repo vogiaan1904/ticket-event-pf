@@ -30,6 +30,10 @@ const cancelWorkflowTimeout = 5 * time.Second
 // it, for the same reason cancellation does.
 const releaseSlotTimeout = 5 * time.Second
 
+// Starting an order's clock has to outlive the deadline its saga spent, for the
+// same reason: the order is already live.
+const startClockTimeout = 5 * time.Second
+
 // claimAttempts bounds the retake loop: a second pass is normal, a fourth means
 // the slot is churning rather than settling.
 const claimAttempts = 3
@@ -279,7 +283,10 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 // Logged, not returned: the order is live, and without its clock it ends as it did
 // before one existed -- chair at its TTL, order left PENDING.
 func (s *implService) startCheckoutClock(ctx context.Context, code string) {
-	_, err := s.temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), startClockTimeout)
+	defer cancel()
+
+	_, err := s.temporal.ExecuteWorkflow(startCtx, client.StartWorkflowOptions{
 		ID:         workflows.GetExpireOrderWorkflowID(code),
 		TaskQueue:  temporal.ConfirmOrderTaskQueue,
 		StartDelay: workflows.CheckoutLifetime,

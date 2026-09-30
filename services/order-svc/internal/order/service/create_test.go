@@ -92,6 +92,9 @@ type fakeWorkflowRun struct {
 	// the cancellation path.
 	outliveCaller bool
 	getErr        error
+
+	// afterGet runs once Get has succeeded: a caller giving up as the saga ends.
+	afterGet func()
 }
 
 func (r *fakeWorkflowRun) GetID() string    { return r.id }
@@ -111,6 +114,9 @@ func (r *fakeWorkflowRun) Get(ctx context.Context, valuePtr any) error {
 			PaymentUrl: "https://pay.test/checkout",
 			Order:      &models.Order{Code: r.id},
 		}
+	}
+	if r.afterGet != nil {
+		r.afterGet()
 	}
 
 	return nil
@@ -133,12 +139,13 @@ type fakeTemporalClient struct {
 	expireOpts     *temporalCli.StartWorkflowOptions
 	expireInput    *workflows.ExpireOrderWorkflowInput
 	expireStartErr error
+	expireCtxErr   error
 }
 
 func (c *fakeTemporalClient) ExecuteWorkflow(ctx context.Context, options temporalCli.StartWorkflowOptions, workflow any, args ...any) (temporalCli.WorkflowRun, error) {
 	if len(args) > 0 {
 		if in, ok := args[0].(*workflows.ExpireOrderWorkflowInput); ok {
-			c.expireOpts, c.expireInput = &options, in
+			c.expireOpts, c.expireInput, c.expireCtxErr = &options, in, ctx.Err()
 			return &fakeWorkflowRun{id: options.ID}, c.expireStartErr
 		}
 	}
@@ -364,5 +371,23 @@ func TestCreate_ALostRaceStartsNoClock(t *testing.T) {
 
 	if tprCli.expireOpts != nil {
 		t.Fatal("an order that was never written got a clock")
+	}
+}
+
+// The order is live once the saga returns; its clock must not share the deadline
+// the caller spent waiting for it.
+func TestCreate_TheClockOutlivesTheCallersDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{afterGet: cancel}}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	_, _ = s.Create(ctx, createInput())
+
+	if tprCli.expireOpts == nil {
+		t.Fatal("no clock was started for the order")
+	}
+	if tprCli.expireCtxErr != nil {
+		t.Fatalf("the clock was started on a spent context (%v); Temporal would refuse it", tprCli.expireCtxErr)
 	}
 }
