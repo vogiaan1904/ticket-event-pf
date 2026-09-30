@@ -7,6 +7,7 @@ export class QueueStatusMapper {
     return {
       sessionId: proto.sessionId,
       status: SessionStatusMapper.toEnum(proto.status),
+      paused: proto.paused,
       position: Number(proto.position),
       queueLength: Number(proto.queueLength),
       checkoutToken: proto.checkoutToken,

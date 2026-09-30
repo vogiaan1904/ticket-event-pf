@@ -32,6 +32,7 @@ type QueueStatusOutput struct {
 	CheckoutURL       string
 	CheckoutExpiresAt *time.Time
 	AdmittedAt        *time.Time
+	Paused            bool
 }
 
 type LeaveQueueOutput struct {

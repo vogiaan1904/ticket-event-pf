@@ -54,6 +54,8 @@ export interface QueueStatusResponse {
   checkoutUrl: string;
   checkoutExpiresAt: string;
   admittedAt: string;
+  /** The door is shut until a ticket is available again; the place is kept. */
+  paused: boolean;
 }
 
 export interface LeaveQueueRequest {

@@ -98,7 +98,7 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 	})
 
 	return &admissionRig{
-		svc:    NewWaitroomService(qSvc, ssSvc, ev, prod, l, proc, time.Minute),
+		svc:    NewWaitroomService(qSvc, ssSvc, ev, stock, prod, l, proc, time.Minute),
 		proc:   proc,
 		inv:    inv,
 		cli:    cli,

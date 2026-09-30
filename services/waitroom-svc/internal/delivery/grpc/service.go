@@ -65,6 +65,7 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 		ExpiresAt:     util.TimeToISO8601Str(out.ExpiresAt),
 		CheckoutToken: out.CheckoutToken,
 		CheckoutUrl:   out.CheckoutURL,
+		Paused:        out.Paused,
 	}
 	if out.CheckoutExpiresAt != nil {
 		res.CheckoutExpiresAt = util.TimeToISO8601Str(*out.CheckoutExpiresAt)

@@ -13,6 +13,9 @@ var (
 	ErrEventConfigNotFound = errors.New("event config not found")
 	ErrWaitRoomNotAllowed  = errors.New("wait room is not allowed for this event")
 
+	// The event has no ticket left to sell: a verdict, never a fault.
+	ErrSoldOut = errors.New("sold out")
+
 	// A failed call to event-svc, not a verdict about the event. Never fold into
 	// ErrEventNotFound: a 404 tells the buyer to stop; the answer here is retry.
 	ErrEventServiceUnavailable = errors.New("event service unavailable")
