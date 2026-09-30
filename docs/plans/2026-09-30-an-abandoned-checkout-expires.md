@@ -1,6 +1,7 @@
 # An abandoned checkout expires
 
-**Status: not started. It waits on the architect's three calls below.** Decision:
+**Status: not started.** The architect answered the three calls below on 2026-09-30,
+choosing the recommended option each time, so every task stands as written. Decision:
 → [0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), proposed.
 
 **Goal:** An order nobody pays for times out when its hold expires. At that point it

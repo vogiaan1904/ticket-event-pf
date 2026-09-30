@@ -206,7 +206,7 @@ Not in this step:
 
 ## When a checkout is abandoned
 
-**Status:** specified 2026-09-30; not built; its three calls are with the architect.
+**Status:** specified 2026-09-30; its three calls answered the same day; not built.
 [0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md), proposed.
 
 A buyer who takes a hold and never pays is noticed by nothing that tells anyone else.

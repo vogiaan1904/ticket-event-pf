@@ -52,4 +52,11 @@ branch for a payment on a `TIMEOUT` order. Nothing produces either.
 
 ## Decision
 
-Put to the architect with the plan on 2026-09-30; not yet answered.
+The architect was given the three calls, each with a recommended option and its
+alternatives, their costs as above, and the plan. The options were not lettered; the
+answer format offered was "1 A, 2 A, 3 A", with A as the recommended option. They
+answered: "for the decision, 1 A, 2 A, 3 A" (2026-09-30). That means:
+1. order-svc runs the clock, with a delayed `ExpireOrder` at the hold's expiry;
+2. a payment on a `TIMEOUT` order is confirmed if inventory can re-acquire the
+   ticket, and refunded if not;
+3. a `TIMEOUT` order reads `CANCELED` on the wire.
