@@ -469,6 +469,53 @@ func (r *implRepository) Update(ctx context.Context, code string, opt UpdateOrde
 	return o, nil
 }
 
+// ExpireIfPending moves a PENDING order to TIMEOUT and reports whether it is now
+// TIMEOUT: true again on a retry, false for an order paid, failed or cancelled
+// first. Conditional, so a timeout never overwrites a payment that won the race.
+func (r *implRepository) ExpireIfPending(ctx context.Context, code string) (models.Order, bool, error) {
+	expr, err := expression.NewBuilder().
+		WithUpdate(expression.Set(expression.Name("status"), expression.Value(string(models.OrderStatusTimeout))).
+			Set(expression.Name("updated_at"), expression.Value(r.clock()))).
+		WithCondition(expression.Name("status").Equal(expression.Value(string(models.OrderStatusPending)))).
+		Build()
+	if err != nil {
+		r.l.Errorf(ctx, "order.repository.ExpireIfPending.BuildExpression: %v", err)
+		return models.Order{}, false, err
+	}
+
+	result, err := r.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pkgDynamo.BuildOrderPK(code)},
+			"SK": &types.AttributeValueMemberS{Value: pkgDynamo.BuildOrderSK(code)},
+		},
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllNew,
+	})
+	if isConditionalCheckFailed(err) {
+		// Not PENDING, or not there: read which.
+		o, gErr := r.GetByCode(ctx, code)
+		if gErr != nil {
+			return models.Order{}, false, gErr
+		}
+		return o, o.Status == models.OrderStatusTimeout, nil
+	}
+	if err != nil {
+		r.l.Errorf(ctx, "order.repository.ExpireIfPending.UpdateItem: %v", err)
+		return models.Order{}, false, err
+	}
+
+	var o models.Order
+	if err := attributevalue.UnmarshalMap(result.Attributes, &o); err != nil {
+		r.l.Errorf(ctx, "order.repository.ExpireIfPending.UnmarshalMap: %v", err)
+		return models.Order{}, false, err
+	}
+	return o, true, nil
+}
+
 func (r *implRepository) Delete(ctx context.Context, code string) error {
 	pk := pkgDynamo.BuildOrderPK(code)
 	sk := pkgDynamo.BuildOrderSK(code)

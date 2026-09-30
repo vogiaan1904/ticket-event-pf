@@ -22,6 +22,7 @@ type OrderRepository interface {
 	GetMany(ctx context.Context, opt GetManyOrderOption) ([]models.Order, paginator.Paginator, error)
 	List(ctx context.Context, opt ListOrderOption) ([]models.Order, error)
 	Update(ctx context.Context, code string, opt UpdateOrderOption) (models.Order, error)
+	ExpireIfPending(ctx context.Context, code string) (models.Order, bool, error)
 	Delete(ctx context.Context, code string) error
 }
 
