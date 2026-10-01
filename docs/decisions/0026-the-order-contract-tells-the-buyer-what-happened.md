@@ -1,7 +1,7 @@
 # 0026 — The order contract tells a buyer what happened, and only to that buyer
 
 **Date:** 2026-10-01
-**Status:** proposed
+**Status:** accepted
 **Arc:** order-contract — [plan](../plans/2026-10-01-the-order-contract.md)
 **Where it lives:** `proto/order.proto`, `services/order-svc/internal/order/delivery/grpc/presenter.go`, `services/order-svc/internal/order/service/order.go` (`Cancel`, `GetByID`), `services/api-gateway/src/modules/orders/`
 
@@ -70,3 +70,36 @@ separate choice.
 - Reading or cancelling someone else's order answers 404.
 - A cancel that loses to a payment answers 409 and changes nothing.
 - The gateway's order routes and their tests describe the contract that runs.
+
+## Outcome
+
+Built in `71f737f` (statuses), `f82ae31` (the owner), `c1fdcc1` (cancel) and `b1d8379`
+(the gateway); the acceptance gate in `6077629`. Its first run on k3s read the order
+back and found three fields that had never been stored, since nothing had read an order
+back before: the phone, the payment method, and each item's quantity and price, which
+read 0. `f4a7bb3` carries them through.
+
+Each test below failed before its code existed, and fails again when the code it guards
+is broken:
+- `TestEveryStoredStatusHasItsOwnWireValue`. `REFUND_REQUIRED` and `REFUNDED` read
+  `UNSPECIFIED`, and `TIMEOUT` shared `CANCELED`.
+- `TestGetByID_AStrangerIsToldThereIsNoSuchOrder` and
+  `TestCancel_AStrangerIsToldThereIsNoSuchOrder`, without the owner check.
+- `TestCancel_APaymentThatLandedFirstWins`. The old `Cancel` overwrote a payment that
+  confirmed after its read, and released its tickets. Dropping the write's condition
+  fails it, and both `LeavesAPaidOrderAlone` repository tests.
+- `TestGetManyOrders_TheFirstPageNeedsNoCursor`, against the old validation.
+- `TestCreateOrder_StoresWhatTheBuyerAskedFor` and
+  `TestCreateOrderInput_KeepsEveryFieldTheBuyerSent`, against the dropped fields.
+- In the gateway, the unknown-status and caller tests, against a mapper that throws and
+  a read that sends no `user_id`.
+
+On k3s, 2026-10-01, revisions 60 and 61 (`sha-f4a7bb3`, then `sha-895d7b1`):
+- `make -C deploy k3s-gate-orders` passed. The owner read the order with its 2-ticket
+  line, phone and payment method, and found it on the first page of the list. A
+  stranger got 404 for both read and cancel, and the order stayed `PENDING`. The owner's
+  cancel answered 200; the order read `CANCELED`, its reservation `CANCELLED`, and a
+  second cancel 409.
+- gate 2 and the sold-out gate passed on both revisions, and the room gate on 61.
+- `make -C deploy k3s-gate-checkout-expiry` passed on 61: the unpaid order read
+  `EXPIRED` on the wire 555s after it was placed, with `TIMEOUT` stored.

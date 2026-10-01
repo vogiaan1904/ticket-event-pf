@@ -1,7 +1,7 @@
 # 0027 — An admitted buyer has five minutes to start a checkout
 
 **Date:** 2026-10-01
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [design](../design/admission-sizing.md#the-end-of-a-sell-out), [plan](../plans/2026-10-01-the-end-of-a-sell-out.md)
 **Where it lives:** `deploy/helm/ticketbottle/values.yaml` (`waitroom.checkoutWindow`), read as `JWT_EXPIRY` by `services/waitroom-svc/config/config.go`
 
@@ -59,3 +59,21 @@ separate choice.
   the hold does, which removes the double count from then on.
 - `checkout.expired` no longer frees chairs in practice: the window ends first. It
   still ends the session and invalidates the token.
+
+## Outcome
+
+Built in `66d232a` (the chart value), with its gate in `d7b35eb` and its documents in
+`895d7b1`. The render check `the waitroom's checkout window comes from values` failed
+at `15m` before the value existed.
+
+On k3s, 2026-10-01, revision 61 (`sha-895d7b1`), `waitroom-config` read
+`JWT_EXPIRY: 5m`:
+- `make -C deploy k3s-gate-sell-out-tail` passed. Two tickets, three buyers who never
+  order: two were admitted with chairs ending 291s later, and the third was admitted
+  292s after the room filled, not at the old 15 minutes.
+- `make -C deploy k3s-gate-checkout-expiry` passed. A's order expired 555s after it was
+  placed, `EXPIRED` on the wire and `TIMEOUT` stored, its session expired and its
+  reservation released; A's chair had already ended with its window. B's paid order was
+  untouched.
+- gate 2, the sold-out, room and orders gates passed: a checkout started inside the
+  window is unchanged.

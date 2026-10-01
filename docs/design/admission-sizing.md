@@ -328,8 +328,8 @@ Not in this step:
 
 ## The end of a sell-out
 
-**Status:** specified 2026-10-01; built; not yet verified on k3s.
-[0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md), proposed.
+**Status:** built and verified on k3s 2026-10-01.
+[0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md), accepted.
 
 Since the room is the event's tickets, every chair stands for a ticket. Three kinds of
 chair stand for one without taking it, and each held its place for the token's 15
@@ -389,7 +389,7 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
    and door speed × time to pay". Door speed × time to pay is a property of the
    target, and it cannot bind, so only the event's tickets are left.
 5. **The end of a sell-out.** The section above; added 2026-10-01, once step 4 made
-   every chair stand for a ticket.
+   every chair stand for a ticket; built and verified on k3s the same day.
 
 ## Not in scope
 

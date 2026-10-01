@@ -1,7 +1,8 @@
 # The end of a sell-out
 
-**Status: in progress.** Calls delegated to the agent on 2026-10-01. Decision:
-→ [0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md), proposed.
+**Status: COMPLETE 2026-10-01.** A chair that takes no ticket holds a place for at
+most 5 minutes; verified on k3s. Decision:
+→ [0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md), accepted.
 
 **Goal:** A chair that takes no ticket holds a place for at most 5 minutes, so the end
 of a sell-out never stalls for the token's 15.
@@ -55,3 +56,24 @@ still names the 100 that 0025 deleted; the admission diagram's labels; the regis
 
 Deploy; gate 2, sold-out, room, orders, sell-out tail and checkout-expiry. Stop the
 box. 0027 accepted with an Outcome; this plan COMPLETE with Results.
+
+## Results
+
+Tasks 1–3 landed as `66d232a`, `d7b35eb` and `895d7b1`. The render check went red at
+`15m` first. The final review was a self-review, with no fresh reviewer: only the
+token's own expiry and the chair's TTL read `JWT_EXPIRY`, and both still match. It
+found nothing Critical or Important.
+
+Where the run departs from the tasks as written:
+- Task 3 also corrected two documents that still described the room of 100 that 0025
+  deleted: the README's admission paragraph and the admission diagram, re-exported.
+- A run of the checkout-expiry gate started on revision 60 was stopped: its script was
+  edited while it ran, and bash reads a script as it goes. The run below is a fresh one.
+
+Task 4, on k3s on 2026-10-01, revision 61 (`sha-895d7b1`, `JWT_EXPIRY: 5m`):
+
+| Check | Result |
+|---|---|
+| gate 2, sold-out, room, orders | passed |
+| `make -C deploy k3s-gate-sell-out-tail` | passed: chairs ending in 291s; the third buyer admitted 292s after the room filled |
+| `make -C deploy k3s-gate-checkout-expiry` | passed: A's order expired at 555s, its chair already gone; B untouched |

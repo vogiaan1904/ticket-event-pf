@@ -1,7 +1,8 @@
 # The order contract
 
-**Status: in progress.** Calls delegated to the agent on 2026-10-01. Decision:
-→ [0026](../decisions/0026-the-order-contract-tells-the-buyer-what-happened.md), proposed.
+**Status: COMPLETE 2026-10-01.** A buyer reads, lists and cancels their own orders,
+nobody else can, and every stored status reaches them as itself; verified on k3s.
+Decision: → [0026](../decisions/0026-the-order-contract-tells-the-buyer-what-happened.md), accepted.
 
 **Goal:** A buyer can read, list and cancel their own orders through the gateway,
 nobody else can, and every status order-svc stores reaches them as itself.
@@ -100,3 +101,33 @@ Push; wait for CI. Start the box (the EKS check first), deploy, then
 `k3s-gate2`, `k3s-gate-sold-out`, `k3s-gate-room`, `k3s-gate-orders` and
 `k3s-gate-checkout-expiry`. Stop the box. 0026 accepted with an Outcome; this plan
 COMPLETE with Results.
+
+## Results
+
+Tasks 1–5 landed as `71f737f`, `f82ae31`, `c1fdcc1`, `b1d8379` and `6077629`. Every
+test the tasks name went red first, then green, and the deliberate breaks failed. The
+final review was a self-review, with no fresh reviewer. It found nothing Critical or
+Important, and deferred one minor: a cancel does not void the payment link at the
+provider, so a buyer who cancels and then pays is charged, the order reads
+`REFUND_REQUIRED`, and `OrdersNeedingRefund` pages.
+
+Where the run departs from the tasks as written:
+- The gateway's regenerated stub was committed in Task 4, not Task 1, so that no commit
+  leaves the gateway unable to compile.
+- Task 6's first k3s run found the phone, the payment method and every item's quantity
+  and price unstored. `f4a7bb3` fixed all three, with
+  `TestCreateOrder_StoresWhatTheBuyerAskedFor` and
+  `TestCreateOrderInput_KeepsEveryFieldTheBuyerSent`. Orders stored before it keep
+  their zeros.
+- The list nests its `{ data, meta }` inside the gateway's envelope, as the event list
+  does; `a6e1ef1` corrects the gate's path.
+- The SSH allowlist needed the other of this network's two egress addresses again.
+
+Task 6, on k3s on 2026-10-01:
+
+| Check | Result |
+|---|---|
+| `make -C deploy k3s-gate-orders` | passed on revisions 60 and 61: owner reads 2 tickets and lists the order; stranger 404 and 404; cancel 200, `CANCELED`, reservation `CANCELLED`, second cancel 409 |
+| gate 2, sold-out | passed on revisions 59, 60 and 61 |
+| `make -C deploy k3s-gate-room` | passed on revisions 59 and 61, with `paused` read strictly as `False` |
+| `make -C deploy k3s-gate-checkout-expiry` | passed on revision 61: A's order read `EXPIRED` on the wire 555s after it was placed |
