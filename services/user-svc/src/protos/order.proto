@@ -98,7 +98,9 @@ message GetManyOrdersResponse {
 }
 
 message GetOrderRequest {
-        string code = 1;
+    string code = 1;
+    // The caller. Only the order's owner may read it; anyone else is told it does not exist.
+    string user_id = 2;
 }
 
 message GetOrderResponse {
@@ -115,4 +117,6 @@ message ListOrdersResponse {
 
 message CancelOrderRequest {
     string code = 1;
+    // The caller. Only the order's owner may cancel it; anyone else is told it does not exist.
+    string user_id = 2;
 }

@@ -53,10 +53,8 @@ func validateCreateOrderItem(item *orderpb.CreateOrderItem) error {
 	return nil
 }
 
+// An empty cursor is the first page.
 func (s *grpcService) validateGetManyOrdersRequest(req *orderpb.GetManyOrdersRequest) error {
-	if req.GetCursor() == "" {
-		return ErrValidationFailed
-	}
 	if req.GetPageSize() <= 0 {
 		return ErrValidationFailed
 	}
@@ -80,7 +78,7 @@ func (s *grpcService) validateOrderFilter(fil *orderpb.OrderFilter) error {
 }
 
 func (s *grpcService) validateGetOrderRequest(req *orderpb.GetOrderRequest) error {
-	if req.GetCode() == "" {
+	if req.GetCode() == "" || req.GetUserId() == "" {
 		return ErrValidationFailed
 	}
 	return nil
@@ -96,7 +94,7 @@ func (s *grpcService) validateListOrdersRequest(req *orderpb.ListOrdersRequest) 
 }
 
 func (s *grpcService) validateCancelOrderRequest(req *orderpb.CancelOrderRequest) error {
-	if req.GetCode() == "" {
+	if req.GetCode() == "" || req.GetUserId() == "" {
 		return ErrValidationFailed
 	}
 	return nil

@@ -89,6 +89,7 @@ func (s *grpcService) newOrderResponse(o models.Order) *orderpb.Order {
 		EventId:          o.EventID,
 		UserFullname:     o.UserFullName,
 		UserEmail:        o.Email,
+		UserPhone:        o.Phone,
 		TotalAmountCents: o.TotalAmount,
 		Currency:         o.Currency,
 		PaymentMethod:    string(o.PaymentMethod),
@@ -109,10 +110,10 @@ func (s *grpcService) newListOrderResponse(os []models.Order) *orderpb.ListOrder
 	}
 }
 
-func (s *grpcService) newGetOrderResponse(o models.Order) *orderpb.GetOrderResponse {
-	return &orderpb.GetOrderResponse{
-		Order: s.newOrderResponse(o),
-	}
+func (s *grpcService) newGetOrderResponse(out order.GetOrderOutput) *orderpb.GetOrderResponse {
+	o := s.newOrderResponse(out.Order)
+	o.Items = s.newOrderItems(out.Items)
+	return &orderpb.GetOrderResponse{Order: o}
 }
 
 func (s *grpcService) newOrderFilter(reqFil *orderpb.OrderFilter) order.FilterOrder {

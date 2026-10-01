@@ -24,6 +24,11 @@ type CreateOrderOutput struct {
 	PaymentUrl string
 }
 
+type GetOrderOutput struct {
+	Order models.Order
+	Items []models.OrderItem
+}
+
 type OrderItemInput struct {
 	TicketClassID string
 	Quantity      int32

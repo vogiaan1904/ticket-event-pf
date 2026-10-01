@@ -749,8 +749,10 @@ func (x *GetManyOrdersResponse) GetPagination() *PaginationInfo {
 }
 
 type GetOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The caller. Only the order's owner may read it; anyone else is told it does not exist.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -788,6 +790,13 @@ func (*GetOrderRequest) Descriptor() ([]byte, []int) {
 func (x *GetOrderRequest) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *GetOrderRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -925,8 +934,10 @@ func (x *ListOrdersResponse) GetOrders() []*Order {
 }
 
 type CancelOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The caller. Only the order's owner may cancel it; anyone else is told it does not exist.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -964,6 +975,13 @@ func (*CancelOrderRequest) Descriptor() ([]byte, []int) {
 func (x *CancelOrderRequest) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *CancelOrderRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -1040,18 +1058,20 @@ const file_order_proto_rawDesc = "" +
 	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\x125\n" +
 	"\n" +
 	"pagination\x18\x02 \x01(\v2\x15.order.PaginationInfoR\n" +
-	"pagination\"%\n" +
+	"pagination\">\n" +
 	"\x0fGetOrderRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\"6\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"6\n" +
 	"\x10GetOrderResponse\x12\"\n" +
 	"\x05order\x18\x01 \x01(\v2\f.order.OrderR\x05order\"O\n" +
 	"\x11ListOrdersRequest\x12/\n" +
 	"\x06filter\x18\x01 \x01(\v2\x12.order.OrderFilterH\x00R\x06filter\x88\x01\x01B\t\n" +
 	"\a_filter\":\n" +
 	"\x12ListOrdersResponse\x12$\n" +
-	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\"(\n" +
+	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\"A\n" +
 	"\x12CancelOrderRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code*\xec\x01\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId*\xec\x01\n" +
 	"\vOrderStatus\x12\x1c\n" +
 	"\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14ORDER_STATUS_PENDING\x10\x01\x12\x1a\n" +

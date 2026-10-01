@@ -468,14 +468,9 @@ func (s *implService) handlePaymentFailure(ctx context.Context, code string) err
 	return nil
 }
 
-func (s *implService) Cancel(ctx context.Context, code string) error {
-	o, err := s.repo.GetByCode(ctx, code)
+func (s *implService) Cancel(ctx context.Context, code, userID string) error {
+	o, err := s.ownedOrder(ctx, code, userID)
 	if err != nil {
-		if err == repo.ErrOrderNotFound {
-			s.l.Warnf(ctx, "internal.order.service.Cancel: %v", order.ErrOrderNotFound)
-			return order.ErrOrderNotFound
-		}
-		s.l.Errorf(ctx, "internal.order.service.Cancel.repo.GetByCode:%v", err)
 		return err
 	}
 
@@ -522,15 +517,34 @@ func (s *implService) GetMany(ctx context.Context, in order.GetManyOrderInput) (
 	}, nil
 }
 
-func (s *implService) GetByID(ctx context.Context, code string) (models.Order, error) {
+func (s *implService) GetByID(ctx context.Context, code, userID string) (order.GetOrderOutput, error) {
+	o, err := s.ownedOrder(ctx, code, userID)
+	if err != nil {
+		return order.GetOrderOutput{}, err
+	}
+
+	itms, err := s.repo.ListItemByOrderCode(ctx, code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.GetByID.repo.ListItemByOrderCode: %v", err)
+		return order.GetOrderOutput{}, err
+	}
+
+	return order.GetOrderOutput{Order: o, Items: itms}, nil
+}
+
+// ownedOrder reads an order for its owner. Anyone else is told it does not exist,
+// before any state is checked, so a stranger learns nothing about it.
+func (s *implService) ownedOrder(ctx context.Context, code, userID string) (models.Order, error) {
 	o, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
 		if err == repo.ErrOrderNotFound {
-			s.l.Warnf(ctx, "internal.order.service.GetByID: %v", order.ErrOrderNotFound)
 			return models.Order{}, order.ErrOrderNotFound
 		}
-		s.l.Errorf(ctx, "internal.order.service.GetByID.repo.GetByCode:%v", err)
+		s.l.Errorf(ctx, "internal.order.service.ownedOrder.repo.GetByCode: %v", err)
 		return models.Order{}, err
+	}
+	if o.UserID != userID {
+		return models.Order{}, order.ErrOrderNotFound
 	}
 
 	return o, nil

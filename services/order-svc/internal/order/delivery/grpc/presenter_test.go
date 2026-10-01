@@ -34,3 +34,21 @@ func TestEveryStoredStatusHasItsOwnWireValue(t *testing.T) {
 		}
 	}
 }
+
+// An empty cursor is the first page; refusing it made the list unreadable.
+func TestGetManyOrders_TheFirstPageNeedsNoCursor(t *testing.T) {
+	s := &grpcService{}
+	if err := s.validateGetManyOrdersRequest(&orderpb.GetManyOrdersRequest{PageSize: 10}); err != nil {
+		t.Fatalf("first page refused: %v", err)
+	}
+}
+
+func TestReadAndCancelRefuseARequestWithNoOwner(t *testing.T) {
+	s := &grpcService{}
+	if err := s.validateGetOrderRequest(&orderpb.GetOrderRequest{Code: "TB-1"}); err == nil {
+		t.Error("a read with no user_id was accepted")
+	}
+	if err := s.validateCancelOrderRequest(&orderpb.CancelOrderRequest{Code: "TB-1"}); err == nil {
+		t.Error("a cancel with no user_id was accepted")
+	}
+}

@@ -67,7 +67,7 @@ func (s *grpcService) CancelOrder(ctx context.Context, req *orderpb.CancelOrderR
 		return nil, response.GrpcError(err)
 	}
 
-	err := s.svc.Cancel(ctx, req.GetCode())
+	err := s.svc.Cancel(ctx, req.GetCode(), req.GetUserId())
 	if err != nil {
 		err := s.mapError(err)
 		s.l.Errorf(ctx, "internal.order.delivery.grpc.service.Cancel: %v", err)
@@ -129,12 +129,12 @@ func (s *grpcService) GetOrder(ctx context.Context, req *orderpb.GetOrderRequest
 		return nil, response.GrpcError(err)
 	}
 
-	o, err := s.svc.GetByID(ctx, req.GetCode())
+	out, err := s.svc.GetByID(ctx, req.GetCode(), req.GetUserId())
 	if err != nil {
 		err := s.mapError(err)
 		s.l.Errorf(ctx, "internal.order.delivery.grpc.service.GetOrder.GetByID: %v", err)
 		return nil, response.GrpcError(err)
 	}
 
-	return s.newGetOrderResponse(o), nil
+	return s.newGetOrderResponse(out), nil
 }
