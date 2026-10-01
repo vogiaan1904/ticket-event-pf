@@ -1,8 +1,8 @@
 # Room size per event
 
-**Status: not started.** The architect answered both calls on 2026-10-01 with the
-recommended option, so every task stands as written. Decision:
-→ [0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), proposed.
+**Status: COMPLETE 2026-10-01.** A tick admits only while the event has more tickets
+available than buyers inside; `QUEUE_DEFAULT_MAX_CONCURRENT` is gone; verified on k3s.
+Decision: → [0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), accepted.
 
 **Goal:** A tick admits only while the event has more tickets available than buyers
 inside, and `QUEUE_DEFAULT_MAX_CONCURRENT` is gone.
@@ -767,3 +767,36 @@ This needs the architect's go-ahead: it pushes `dev` and starts the box.
    - the register row reads verified;
    - this plan reads COMPLETE, with *Results*;
    - regenerate the decisions index, commit, and push on the go-ahead.
+
+## Results
+
+Tasks 1–3 landed as `758466d`, `b6e08bd` and `60337be`. Every test the tasks name went
+red first, then green, and every deliberate break the tasks call for failed. CI's
+`build-push-ecr`, `go-tests` and `chart-assertions` passed on `60337be`. The final
+review was a self-review, with no fresh reviewer. It found nothing Critical or
+Important, and deferred two minors:
+- *The problem* and the opening of *Room size per event* in
+  `docs/design/admission-sizing.md` still state `QUEUE_DEFAULT_MAX_CONCURRENT` = 100 in
+  the present tense.
+- The two bullets Task 3 added to `services/waitroom-svc/CLAUDE.md` are not wrapped.
+
+Where the run departs from the tasks as written:
+- Task 3's grep also matches `services/waitroom-svc/.env`, a gitignored local file. It
+  was left alone, since nothing reads the key.
+- The room gate's step 4 expected `paused` to read `False`. The gateway leaves a false
+  `paused` out of the body, so the first run failed there, after step 3 had passed.
+  `8e6fae5` reads it absent as not paused.
+- The SSH allowlist took two applies. This network's egress alternates between two
+  addresses, and the first `update-my-ip` caught the one SSH did not use.
+
+Task 4, on k3s on 2026-10-01, revision 58 (`sha-60337be`, every app rolled):
+
+| Check | Result |
+|---|---|
+| `waitroom-config` and the waitroom's log | no `MAX_CONCURRENT` key; `Starting queue processor - interval: 1s, batch_size: 2` |
+| `make -C deploy k3s-gate2` | passed: order `COMPLETED` |
+| `make -C deploy k3s-gate-sold-out` | passed: 409 `WTR012` for B's poll and C's join; B's session sold out |
+| `make -C deploy k3s-gate-room` | passed on its second run: 3 inside, 2 waiting, held 5s; the waiter `QUEUED`, not paused; 5 inside, 0 waiting once two tickets were added |
+
+Not observed: the room gate going red on the code before Task 2. That build was not
+deployed.

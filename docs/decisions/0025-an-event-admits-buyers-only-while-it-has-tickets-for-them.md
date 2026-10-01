@@ -1,7 +1,7 @@
 # 0025 — An event admits buyers only while it has tickets for them
 
 **Date:** 2026-10-01
-**Status:** proposed
+**Status:** accepted
 **Arc:** admission-sizing — [design](../design/admission-sizing.md#room-size-per-event), [plan](../plans/2026-10-01-room-size-per-event.md)
 **Where it lives:** `services/waitroom-svc/internal/service/queue_processor.go` (`admitCount`), `services/waitroom-svc/internal/service/stock_gate.go` (`Stock`)
 
@@ -80,3 +80,32 @@ That means:
   it, that door is EKS's only limit. EKS has no real buyers, and its load tests never
   filled the room, so nothing measured changes.
 - Gate 4a's admission check becomes "peak buyers inside ≤ the event's tickets".
+
+## Outcome
+
+Built in `758466d` and `b6e08bd`; the acceptance run in `60337be`. Its first run on k3s
+expected a waiter's `paused` to read `False`, which the gateway leaves out of the body
+when false; `8e6fae5` reads it absent as not paused.
+
+Each test below failed before its code existed, and fails again when the code it guards
+is broken:
+- `TestStockGateCountsNothingWhenNoClassCanSell`, with `Counted` always true: an event
+  with no class that can still sell got a room of 0.
+- `TestTheRoomAdmitsOnlyAsManyAsTicketsLeftOver` and
+  `TestNoTicketBeyondTheBuyersInsideAdmitsNobody`, with `- inside` dropped: the tick
+  admitted up to the tickets available whatever the buyers inside.
+- `TestWithNothingToJudgeByOnlyTheDoorPaces`, with the uncounted branch removed: a down
+  inventory shut the door.
+- `TestAdmitCount`, under both breaks.
+
+On k3s, 2026-10-01, revision 58 deployed `sha-60337be` to every app. `waitroom-config`
+has no `QUEUE_DEFAULT_MAX_CONCURRENT`, and the waitroom logged
+`Starting queue processor - interval: 1s, batch_size: 2`:
+- `make -C deploy k3s-gate2` and `make -C deploy k3s-gate-sold-out` passed, so admission
+  and the door are unchanged where tickets are plenty and where they run out.
+- `make -C deploy k3s-gate-room` passed. Three tickets, five buyers who never order: 3
+  inside and 2 waiting, still so 5s later at a door of 2 a second. A waiter read
+  `QUEUED`, not paused, at position 1. Two tickets added: 5 inside, 0 waiting. The
+  first run held the same 3 and 2 before failing on the `paused` check.
+- Not observed: the gate going red on the code before this change, which would admit
+  all five. That build was not deployed.

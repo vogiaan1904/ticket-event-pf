@@ -261,8 +261,8 @@ Not in this step:
 
 ## Room size per event
 
-**Status:** specified 2026-10-01; its two calls answered the same day; built; not yet verified on k3s.
-[0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), proposed.
+**Status:** built and verified on k3s 2026-10-01.
+[0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), accepted.
 
 Room size is how many buyers may be inside an event at once: admitted, and holding a
 checkout pass. It is `QUEUE_DEFAULT_MAX_CONCURRENT`, 100, for every event, and that is
@@ -346,8 +346,8 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
    chair for the token's 15 minutes, 6 minutes after its tickets went back on sale.
    The section *When a checkout is abandoned* above; built and verified on k3s
    2026-09-30: an abandoned chair frees at about 9 minutes.
-4. **Room size per event.** The section *Room size per event* above; specified
-   2026-10-01. The design first read "the smaller of the event's size and door speed ×
+4. **Room size per event.** The section *Room size per event* above; built and
+   verified on k3s 2026-10-01. The design first read "the smaller of the event's size and door speed ×
    time to pay". Door speed × time to pay is a property of the target, and it cannot
    bind, so only the event's tickets are left.
 
