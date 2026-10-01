@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # An abandoned checkout, run on k3s by `make -C deploy k3s-gate-checkout-expiry`.
-# Ten tickets, two buyers: A orders and never pays, B orders and pays -> A's chair
-# frees at the hold's expiry (~9m), not at its own 15m TTL; B's order is untouched.
+# Ten tickets, two buyers: A orders and never pays, B orders and pays -> A's order
+# expires with its hold (~9m), after A's chair ended with its 5m window (0027);
+# B's order is untouched.
 # Rule: docs/design/admission-sizing.md#when-a-checkout-is-abandoned.
 set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
@@ -122,24 +123,24 @@ done
 [ "$STATUS" = COMPLETED ] || fail "B's order did not reach COMPLETED: ${STATUS:-?}"
 echo "  B's order COMPLETED"
 
-echo "== 5. wait for A's chair to free (every 15s, up to 12m) =="
-FREED_AT=""
+echo "== 5. wait for A's order to expire (every 15s, up to 12m) =="
+EXPIRED_AT=""
 while [ $(( $(date +%s) - T0 )) -le 720 ]; do
-  if [ -z "$(redis ZSCORE "waitroom:$EVENT_ID:checkouts" "$SESSION_A")" ]; then
-    FREED_AT=$(date +%s)
+  STATUS=$(order_status "$TOK_A" "$CODE_A")
+  if [ "$STATUS" = EXPIRED ]; then
+    EXPIRED_AT=$(date +%s)
     break
   fi
-  echo "  $(( $(date +%s) - T0 ))s: A still holds a chair"
+  echo "  $(( $(date +%s) - T0 ))s: A's order reads ${STATUS:-?}"
   sleep 15
 done
-[ -n "$FREED_AT" ] || fail "A's chair was still held 12m after the order"
-AFTER=$(( FREED_AT - T0 ))
-echo "  A's chair freed ${AFTER}s after the order"
+[ -n "$EXPIRED_AT" ] || fail "A's order had not expired 12m after it was placed"
+AFTER=$(( EXPIRED_AT - T0 ))
+echo "  A's order expired ${AFTER}s after it was placed"
 
 echo "== 6. A's checkout expired everywhere; B's is untouched =="
-[ "$AFTER" -ge 510 ] && [ "$AFTER" -le 660 ] || fail "chair freed at ${AFTER}s, want 510-660s (the hold is 540s, the chair's TTL 900s)"
-STATUS=$(order_status "$TOK_A" "$CODE_A")
-[ "$STATUS" = EXPIRED ] || fail "A's order reads ${STATUS:-?}, want EXPIRED"
+[ "$AFTER" -ge 510 ] && [ "$AFTER" -le 660 ] || fail "A's order expired at ${AFTER}s, want 510-660s (the hold is 540s)"
+[ -z "$(redis ZSCORE "waitroom:$EVENT_ID:checkouts" "$SESSION_A")" ] || fail "A still holds a chair after its order expired"
 KEY="{\"PK\":{\"S\":\"ORDER#$CODE_A\"},\"SK\":{\"S\":\"ORDER#$CODE_A\"}}"
 STORED=$(aws dynamodb get-item --region "$REGION" --table-name "$TABLE" --key "$KEY" --query 'Item.status.S' --output text)
 [ "$STORED" = TIMEOUT ] || fail "A's order is $STORED in DynamoDB, want TIMEOUT"
@@ -164,4 +165,4 @@ done
 [ -n "$SEEN" ] || fail "order-consumer never logged B's order ($CODE_B) as nothing to expire"
 echo "  order-consumer: $CODE_B settled before its hold expired"
 
-echo "CHECKOUT-EXPIRY GATE PASSED: event $EVENT_ID, chair freed at ${AFTER}s"
+echo "CHECKOUT-EXPIRY GATE PASSED: event $EVENT_ID, order expired at ${AFTER}s"
