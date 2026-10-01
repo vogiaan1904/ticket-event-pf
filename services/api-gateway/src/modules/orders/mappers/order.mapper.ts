@@ -1,11 +1,10 @@
-import { Order } from '@/protogen/order.pb';
-import { OrderRespDto } from '../dtos/resp';
+import { GetManyOrdersResponse, Order } from '@/protogen/order.pb';
+import { GetManyOrdersRespDto, OrderRespDto } from '../dtos/resp';
 import { OrderStatusMapper } from './order-status.mapper';
 
 export class OrderMapper {
   static toDto(proto: Order): OrderRespDto {
     return {
-      id: proto.id,
       code: proto.code,
       eventId: proto.eventId,
       userId: proto.userId,
@@ -25,6 +24,18 @@ export class OrderMapper {
         : [],
       createdAt: new Date(proto.createdAt),
       updatedAt: new Date(proto.updatedAt),
+    };
+  }
+
+  static toListDto(proto: GetManyOrdersResponse): GetManyOrdersRespDto {
+    return {
+      data: proto.orders?.map((o) => OrderMapper.toDto(o)) ?? [],
+      meta: {
+        perPage: Number(proto.pagination?.pageSize),
+        count: Number(proto.pagination?.count),
+        nextCursor: proto.pagination?.nextCursor ?? '',
+        hasNext: proto.pagination?.hasNext ?? false,
+      },
     };
   }
 }

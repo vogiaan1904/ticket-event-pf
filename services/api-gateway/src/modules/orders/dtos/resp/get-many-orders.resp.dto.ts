@@ -3,11 +3,10 @@ import { OrderRespDto } from './order.resp.dto';
 export class GetManyOrdersRespDto {
   data: OrderRespDto[];
   meta: {
-    currentPage: number;
     perPage: number;
-    total: number;
-    lastPage: number;
+    count: number;
+    /** Pass back as `cursor` for the next page; empty on the last one. */
+    nextCursor: string;
     hasNext: boolean;
-    hasPrevious: boolean;
   };
 }

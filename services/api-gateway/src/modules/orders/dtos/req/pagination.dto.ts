@@ -1,13 +1,11 @@
-import { PaginationQuery } from '@/shared/interfaces/pagination-input.interface';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
-export class PaginationDto implements PaginationQuery {
-  @IsNumber()
+/** Orders page by cursor: omit it for the first page, then pass back `nextCursor`. */
+export class PaginationDto {
+  @IsString()
   @IsOptional()
-  @Min(1)
-  @Type(() => Number)
-  page: number = 1;
+  cursor?: string;
 
   @IsNumber()
   @IsOptional()
