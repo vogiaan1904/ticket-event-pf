@@ -7,19 +7,26 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/util"
 )
 
+// GrpcOrderStatusValue gives every stored status its own wire value, so a buyer
+// owed money never reads the same as one who was never charged.
 var GrpcOrderStatusValue = map[models.OrderStatus]orderpb.OrderStatus{
-	models.OrderStatusPending:       orderpb.OrderStatus_ORDER_STATUS_PENDING,
-	models.OrderStatusCompleted:     orderpb.OrderStatus_ORDER_STATUS_COMPLETED,
-	models.OrderStatusCancelled:     orderpb.OrderStatus_ORDER_STATUS_CANCELED,
-	models.OrderStatusPaymentFailed: orderpb.OrderStatus_ORDER_STATUS_FAILED,
-	models.OrderStatusTimeout:       orderpb.OrderStatus_ORDER_STATUS_CANCELED, // No expired status on the wire; see 0024.
+	models.OrderStatusPending:        orderpb.OrderStatus_ORDER_STATUS_PENDING,
+	models.OrderStatusCompleted:      orderpb.OrderStatus_ORDER_STATUS_COMPLETED,
+	models.OrderStatusCancelled:      orderpb.OrderStatus_ORDER_STATUS_CANCELED,
+	models.OrderStatusPaymentFailed:  orderpb.OrderStatus_ORDER_STATUS_FAILED,
+	models.OrderStatusTimeout:        orderpb.OrderStatus_ORDER_STATUS_EXPIRED,
+	models.OrderStatusRefundRequired: orderpb.OrderStatus_ORDER_STATUS_REFUND_REQUIRED,
+	models.OrderStatusRefunded:       orderpb.OrderStatus_ORDER_STATUS_REFUNDED,
 }
 
 var OrderStatus = map[orderpb.OrderStatus]models.OrderStatus{
-	orderpb.OrderStatus_ORDER_STATUS_PENDING:   models.OrderStatusPending,
-	orderpb.OrderStatus_ORDER_STATUS_COMPLETED: models.OrderStatusCompleted,
-	orderpb.OrderStatus_ORDER_STATUS_CANCELED:  models.OrderStatusCancelled,
-	orderpb.OrderStatus_ORDER_STATUS_FAILED:    models.OrderStatusPaymentFailed,
+	orderpb.OrderStatus_ORDER_STATUS_PENDING:         models.OrderStatusPending,
+	orderpb.OrderStatus_ORDER_STATUS_COMPLETED:       models.OrderStatusCompleted,
+	orderpb.OrderStatus_ORDER_STATUS_CANCELED:        models.OrderStatusCancelled,
+	orderpb.OrderStatus_ORDER_STATUS_FAILED:          models.OrderStatusPaymentFailed,
+	orderpb.OrderStatus_ORDER_STATUS_EXPIRED:         models.OrderStatusTimeout,
+	orderpb.OrderStatus_ORDER_STATUS_REFUND_REQUIRED: models.OrderStatusRefundRequired,
+	orderpb.OrderStatus_ORDER_STATUS_REFUNDED:        models.OrderStatusRefunded,
 }
 
 func (s *grpcService) newOrderItems(itms []models.OrderItem) []*orderpb.OrderItem {

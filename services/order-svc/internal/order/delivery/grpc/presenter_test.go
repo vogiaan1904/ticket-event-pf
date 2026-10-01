@@ -7,9 +7,30 @@ import (
 	orderpb "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/order"
 )
 
-// The order contract has no expired status; a buyer must see a finished checkout.
-func TestATimedOutOrderReadsCanceled(t *testing.T) {
-	if got := GrpcOrderStatusValue[models.OrderStatusTimeout]; got != orderpb.OrderStatus_ORDER_STATUS_CANCELED {
-		t.Fatalf("TIMEOUT reads %s, want ORDER_STATUS_CANCELED", got)
+var storedStatuses = []models.OrderStatus{
+	models.OrderStatusPending,
+	models.OrderStatusTimeout,
+	models.OrderStatusCompleted,
+	models.OrderStatusCancelled,
+	models.OrderStatusPaymentFailed,
+	models.OrderStatusRefunded,
+	models.OrderStatusRefundRequired,
+}
+
+// A buyer owed money must not read the same thing as one who was never charged.
+func TestEveryStoredStatusHasItsOwnWireValue(t *testing.T) {
+	seen := map[orderpb.OrderStatus]models.OrderStatus{}
+	for _, st := range storedStatuses {
+		wire := GrpcOrderStatusValue[st]
+		if wire == orderpb.OrderStatus_ORDER_STATUS_UNSPECIFIED {
+			t.Errorf("%s reads UNSPECIFIED", st)
+		}
+		if prev, dup := seen[wire]; dup {
+			t.Errorf("%s and %s both read %s", prev, st, wire)
+		}
+		seen[wire] = st
+		if back := OrderStatus[wire]; back != st {
+			t.Errorf("a filter on %s finds %q, want %s", wire, back, st)
+		}
 	}
 }
