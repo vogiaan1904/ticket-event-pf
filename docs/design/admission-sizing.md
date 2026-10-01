@@ -11,10 +11,10 @@
 
 ## The problem
 
-The waitroom has two knobs, both global constants in
+When this design began, the waitroom had two knobs, both global constants in
 `deploy/helm/ticketbottle/templates/apps/config.yaml`:
 
-| Knob | Setting | Value |
+| Knob | Setting | Value then |
 |---|---|---|
 | **Door speed**: buyers admitted per tick | `QUEUE_DEFAULT_RELEASE_RATE` per `QUEUE_PROCESS_INTERVAL` | 10 per 1s |
 | **Room size**: buyers holding a checkout slot at once | `QUEUE_DEFAULT_MAX_CONCURRENT` | 100 |
@@ -265,14 +265,14 @@ Not in this step:
 [0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), accepted.
 
 Room size is how many buyers may be inside an event at once: admitted, and holding a
-checkout pass. It is `QUEUE_DEFAULT_MAX_CONCURRENT`, 100, for every event, and that is
-wrong twice:
-- **For real buyers it is the limit, not the door.** A full room admits only as fast
+checkout pass. It was `QUEUE_DEFAULT_MAX_CONCURRENT`, 100, for every event, and that
+was wrong twice:
+- **For real buyers it was the limit, not the door.** A full room admits only as fast
   as buyers leave: 100 ÷ stay. At a 3-minute stay that is 0.56 a second, under a third
   of k3s's measured door of 2. Load tests stay 2–4s, so the room never fills there,
   and no test shows it.
-- **It knows nothing about tickets.** A 3-ticket event admits up to 100, and a buyer
-  whose checkout `Reserve` refuses keeps their chair for the token's 15 minutes.
+- **It knew nothing about tickets.** A 3-ticket event admitted up to 100, and a buyer
+  whose checkout `Reserve` refused kept their chair for the token's 15 minutes.
 
 Door speed already bounds the machine, and a buyer who is paying costs it nothing. So
 all that is left for room size is matching buyers to tickets, and that is per event.

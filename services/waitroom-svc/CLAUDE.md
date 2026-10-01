@@ -129,7 +129,9 @@ tickets run out*. The mechanism is `internal/service/stock_gate.go`:
   when the next tick reads it, so the tick would ask only every other tick.
 - **The tick asks only with someone due**, before it counts chairs. So a sold-out line
   closes even when every chair is taken, and an empty line costs inventory nothing.
-- **The same answer sizes the room.** `Stock` carries `available` as well as the door, and the tick admits only while it exceeds the buyers inside (`admitCount`). Unanswered, or with no class that can still sell, it sets no limit.
+- **The same answer sizes the room.** `Stock` carries `available` as well as the door,
+  and the tick admits only while it exceeds the buyers inside (`admitCount`).
+  Unanswered, or with no class that can still sell, it sets no limit.
 - **It fails open, and caches the failure.** An unanswered question reads as open, so
   the waitroom admits as before this existed. `tb_waitroom_stock_checks_total{result}`
   counts each question, and `unavailable` is a fail-open.
