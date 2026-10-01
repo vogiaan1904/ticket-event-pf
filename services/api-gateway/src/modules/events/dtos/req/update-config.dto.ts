@@ -1,13 +1,21 @@
-import { IsYYYYMMDD } from '@/common/decorators/isYYYYMMDD.decorator';
-import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class UpdateConfigDto {
   @IsNotEmpty()
-  @IsYYYYMMDD()
+  @IsDateString()
   ticketSaleStartDate: string;
 
   @IsNotEmpty()
-  @IsYYYYMMDD()
+  @IsDateString()
   ticketSaleEndDate: string;
 
   @IsNotEmpty()
