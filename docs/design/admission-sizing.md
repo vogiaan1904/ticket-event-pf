@@ -261,7 +261,7 @@ Not in this step:
 
 ## Room size per event
 
-**Status:** specified 2026-10-01; its two calls answered the same day; not built.
+**Status:** specified 2026-10-01; its two calls answered the same day; built; not yet verified on k3s.
 [0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), proposed.
 
 Room size is how many buyers may be inside an event at once: admitted, and holding a

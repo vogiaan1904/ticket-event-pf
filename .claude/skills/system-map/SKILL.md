@@ -67,7 +67,7 @@ does not.
 | The stateful tier on EKS | `docs/design/eks-stateful-tier.md` |
 | Recording a decision | `.claude/skills/decision-records/SKILL.md` |
 | The architecture diagram | `docs/diagrams/README.md` |
-| End-to-end acceptance, load, chaos | `deploy/scripts/gate1-purchase-flow.sh`, `deploy/scripts/gate-sold-out.sh`, `deploy/scripts/gate-checkout-expiry.sh`, `deploy/loadtest/`, `deploy/scripts/gate4b-chaos.sh` |
+| End-to-end acceptance, load, chaos | `deploy/scripts/gate1-purchase-flow.sh`, `deploy/scripts/gate-sold-out.sh`, `deploy/scripts/gate-checkout-expiry.sh`, `deploy/scripts/gate-room.sh`, `deploy/loadtest/`, `deploy/scripts/gate4b-chaos.sh` |
 | What CI runs | `.github/workflows/` |
 | How the agent and the architect split decisions | `docs/decisions/0002-the-agent-is-a-mentor-not-a-gate.md`; `docs/design/decision-protocol.md` is the superseded first version |
 

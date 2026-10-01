@@ -9,7 +9,7 @@ This is the **Waitroom** (virtual queue) service for TicketBottle V2. For the sy
 gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a **queue** (Redis sorted set; see the draw below); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `queue.ready` event to Kafka. It also consumes downstream events (e.g. `checkout.completed`) to release slots and admit the next user.
 
 Key behaviors (`internal/service/queue_processor.go`):
-- Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
+- Room size per event — a tick admits only while the event has more tickets available than buyers inside (`admitCount`); there is no fixed cap ([0025](../../docs/decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md)).
 - Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
 - Asks the **Inventory** service (`INVENTORY_SERVICE_ADDR`, default `localhost:50057`) what each event has left, through `StockGate`, and pauses or closes the door on the answer.
@@ -129,6 +129,7 @@ tickets run out*. The mechanism is `internal/service/stock_gate.go`:
   when the next tick reads it, so the tick would ask only every other tick.
 - **The tick asks only with someone due**, before it counts chairs. So a sold-out line
   closes even when every chair is taken, and an empty line costs inventory nothing.
+- **The same answer sizes the room.** `Stock` carries `available` as well as the door, and the tick admits only while it exceeds the buyers inside (`admitCount`). Unanswered, or with no class that can still sell, it sets no limit.
 - **It fails open, and caches the failure.** An unanswered question reads as open, so
   the waitroom admits as before this existed. `tb_waitroom_stock_checks_total{result}`
   counts each question, and `unavailable` is a fail-open.
@@ -184,8 +185,9 @@ each other. Add DLQ-depth alerting before relying on either alone.
 
 `QUEUE_DEFAULT_RELEASE_RATE` is how fast buyers are admitted, and so how fast work
 reaches the box. It comes from the chart's `waitroom.releaseRate`, measured per target
-(`docs/design/admission-sizing.md`); the chart default of 10 is unmeasured. Room size,
-`QUEUE_DEFAULT_MAX_CONCURRENT`, is a separate, per-event question.
+(`docs/design/admission-sizing.md`); the chart default of 10 is unmeasured. Room size
+is not a setting: it is each event's tickets available, read each tick
+(`docs/design/admission-sizing.md`, *Room size per event*).
 
 ## Single-replica constraint
 
@@ -209,8 +211,8 @@ The processing set moved from `waitroom:{event}:processing` (SET) to
 `waitroom:{event}:checkouts` (sorted set). Redis is persistent in the chart, so the type
 could not change in place without `WRONGTYPE`. The old key carries a TTL and ages out on
 its own, but **at cutover every in-flight slot is forgotten** and `:checkouts` starts
-empty — the service can briefly admit up to `MaxConcurrent` extra users on top of those
-already checking out. Bounded (<=100/event, <=15 min) but real: deploy during a quiet
+empty — the service can briefly admit extra users on top of those already
+checking out, as many as the event's tickets available allow, for up to 15 min. Real: deploy during a quiet
 period.
 
 ## Notes

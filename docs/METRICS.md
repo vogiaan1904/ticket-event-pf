@@ -91,8 +91,8 @@ sampler `Reset()`s both on every tick, so the series count tracks events
 currently in play rather than events ever seeded — that reset, not a seed-count
 ceiling, is what bounds them.
 
-`tb_waitroom_slots_in_use` is per event because the limit it is read against,
-`QUEUE_DEFAULT_MAX_CONCURRENT`, is `MaxConcurrentPerEvent`. A cluster-wide sum
-cannot be compared to a per-event cap in either direction: many events lightly
+`tb_waitroom_slots_in_use` is per event because what it is read against, the event's
+tickets available, is per event. A cluster-wide sum cannot be compared to a per-event
+limit in either direction: many events lightly
 loaded exceeds it while none is saturated, and one event fully saturated does
 not.

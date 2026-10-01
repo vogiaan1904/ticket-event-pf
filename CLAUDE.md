@@ -49,7 +49,7 @@ describing it for a week — because the fact had been copied rather than linked
 | When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
 | What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
 | What happens to an order nobody pays for? | `docs/decisions/0024` | Times out at its hold's expiry, frees the chair; built and verified on k3s 2026-09-30 |
-| How many buyers may hold inventory at once, and can it vary per event? | `docs/decisions/0025` | As many as the event has tickets available, checked each tick; the global 100 is deleted; decided 2026-10-01, not built |
+| How many buyers may hold inventory at once, and can it vary per event? | `docs/decisions/0025` | As many as the event has tickets available, checked each tick; the global 100 is deleted; built, not yet verified on k3s |
 
 ### Open
 

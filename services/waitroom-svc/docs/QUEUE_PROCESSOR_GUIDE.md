@@ -133,7 +133,6 @@ SREM waitroom:active_events "event-123"   # Auto-remove
 ```go
 ProcessorConfig{
     ProcessInterval:        1 * time.Second,   // Check frequency
-    MaxConcurrentPerEvent:  100,               // Max in checkout
     BatchSize:              10,                // Users per cycle
     RetryAttempts:          3,                 // Retry count
     ShutdownTimeout:        30 * time.Second,  // Graceful shutdown

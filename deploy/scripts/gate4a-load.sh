@@ -4,7 +4,7 @@
 # Seeds ONE ticket class with a fixed allotment, drives more concurrent buyers
 # than there are tickets, then asserts:
 #   1. no oversell            (sold + reserved <= TOTAL, always)
-#   2. admission control held  (concurrent checkouts <= MAX_CONCURRENT)
+#   2. admission control held  (buyers inside <= TOTAL: a tick admits only while tickets outnumber them)
 #   3. every rejected buyer got a 409, never a 5xx or a stray 4xx
 #   4. nothing leaked          (reserved == 0 and no ACTIVE reservation once holds expire)
 #   5. the HPA scaled app-gateway out AND back in
@@ -26,7 +26,6 @@ DURATION=${DURATION:-}
 # mid-purchase. A file is the least invasive channel for it; this script's
 # stdout is the human-readable run log.
 TCID_FILE=${TCID_FILE:-/tmp/gate4a-ticketclass}
-MAX_CONCURRENT=${MAX_CONCURRENT:-$(kubectl -n $NS get cm waitroom-config -o jsonpath='{.data.QUEUE_DEFAULT_MAX_CONCURRENT}')}
 
 psql() { kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc "$1" | tr -d '[:space:]'; }
 fail() { echo "GATE 4a FAILED: $1"; exit 1; }
@@ -143,8 +142,8 @@ echo "  sold=$SOLD reserved=$RESERVED (total=$TOTAL)"
 [ $((SOLD + RESERVED)) -le "$TOTAL" ] || fail "OVERSELL: sold=$SOLD + reserved=$RESERVED > total=$TOTAL"
 
 echo "== 5. assert admission control held =="
-echo "  peak concurrent checkouts=$PEAK_ADMITTED (limit=$MAX_CONCURRENT)"
-[ "$PEAK_ADMITTED" -le "$MAX_CONCURRENT" ] || fail "waitroom admitted $PEAK_ADMITTED concurrent checkouts, limit is $MAX_CONCURRENT"
+echo "  peak concurrent checkouts=$PEAK_ADMITTED (tickets=$TOTAL)"
+[ "$PEAK_ADMITTED" -le "$TOTAL" ] || fail "waitroom admitted $PEAK_ADMITTED concurrent checkouts for $TOTAL tickets"
 
 echo "== 6. assert nothing leaked once the holds expire =="
 # Reservations outlive the run by design and the sweeper releases them, so
@@ -176,4 +175,4 @@ done
 [ "$R" -le "$START_REPLICAS" ] || fail "app-gateway stuck at $R replicas after the window"
 
 echo
-echo "GATE 4a PASSED: $SOLD/$TOTAL sold, zero oversell, peak admitted $PEAK_ADMITTED/$MAX_CONCURRENT, HPA $START_REPLICAS -> $PEAK -> $R"
+echo "GATE 4a PASSED: $SOLD/$TOTAL sold, zero oversell, peak admitted $PEAK_ADMITTED/$TOTAL, HPA $START_REPLICAS -> $PEAK -> $R"
