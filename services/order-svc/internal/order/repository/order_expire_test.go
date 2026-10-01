@@ -70,3 +70,24 @@ func TestExpireIfPending_AMissingOrderIsNotFound(t *testing.T) {
 		t.Fatalf("err = %v, want ErrOrderNotFound", err)
 	}
 }
+
+func TestCancelIfPending_CancelsAPendingOrder(t *testing.T) {
+	r := newTestRepo(t)
+	seedOrder(t, r, "TB-CAN-1001", models.OrderStatusPending)
+
+	o, cancelled, err := r.CancelIfPending(context.Background(), "TB-CAN-1001")
+	if err != nil || !cancelled || o.Status != models.OrderStatusCancelled {
+		t.Fatalf("cancelled = %v, status = %s, err = %v; want true, CANCELLED", cancelled, o.Status, err)
+	}
+}
+
+func TestCancelIfPending_LeavesAPaidOrderAlone(t *testing.T) {
+	r := newTestRepo(t)
+	seedOrder(t, r, "TB-CAN-1002", models.OrderStatusCompleted)
+
+	_, cancelled, err := r.CancelIfPending(context.Background(), "TB-CAN-1002")
+	stored, _ := r.GetByCode(context.Background(), "TB-CAN-1002")
+	if err != nil || cancelled || stored.Status != models.OrderStatusCompleted {
+		t.Fatalf("cancelled = %v, stored = %s, err = %v; want false, COMPLETED", cancelled, stored.Status, err)
+	}
+}

@@ -473,13 +473,24 @@ func (r *implRepository) Update(ctx context.Context, code string, opt UpdateOrde
 // TIMEOUT: true again on a retry, false for an order paid, failed or cancelled
 // first. Conditional, so a timeout never overwrites a payment that won the race.
 func (r *implRepository) ExpireIfPending(ctx context.Context, code string) (models.Order, bool, error) {
+	return r.leavePending(ctx, code, models.OrderStatusTimeout)
+}
+
+func (r *implRepository) CancelIfPending(ctx context.Context, code string) (models.Order, bool, error) {
+	return r.leavePending(ctx, code, models.OrderStatusCancelled)
+}
+
+// leavePending moves a PENDING order to `to` with a conditional write, so it never
+// overwrites an order a payment or another path settled first. It reports true
+// also when the order already reads `to`, so a retried step sees its own write.
+func (r *implRepository) leavePending(ctx context.Context, code string, to models.OrderStatus) (models.Order, bool, error) {
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Set(expression.Name("status"), expression.Value(string(models.OrderStatusTimeout))).
+		WithUpdate(expression.Set(expression.Name("status"), expression.Value(string(to))).
 			Set(expression.Name("updated_at"), expression.Value(r.clock()))).
 		WithCondition(expression.Name("status").Equal(expression.Value(string(models.OrderStatusPending)))).
 		Build()
 	if err != nil {
-		r.l.Errorf(ctx, "order.repository.ExpireIfPending.BuildExpression: %v", err)
+		r.l.Errorf(ctx, "order.repository.leavePending.BuildExpression: %v", err)
 		return models.Order{}, false, err
 	}
 
@@ -501,16 +512,16 @@ func (r *implRepository) ExpireIfPending(ctx context.Context, code string) (mode
 		if gErr != nil {
 			return models.Order{}, false, gErr
 		}
-		return o, o.Status == models.OrderStatusTimeout, nil
+		return o, o.Status == to, nil
 	}
 	if err != nil {
-		r.l.Errorf(ctx, "order.repository.ExpireIfPending.UpdateItem: %v", err)
+		r.l.Errorf(ctx, "order.repository.leavePending.UpdateItem: %v", err)
 		return models.Order{}, false, err
 	}
 
 	var o models.Order
 	if err := attributevalue.UnmarshalMap(result.Attributes, &o); err != nil {
-		r.l.Errorf(ctx, "order.repository.ExpireIfPending.UnmarshalMap: %v", err)
+		r.l.Errorf(ctx, "order.repository.leavePending.UnmarshalMap: %v", err)
 		return models.Order{}, false, err
 	}
 	return o, true, nil

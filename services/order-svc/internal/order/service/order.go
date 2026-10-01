@@ -479,16 +479,20 @@ func (s *implService) Cancel(ctx context.Context, code, userID string) error {
 		return order.ErrOrderNotPending
 	}
 
-	if err := s.releaseTickets(ctx, o.Code); err != nil {
-		s.l.Errorf(ctx, "internal.order.service.Cancel.releaseTickets: %v", err)
+	// Flipped before the release: a payment that lands after the read keeps its
+	// tickets, and this cancel is refused.
+	_, cancelled, err := s.repo.CancelIfPending(ctx, o.Code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.Cancel.repo.CancelIfPending: %v", err)
+		return order.ErrOrderCancellationFailed
+	}
+	if !cancelled {
+		return order.ErrOrderNotPending
 	}
 
-	_, err = s.repo.Update(ctx, o.Code, repo.UpdateOrderOption{
-		Status: models.OrderStatusCancelled,
-	})
-	if err != nil {
-		s.l.Errorf(ctx, "Failed to update order status to cancelled for %s: %v", o.Code, err)
-		return order.ErrOrderCancellationFailed
+	// A failed release is not retried: the hold expires on its own.
+	if err := s.releaseTickets(ctx, o.Code); err != nil {
+		s.l.Errorf(ctx, "internal.order.service.Cancel.releaseTickets: %v", err)
 	}
 
 	if o.SessionID != "" {

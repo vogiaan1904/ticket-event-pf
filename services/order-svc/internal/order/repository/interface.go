@@ -23,6 +23,7 @@ type OrderRepository interface {
 	List(ctx context.Context, opt ListOrderOption) ([]models.Order, error)
 	Update(ctx context.Context, code string, opt UpdateOrderOption) (models.Order, error)
 	ExpireIfPending(ctx context.Context, code string) (models.Order, bool, error)
+	CancelIfPending(ctx context.Context, code string) (models.Order, bool, error)
 	Delete(ctx context.Context, code string) error
 }
 
