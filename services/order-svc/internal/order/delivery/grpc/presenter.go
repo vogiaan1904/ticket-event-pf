@@ -130,3 +130,26 @@ func (s *grpcService) newOrderFilter(reqFil *orderpb.OrderFilter) order.FilterOr
 
 	return fil
 }
+
+func newCreateOrderInput(req *orderpb.CreateOrderRequest) order.CreateOrderInput {
+	itms := make([]order.OrderItemInput, len(req.Items))
+	for i, item := range req.Items {
+		itms[i] = order.OrderItemInput{
+			TicketClassID: item.TicketClassId,
+			Quantity:      item.Quantity,
+		}
+	}
+
+	return order.CreateOrderInput{
+		UserID:        req.UserId,
+		EventID:       req.EventId,
+		UserFullName:  req.UserFullname,
+		Email:         req.UserEmail,
+		Phone:         req.UserPhone,
+		Currency:      req.Currency,
+		PaymentMethod: models.PaymentMethod(req.PaymentMethod),
+		RedirectUrl:   req.RedirectUrl,
+		CheckoutToken: req.CheckoutToken,
+		Items:         itms,
+	}
+}

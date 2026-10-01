@@ -42,16 +42,17 @@ func validateOrder(ctx workflow.Context, code string) (*models.Order, error) {
 
 func createOrder(ctx workflow.Context, in *CreateOrderWorkflowInput) (*models.Order, error) {
 	opt := repo.CreateOrderOption{
-		SessionID:    in.SessionID,
-		Code:         in.OrderCode,
-		UserID:       in.UserID,
-		Email:        in.Email,
-		Phone:        in.Phone,
-		UserFullName: in.UserFullName,
-		EventID:      in.EventID,
-		Currency:     in.Currency,
-		Status:       models.OrderStatusPending,
-		TotalAmount:  in.TotalAmount,
+		SessionID:     in.SessionID,
+		Code:          in.OrderCode,
+		UserID:        in.UserID,
+		Email:         in.Email,
+		Phone:         in.Phone,
+		UserFullName:  in.UserFullName,
+		EventID:       in.EventID,
+		Currency:      in.Currency,
+		PaymentMethod: models.PaymentMethod(in.PaymentProvider),
+		Status:        models.OrderStatusPending,
+		TotalAmount:   in.TotalAmount,
 	}
 
 	var o *models.Order
@@ -66,6 +67,9 @@ func createOrderItems(ctx workflow.Context, code string, ins []CreateOrderItemIn
 			OrderCode:       code,
 			TicketClassID:   itm.TicketClassID,
 			TicketClassName: itm.TicketClassName,
+			PriceAtPurchase: itm.PriceAtPurchase,
+			Quantity:        itm.Quantity,
+			TotalAmount:     itm.TotalAmount,
 		}
 	}
 	var itms []models.OrderItem

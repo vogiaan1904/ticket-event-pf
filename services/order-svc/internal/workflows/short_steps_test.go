@@ -20,16 +20,20 @@ import (
 // activity registered on a struct. Steps that stay remote are still mocked.
 type fakeRepo struct {
 	repo.Repository
-	calls []string
+	calls   []string
+	created repo.CreateOrderOption
+	items   []repo.CreateOrderItemOption
 }
 
 func (f *fakeRepo) Create(_ context.Context, opt repo.CreateOrderOption) (models.Order, error) {
 	f.calls = append(f.calls, "Create")
+	f.created = opt
 	return models.Order{Code: opt.Code}, nil
 }
 
-func (f *fakeRepo) CreateManyItems(_ context.Context, _ string, _ []repo.CreateOrderItemOption) ([]models.OrderItem, error) {
+func (f *fakeRepo) CreateManyItems(_ context.Context, _ string, opts []repo.CreateOrderItemOption) ([]models.OrderItem, error) {
 	f.calls = append(f.calls, "CreateManyItems")
+	f.items = opts
 	return []models.OrderItem{}, nil
 }
 
@@ -108,5 +112,29 @@ func TestConfirmOrder_ShortStepsRunAsLocalActivities(t *testing.T) {
 	}
 	if p.published != 1 {
 		t.Fatalf("checkout.completed published %d times, want 1", p.published)
+	}
+}
+
+// The buyer reads back what they asked for: every field the saga is given is stored.
+func TestCreateOrder_StoresWhatTheBuyerAskedFor(t *testing.T) {
+	r := &fakeRepo{}
+	env, _ := newShortStepEnv(t, r, &fakeProducer{})
+	env.OnActivity("ReserveInventory", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	env.OnActivity("CreatePaymentIntent", mock.Anything, mock.Anything).
+		Return(&payment.CreatePaymentIntentResponse{PaymentUrl: "https://pay"}, nil)
+	in := testCreateInput()
+	in.Phone = "0900000000"
+
+	env.ExecuteWorkflow(CreateOrder, in)
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow failed: %v", err)
+	}
+	if r.created.Phone != "0900000000" || r.created.PaymentMethod != models.PaymentMethod("ZALOPAY") {
+		t.Errorf("order stored phone %q, payment method %q", r.created.Phone, r.created.PaymentMethod)
+	}
+	want := repo.CreateOrderItemOption{OrderCode: "TB-TEST-0001", TicketClassID: "1", Quantity: 2, PriceAtPurchase: 500, TotalAmount: 1000}
+	if len(r.items) != 1 || r.items[0] != want {
+		t.Errorf("items stored %+v, want [%+v]", r.items, want)
 	}
 }

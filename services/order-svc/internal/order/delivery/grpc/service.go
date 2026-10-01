@@ -3,7 +3,6 @@ package grpc
 import (
 	"context"
 
-	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	orderpb "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/order"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
@@ -31,27 +30,7 @@ func (s *grpcService) CreateOrder(ctx context.Context, req *orderpb.CreateOrderR
 		return nil, response.GrpcError(err)
 	}
 
-	in := order.CreateOrderInput{
-		UserID:        req.UserId,
-		EventID:       req.EventId,
-		UserFullName:  req.UserFullname,
-		Email:         req.UserEmail,
-		Currency:      req.Currency,
-		PaymentMethod: models.PaymentMethod(req.PaymentMethod),
-		RedirectUrl:   req.RedirectUrl,
-		CheckoutToken: req.CheckoutToken,
-	}
-
-	itms := make([]order.OrderItemInput, len(req.Items))
-	for i, item := range req.Items {
-		itms[i] = order.OrderItemInput{
-			TicketClassID: item.TicketClassId,
-			Quantity:      item.Quantity,
-		}
-	}
-	in.Items = itms
-
-	out, err := s.svc.Create(ctx, in)
+	out, err := s.svc.Create(ctx, newCreateOrderInput(req))
 	if err != nil {
 		err := s.mapError(err)
 		s.l.Errorf(ctx, "internal.order.delivery.grpc.service.Create: %v", err)

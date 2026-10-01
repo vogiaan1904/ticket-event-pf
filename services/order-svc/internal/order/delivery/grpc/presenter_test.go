@@ -52,3 +52,14 @@ func TestReadAndCancelRefuseARequestWithNoOwner(t *testing.T) {
 		t.Error("a cancel with no user_id was accepted")
 	}
 }
+
+func TestCreateOrderInput_KeepsEveryFieldTheBuyerSent(t *testing.T) {
+	in := newCreateOrderInput(&orderpb.CreateOrderRequest{
+		UserId: "u1", EventId: "e1", UserFullname: "A", UserEmail: "a@x", UserPhone: "0900000000",
+		PaymentMethod: "ZALOPAY", Currency: "VND", CheckoutToken: "tok", RedirectUrl: "https://r",
+		Items: []*orderpb.CreateOrderItem{{TicketClassId: "tc1", Quantity: 2}},
+	})
+	if in.Phone != "0900000000" || in.Email != "a@x" || len(in.Items) != 1 || in.Items[0].Quantity != 2 {
+		t.Fatalf("input = %+v", in)
+	}
+}
