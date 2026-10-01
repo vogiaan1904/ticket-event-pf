@@ -88,7 +88,7 @@ echo "== 4. A reads it, with its items, and lists it on the first page =="
 [ "$(getval data.status < /tmp/ord-get.json)" = PENDING ] || fail "A's order reads $(getval data.status < /tmp/ord-get.json), want PENDING"
 [ "$(getval data.items.0.quantity < /tmp/ord-get.json)" = 2 ] || fail "A's order has no 2-ticket item: $(cat /tmp/ord-get.json)"
 [ "$(call GET "$TOK_A" "/orders?limit=10&eventId=$EVENT_ID" /tmp/ord-list.json)" = 200 ] || fail "A's list: $(cat /tmp/ord-list.json)"
-[ "$(getval data.0.code < /tmp/ord-list.json)" = "$CODE" ] || fail "A's first page lacks $CODE: $(cat /tmp/ord-list.json)"
+[ "$(getval data.data.0.code < /tmp/ord-list.json)" = "$CODE" ] || fail "A's first page lacks $CODE: $(cat /tmp/ord-list.json)"
 echo "  read PENDING with 2 tickets; listed on the first page"
 
 echo "== 5. a stranger can neither read nor cancel it =="
