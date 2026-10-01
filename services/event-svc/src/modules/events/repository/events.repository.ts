@@ -214,8 +214,8 @@ export class EventsRepository {
             street: dto.street,
             city: dto.city,
             country: dto.country,
-            ward: dto.ward ?? null,
-            district: dto.district ?? null,
+            ward: dto.ward,
+            district: dto.district,
           },
         },
         organizer: {
@@ -225,6 +225,14 @@ export class EventsRepository {
             logoUrl: dto.organizerLogoUrl,
           },
         },
+        // An empty list is what the wire sends when no categories were named, so it
+        // keeps them: proto3 cannot tell "none" from "unchanged" for a repeated field.
+        categories: dto.categoryIds?.length
+          ? {
+              deleteMany: {},
+              createMany: { data: dto.categoryIds.map((categoryId) => ({ categoryId })) },
+            }
+          : undefined,
       },
       include: this.baseInclude,
     });

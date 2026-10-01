@@ -1,7 +1,7 @@
 name: ts-tests
 
-# Unit tests only: they mock every collaborator, so the runner needs no
-# database, broker or network.
+# Unit tests mock every collaborator. A repository suite runs against a real
+# Postgres, given here as a service; without its URL it fails rather than skip.
 on:
   push:
     branches: [main, dev]
@@ -86,6 +86,23 @@ jobs:
     defaults:
       run:
         working-directory: services/event-svc
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: ticketbottle_event_test
+        ports:
+          # 5434, as docker-compose.dev.yml publishes it.
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d ticketbottle_event_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      EVENT_TEST_DATABASE_URL: postgresql://root:root@localhost:5434/ticketbottle_event_test
     steps:
       - uses: actions/checkout@v4
 

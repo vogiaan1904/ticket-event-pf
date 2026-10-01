@@ -40,5 +40,12 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 
 ## Notes
 
+- **The repository suite runs against a real Postgres** (`repository/events.repository.spec.ts`):
+  `docker compose -f docker-compose.dev.yml up -d`, then
+  `EVENT_TEST_DATABASE_URL=postgresql://root:root@localhost:5434/ticketbottle_event_test npm test`.
+  It migrates that database itself. Without the variable it skips locally and fails in CI.
+- **An update's empty `categoryIds` keeps the categories.** proto3 sends an unset repeated field
+  as empty, so "none named" and "clear them" look the same; clearing is not possible by update.
+
 - This service does **not** use `@nestjs/cqrs` — it is a plain service + repository. Don't add CQRS scaffolding expecting it to already exist.
 - Role-based access (organizer vs admin) gates lifecycle transitions; keep authorization checks in the service layer alongside the status update.
