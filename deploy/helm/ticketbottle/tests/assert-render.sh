@@ -125,6 +125,13 @@ dr=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set w
 grep -q 'QUEUE_DEFAULT_RELEASE_RATE: "3"' <<<"$dr" || fail "waitroom.releaseRate does not reach waitroom-config"
 echo "OK  the waitroom's door speed comes from values"
 
+# The window to start a checkout bounds every chair that takes no ticket (0027).
+wm() { awk '/^metadata: { name: waitroom-config,/{f=1} f && /JWT_EXPIRY:/{print $2; exit}' <<<"$1"; }
+[ "$(wm "$dr")" = '"5m"' ] || fail "waitroom-config's JWT_EXPIRY is $(wm "$dr"), want \"5m\""
+cw=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.checkoutWindow=7m)
+[ "$(wm "$cw")" = '"7m"' ] || fail "waitroom.checkoutWindow does not reach waitroom-config"
+echo "OK  the waitroom's checkout window comes from values"
+
 # A ConfigMap change must roll the app that reads it, and only that app: each app
 # carries a digest of its own ConfigMap. Change the waitroom's and compare.
 digest() { awk -v d="$2" '/^---/{k=0;f=0} /^kind: Deployment$/{k=1} k && $0=="  name: "d{f=1} f && /checksum\/config:/{print $2; exit}' <<<"$1"; }

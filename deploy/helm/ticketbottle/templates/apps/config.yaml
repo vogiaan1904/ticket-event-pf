@@ -69,7 +69,7 @@ data:
   QUEUE_EVENT_CACHE_TTL: 30s
   EVENT_SERVICE_ADDR: event-service:50053
   INVENTORY_SERVICE_ADDR: inventory-service:50057
-  JWT_EXPIRY: 15m
+  JWT_EXPIRY: {{ .Values.waitroom.checkoutWindow | quote }}
   LOGGER_LEVEL: debug
   LOGGER_MODE: development
   LOGGER_ENCODING: console
