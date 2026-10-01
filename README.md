@@ -66,7 +66,7 @@ Deployment.
 
 ![The waiting room: join, draw, bounded admission and slot release](assets/waitroom-admission.png)
 
-A buyer joins the queue for an event and is given a score once, at join: a random point in the second before the sale opens if they arrived early, their arrival time otherwise. Gathering early buys a place in the draw, not at the front of it, so an on-sale is not a race on round-trip time. A processor admits buyers each second, at most 10 at a time and never more than 100 in checkout per event, and each admitted buyer receives a checkout token valid for 15 minutes. The buyer learns this by polling: there is no push stream to hold open per waiter. A completed checkout frees the slot, and a slot that is never used expires on its own.
+A buyer joins the queue for an event and is given a score once, at join: a random point in the second before the sale opens if they arrived early, their arrival time otherwise. Gathering early buys a place in the draw, not at the front of it, so an on-sale is not a race on round-trip time. A processor admits buyers each second, a few at a time and only while the event has more tickets available than buyers already inside, and each admitted buyer receives a checkout token valid for 5 minutes, the time they have to start a checkout. The buyer learns this by polling: there is no push stream to hold open per waiter. A completed checkout frees the slot, and a slot that is never used expires on its own.
 
 ### Inventory
 
@@ -147,7 +147,7 @@ Each of these is recorded in [`docs/decisions/`](docs/decisions/README.md) with 
 
 **A draw, not a race, in the waiting room.** Ordering everyone who waited for the doors by arrival makes an on-sale a contest of network paths, which a bot always wins. The cost is that joining early buys a lottery ticket rather than the front of the line.
 
-**Polling, not push, for admission.** A push stream per waiter meant a connection, a gRPC stream and a Redis subscription each, and a stampede became quadratic in queue depth. A poll costs two Redis round trips; the cost is that admission is seen on the next poll, seconds into a 15-minute token.
+**Polling, not push, for admission.** A push stream per waiter meant a connection, a gRPC stream and a Redis subscription each, and a stampede became quadratic in queue depth. A poll costs two Redis round trips; the cost is that admission is seen on the next poll, seconds into a 5-minute token.
 
 **Transactional outbox in Payment.** Updating the database and publishing an event are two writes to two systems, and a crash between them loses the event. Writing the event into an outbox table inside the payment transaction removes that window; a long-lived relay drains the table to Kafka, claiming rows with `FOR UPDATE SKIP LOCKED` and waking on `LISTEN/NOTIFY`.
 

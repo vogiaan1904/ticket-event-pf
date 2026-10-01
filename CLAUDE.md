@@ -50,6 +50,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
 | What happens to an order nobody pays for? | `docs/decisions/0024` | Times out at its hold's expiry, frees the chair; built and verified on k3s 2026-09-30 |
 | How many buyers may hold inventory at once, and can it vary per event? | `docs/decisions/0025` | As many as the event has tickets available, checked each tick; the global 100 is deleted; built and verified on k3s 2026-10-01 |
+| How long does an admitted buyer have to start a checkout? | `docs/decisions/0027` | 5 minutes, the token's and its chair's lifetime, from `waitroom.checkoutWindow`; built, not yet verified on k3s |
 | What does an order tell its buyer, and who may read or cancel it? | `docs/decisions/0026` | Every stored status has its own wire value; only the owner reads or cancels, checked in order-svc; a cancel never overwrites a payment; built, not yet verified on k3s |
 
 ### Open

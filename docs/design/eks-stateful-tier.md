@@ -64,8 +64,9 @@ survives, because nothing irreplaceable is left in the cluster.
 > workflow history, polls task queues and updates visibility once per in-flight
 > order, so its database load scales with **concurrent checkouts**, not with
 > traffic generally. Concurrent checkouts are bounded by each event's tickets
-> and by door speed × the 15-minute token: up to 9000 at EKS's unmeasured door of
-> 10 a second ([0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md)).
+> and by about door speed × the 9-minute hold: up to 5400 at EKS's unmeasured door of
+> 10 a second ([0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md),
+> [0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)).
 > Into the thousands, Temporal becomes the platform's heaviest writer — at which point this grouping, and
 > `db.t4g.micro` at 2 burstable vCPU and 1 GiB, both invert. The split below is
 > sized for failure isolation; re-size it against measured load before any

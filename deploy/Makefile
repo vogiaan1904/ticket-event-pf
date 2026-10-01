@@ -88,7 +88,7 @@ k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 k3s-gate-sold-out: ## The door pauses while the last ticket is held, then refuses with 409 (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-sold-out.sh
 
-k3s-gate-checkout-expiry: ## An unpaid order times out at its hold's expiry and frees its chair (~12 min; tunnel must be open)
+k3s-gate-checkout-expiry: ## An unpaid order times out at its hold's expiry and ends everywhere (~12 min; tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-checkout-expiry.sh
 
 k3s-gate-room:     ## A room follows the tickets left: three of five admitted, then all five (tunnel must be open)

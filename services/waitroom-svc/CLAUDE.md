@@ -10,7 +10,7 @@ gRPC service (port **50056**, Redis-backed) that fairly throttles access to chec
 
 Key behaviors (`internal/service/queue_processor.go`):
 - Room size per event — a tick admits only while the event has more tickets available than buyers inside (`admitCount`); there is no fixed cap ([0025](../../docs/decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md)).
-- Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
+- Checkout tokens are JWTs that last `JWT_EXPIRY`, 5 minutes in the chart: the time to start a checkout, and the chair's lifetime ([0027](../../docs/decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)). Clients poll `GetQueueStatus` for position and, once admitted, for the token.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
 - Asks the **Inventory** service (`INVENTORY_SERVICE_ADDR`, default `localhost:50057`) what each event has left, through `StockGate`, and pauses or closes the door on the answer.
 
@@ -214,8 +214,8 @@ The processing set moved from `waitroom:{event}:processing` (SET) to
 could not change in place without `WRONGTYPE`. The old key carries a TTL and ages out on
 its own, but **at cutover every in-flight slot is forgotten** and `:checkouts` starts
 empty — the service can briefly admit extra users on top of those already
-checking out, as many as the event's tickets available allow, for up to 15 min. Real: deploy during a quiet
-period.
+checking out, as many as the event's tickets available allow, for up to the checkout
+window. Real: deploy during a quiet period.
 
 ## Notes
 

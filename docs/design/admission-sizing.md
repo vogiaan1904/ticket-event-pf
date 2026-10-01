@@ -146,7 +146,7 @@ not this one.
 
 The door admits at its speed whatever inventory has left. Once every ticket is held
 or sold, each buyer it admits costs the box a checkout that inventory refuses and
-holds a chair for the token's 15 minutes, while everyone behind waits for nothing.
+holds a chair until its token ends, while everyone behind waits for nothing.
 
 The rule: **before it admits anyone, each tick asks inventory what the event has
 left, and the answer sets the door.**
@@ -253,8 +253,8 @@ anything else       -> nothing: it was paid, failed or cancelled first
 step 4 sizes the room by.
 
 Not in this step:
-- a chair whose buyer is admitted and never starts a checkout: it holds for the
-  token's 15 minutes, since there is no hold to expire.
+- a chair whose buyer is admitted and never starts a checkout: it holds until the
+  token ends, since there is no hold to expire (*The end of a sell-out*).
 
 ## Room size per event
 
@@ -303,8 +303,9 @@ additive field on `GetEventStock`. An inventory without the field answers 0, whi
 reads as this rule, so that refinement can follow without a coordinated rollout.
 
 **No cap on chairs.** Each tick admits at most the door's batch, and a chair lives at
-most the token's 15 minutes. So chairs never exceed door speed × 900s: 1800 on k3s,
-9000 on EKS. A cap below that can only hold admission under the measured door.
+most the window to start a checkout, 5 minutes (*The end of a sell-out* below). So
+chairs never exceed door speed × 300s: 600 on k3s, 3000 on EKS. A cap below that can
+only hold admission under the measured door.
 
 **What a waiter sees.** `paused` keeps meaning "no ticket available". A waiter held
 back only because the buyers inside could take every ticket left sees their position
@@ -322,8 +323,48 @@ rolls it when the key leaves the chart
 Not in this step:
 - telling the buyers who hold tickets from those who have not ordered: the refinement
   above;
-- a chair whose checkout `Reserve` refuses is still held for the token's 15 minutes.
-  This rule admits fewer such buyers; it does not free their chairs.
+- a chair whose checkout `Reserve` refuses is still held until its window ends. This
+  rule admits fewer such buyers; it does not free their chairs.
+
+## The end of a sell-out
+
+**Status:** specified 2026-10-01; built; not yet verified on k3s.
+[0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md), proposed.
+
+Since the room is the event's tickets, every chair stands for a ticket. Three kinds of
+chair stand for one without taking it, and each held its place for the token's 15
+minutes:
+
+| Chair | Holds a place until | Because |
+|---|---|---|
+| admitted, never orders | its token ends | nothing else ends an unused admission |
+| its `Reserve` refused | its token ends | order-svc tells the waitroom nothing |
+| ordered, holding tickets | its order settles, up to the 9-minute hold | `available` already leaves its tickets out, so it counts twice |
+
+At the end of a sell-out each holds back one buyer: three such chairs on the last three
+tickets stopped the line for up to 15 minutes, with the tickets unsold.
+
+The rule: **an admitted buyer has five minutes to start a checkout.** The checkout
+token and the chair both last `waitroom.checkoutWindow`, 5 minutes, which the chart
+passes as the waitroom's `JWT_EXPIRY`.
+- Each kind of chair above holds a place for at most 5 minutes.
+- A checkout started in time is unchanged. The token is checked only when the order is
+  created; the hold and the order's own clock govern it from there.
+- A checkout's chair usually ends before its hold does, which ends the double count
+  from then on. `checkout.expired` still ends the session and invalidates the token.
+
+What it costs:
+- a buyer who takes longer than 5 minutes to start a checkout joins again, behind
+  whoever is waiting;
+- a retried `POST /orders` after 5 minutes, sent to recover a lost payment link, is
+  refused; the order still expires on its own.
+
+Not in this step:
+- a buyer leaving the room the moment their order holds tickets, by a
+  `checkout.started` event from order-svc: it would remove the double count rather than
+  bound it, at the cost of a topic, a producer and a consumer;
+- freeing a refused buyer's chair at once: they would lose the chance to retry with
+  fewer tickets.
 
 ## What comes next, in order
 
@@ -347,6 +388,8 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
    verified on k3s 2026-10-01. The design first read "the smaller of the event's size
    and door speed × time to pay". Door speed × time to pay is a property of the
    target, and it cannot bind, so only the event's tickets are left.
+5. **The end of a sell-out.** The section above; added 2026-10-01, once step 4 made
+   every chair stand for a ticket.
 
 ## Not in scope
 

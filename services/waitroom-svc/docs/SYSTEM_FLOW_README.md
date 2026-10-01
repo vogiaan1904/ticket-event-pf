@@ -223,7 +223,7 @@ LRANGE waitroom:queue_ready:pending 0 -1
 |-------|-------|------|---------|
 | **CHECKOUT_COMPLETED** | `checkout.completed` | Payment success | Free slot, update session |
 | **CHECKOUT_FAILED** | `checkout.failed` | Payment failed | Free slot, mark failed |
-| **CHECKOUT_EXPIRED** | `checkout.expired` | 15-min timeout | Free slot, mark expired |
+| **CHECKOUT_EXPIRED** | `checkout.expired` | the order's hold expired unpaid (~9 min) | Free slot, mark expired |
 
 **File:** [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go)
 
