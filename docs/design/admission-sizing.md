@@ -347,9 +347,9 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
    The section *When a checkout is abandoned* above; built and verified on k3s
    2026-09-30: an abandoned chair frees at about 9 minutes.
 4. **Room size per event.** The section *Room size per event* above; built and
-   verified on k3s 2026-10-01. The design first read "the smaller of the event's size and door speed ×
-   time to pay". Door speed × time to pay is a property of the target, and it cannot
-   bind, so only the event's tickets are left.
+   verified on k3s 2026-10-01. The design first read "the smaller of the event's size
+   and door speed × time to pay". Door speed × time to pay is a property of the
+   target, and it cannot bind, so only the event's tickets are left.
 
 ## Not in scope
 
