@@ -100,6 +100,18 @@ export interface GetAvailabilityResponse {
   availableQuantity: number;
 }
 
+export interface GetEventStockRequest {
+  eventId: string;
+}
+
+/** Counted over the event's classes that can still sell: ACTIVE, not past their end. */
+export interface GetEventStockResponse {
+  total: number;
+  sold: number;
+  /** On sale now, and neither held nor sold. */
+  available: number;
+}
+
 export interface CheckAvailabilityItem {
   ticketClassId: string;
   quantity: number;
@@ -129,6 +141,8 @@ export interface InventoryServiceClient {
   checkAvailability(request: CheckAvailabilityRequest): Observable<CheckAvailabilityResponse>;
 
   getAvailability(request: GetAvailabilityRequest): Observable<GetAvailabilityResponse>;
+
+  getEventStock(request: GetEventStockRequest): Observable<GetEventStockResponse>;
 
   reserve(request: ReserveRequest): Observable<Empty>;
 
@@ -164,6 +178,10 @@ export interface InventoryServiceController {
     request: GetAvailabilityRequest,
   ): Promise<GetAvailabilityResponse> | Observable<GetAvailabilityResponse> | GetAvailabilityResponse;
 
+  getEventStock(
+    request: GetEventStockRequest,
+  ): Promise<GetEventStockResponse> | Observable<GetEventStockResponse> | GetEventStockResponse;
+
   reserve(request: ReserveRequest): void;
 
   confirm(request: ConfirmRequest): void;
@@ -181,6 +199,7 @@ export function InventoryServiceControllerMethods() {
       "deleteTicketClass",
       "checkAvailability",
       "getAvailability",
+      "getEventStock",
       "reserve",
       "confirm",
       "release",

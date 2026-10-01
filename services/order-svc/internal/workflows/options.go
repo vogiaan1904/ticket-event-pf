@@ -7,6 +7,13 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// shortStepsChangeID versions the move of short steps to local activities.
+const shortStepsChangeID = "short-steps-local"
+
+// shortStepAttemptTimeout bounds one attempt of a local step, well inside the
+// 10s workflow task it runs in.
+const shortStepAttemptTimeout = 5 * time.Second
+
 func getCreateOrderActivityOptions() workflow.ActivityOptions {
 	return workflow.ActivityOptions{
 		StartToCloseTimeout: time.Minute * 2,

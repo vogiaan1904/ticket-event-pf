@@ -5,9 +5,9 @@ import (
 	pkgDynamo "github.com/vogiaan1904/ticketbottle-order/pkg/dynamodb"
 )
 
-func (r *implRepository) buildOrderItemModel(orderCode string, opt CreateOrderItemOption) models.OrderItem {
+func (r *implRepository) buildOrderItemModel(orderCode string, pos int, opt CreateOrderItemOption) models.OrderItem {
 	now := r.clock()
-	itemID := pkgDynamo.GenerateItemID()
+	itemID := pkgDynamo.OrderItemID(orderCode, pos)
 
 	m := models.OrderItem{
 		// DynamoDB keys

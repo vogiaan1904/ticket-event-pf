@@ -19,6 +19,11 @@ enum OrderStatus {
     ORDER_STATUS_COMPLETED = 2;
     ORDER_STATUS_CANCELED = 3;
     ORDER_STATUS_FAILED = 4;
+    // Its hold expired before anyone paid.
+    ORDER_STATUS_EXPIRED = 5;
+    // Paid, but the tickets could not be issued: the buyer is owed the money.
+    ORDER_STATUS_REFUND_REQUIRED = 6;
+    ORDER_STATUS_REFUNDED = 7;
 }
 
 message Order {
@@ -93,7 +98,9 @@ message GetManyOrdersResponse {
 }
 
 message GetOrderRequest {
-        string code = 1;
+    string code = 1;
+    // The caller. Only the order's owner may read it; anyone else is told it does not exist.
+    string user_id = 2;
 }
 
 message GetOrderResponse {
@@ -110,4 +117,6 @@ message ListOrdersResponse {
 
 message CancelOrderRequest {
     string code = 1;
+    // The caller. Only the order's owner may cancel it; anyone else is told it does not exist.
+    string user_id = 2;
 }

@@ -18,6 +18,7 @@ var (
 	ErrEventNotFound       = pkgErrors.NewGRPCError(codes.NotFound, "WTR006", "Event not found")
 	ErrEventConfigNotFound = pkgErrors.NewGRPCError(codes.NotFound, "WTR008", "Event config not found")
 	ErrWaitRoomNotAllowed  = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR009", "Wait room is not allowed")
+	ErrSoldOut             = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR012", "Sold out")
 
 	ErrEventServiceUnavailable = pkgErrors.NewGRPCError(codes.Unavailable, "WTR010", "Event service unavailable")
 	ErrEventServiceTimeout     = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "WTR011", "Event service timed out")
@@ -44,11 +45,25 @@ func (svc *grpcService) mapGRPCError(err error) error {
 		return ErrEventConfigNotFound
 	case errors.Is(err, service.ErrWaitRoomNotAllowed):
 		return ErrWaitRoomNotAllowed
+	case errors.Is(err, service.ErrSoldOut):
+		return ErrSoldOut
 	case errors.Is(err, service.ErrEventServiceUnavailable):
 		return ErrEventServiceUnavailable
 	case errors.Is(err, service.ErrEventServiceTimeout):
 		return ErrEventServiceTimeout
 	default:
 		return err
+	}
+}
+
+// isFault reports whether a call failed on our side, rather than being refused.
+// A refusal (sold out, not found) is the caller's outcome, and the metric's code
+// label already counts it; logging it as an error buries the real failures.
+func isFault(c codes.Code) bool {
+	switch c {
+	case codes.Internal, codes.Unknown, codes.Unavailable, codes.DeadlineExceeded, codes.DataLoss:
+		return true
+	default:
+		return false
 	}
 }

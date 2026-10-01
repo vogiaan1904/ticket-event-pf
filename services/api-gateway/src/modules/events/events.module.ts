@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { EVENT_PACKAGE_NAME, EVENT_SERVICE_NAME } from '@/protogen/event.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
+import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { join } from 'path';
             url: config.microservicesConfig.eventsServiceUrl,
             package: EVENT_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'event.proto'),
+            loader: GRPC_LOADER_OPTIONS,
           },
         }),
         inject: [AppConfigService],

@@ -23,6 +23,7 @@ import (
 type admissionRig struct {
 	svc    WaitroomService
 	proc   *queueProcessor
+	inv    *fakeInventoryClient
 	cli    *redis.Client
 	eID    string
 	owners map[string]string
@@ -52,7 +53,7 @@ func sleepPastSecond() {
 	time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second + 20*time.Millisecond)))
 }
 
-func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interleavingProducer) *admissionRig {
+func newAdmissionRig(t *testing.T, saleStart time.Time, prod *interleavingProducer) *admissionRig {
 	t.Helper()
 
 	addr := os.Getenv("WAITROOM_TEST_REDIS_ADDR")
@@ -68,17 +69,19 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 
 	ssSvc := NewSessionService(repo.NewRedisSessionRepository(cli, l), config.JWTConfig{Secret: "test", Expiry: 15 * time.Minute}, l)
 	qSvc := NewQueueService(repo.NewRedisQueueRepository(cli, l), l)
+	inv := plentyOfStock()
+	stock := NewStockGate(inv, time.Millisecond, l)
 	proc := &queueProcessor{
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
+		stock: stock,
 		prod:  prod,
 		l:     l,
 		cfg: ProcessorConfig{
-			MaxConcurrentPerEvent: slots,
-			BatchSize:             10,
-			RetryAttempts:         2,
-			RetryDelay:            time.Millisecond,
-			CheckoutTTL:           15 * time.Minute,
+			BatchSize:     10,
+			RetryAttempts: 2,
+			RetryDelay:    time.Millisecond,
+			CheckoutTTL:   15 * time.Minute,
 		},
 		stopCh: make(chan struct{}),
 	}
@@ -94,8 +97,9 @@ func newAdmissionRig(t *testing.T, saleStart time.Time, slots int, prod *interle
 	})
 
 	return &admissionRig{
-		svc:    NewWaitroomService(qSvc, ssSvc, ev, prod, l, proc, time.Minute),
+		svc:    NewWaitroomService(qSvc, ssSvc, ev, stock, prod, l, proc, time.Minute),
 		proc:   proc,
+		inv:    inv,
 		cli:    cli,
 		eID:    eID,
 		owners: make(map[string]string),
@@ -131,7 +135,7 @@ func (r *admissionRig) status(t *testing.T, ssID string) *QueueStatusOutput {
 // --- tests -------------------------------------------------------------------
 
 func TestAPostOpenJoinerIsAdmittedWithinASecond(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 
 	ssID := r.join(t, "u-1")
 	sleepPastSecond()
@@ -145,7 +149,7 @@ func TestAPostOpenJoinerIsAdmittedWithinASecond(t *testing.T) {
 // Invariant: a join never undoes an admission that lands while it is in flight.
 func TestAnAdmissionDuringTheJoinIsNotUndone(t *testing.T) {
 	prod := &interleavingProducer{tickOnJoin: true}
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, prod)
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), prod)
 
 	ssID := r.join(t, "u-1")
 	if !prod.ticked {
@@ -158,7 +162,7 @@ func TestAnAdmissionDuringTheJoinIsNotUndone(t *testing.T) {
 }
 
 func TestNobodyIsAdmittedBeforeTheSaleOpens(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(time.Hour), &interleavingProducer{})
 
 	ssID := r.join(t, "u-1")
 	sleepPastSecond()
@@ -171,7 +175,7 @@ func TestNobodyIsAdmittedBeforeTheSaleOpens(t *testing.T) {
 
 func TestPreOpenJoinersAreAdmittedOnceTheSaleOpens(t *testing.T) {
 	saleStart := time.Now().Truncate(time.Second).Add(2 * time.Second)
-	r := newAdmissionRig(t, saleStart, 10, &interleavingProducer{})
+	r := newAdmissionRig(t, saleStart, &interleavingProducer{})
 	ids := []string{r.join(t, "u-1"), r.join(t, "u-2"), r.join(t, "u-3")}
 
 	r.tick(t)
@@ -194,7 +198,7 @@ func TestPreOpenJoinersAreAdmittedOnceTheSaleOpens(t *testing.T) {
 // [saleStart-1, saleStart), and the resulting order not arrival's.
 func TestThePreOpenQueueIsOrderedByLotInRedis(t *testing.T) {
 	saleStart := time.Now().Add(time.Hour).Truncate(time.Second)
-	r := newAdmissionRig(t, saleStart, 0, &interleavingProducer{})
+	r := newAdmissionRig(t, saleStart, &interleavingProducer{})
 
 	const n = 40
 	arrival := make([]string, n)
@@ -227,7 +231,7 @@ func TestThePreOpenQueueIsOrderedByLotInRedis(t *testing.T) {
 }
 
 func TestOnlyTheOwnerCanReadOrLeaveASession(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 	ssID := r.join(t, "u-owner")
 	ctx := context.Background()
 
@@ -244,7 +248,7 @@ func TestOnlyTheOwnerCanReadOrLeaveASession(t *testing.T) {
 
 // A stranger learns nothing about a session, not even that it has ended.
 func TestAStrangerCannotTellAnEndedSessionExists(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 	ssID := r.join(t, "u-owner")
 	ctx := context.Background()
 	if err := r.svc.LeaveQueue(ctx, ssID, "u-owner"); err != nil {

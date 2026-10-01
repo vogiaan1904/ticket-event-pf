@@ -120,4 +120,37 @@ if [ -f "$REAL" ]; then
   echo "OK  goldens carry no real secret"
 fi
 
+# Door speed is a per-target value, so it must reach the waitroom's ConfigMap.
+dr=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=3)
+grep -q 'QUEUE_DEFAULT_RELEASE_RATE: "3"' <<<"$dr" || fail "waitroom.releaseRate does not reach waitroom-config"
+echo "OK  the waitroom's door speed comes from values"
+
+# The window to start a checkout bounds every chair that takes no ticket (0027).
+wm() { awk '/^metadata: { name: waitroom-config,/{f=1} f && /JWT_EXPIRY:/{print $2; exit}' <<<"$1"; }
+[ "$(wm "$dr")" = '"5m"' ] || fail "waitroom-config's JWT_EXPIRY is $(wm "$dr"), want \"5m\""
+cw=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.checkoutWindow=7m)
+[ "$(wm "$cw")" = '"7m"' ] || fail "waitroom.checkoutWindow does not reach waitroom-config"
+echo "OK  the waitroom's checkout window comes from values"
+
+# A ConfigMap change must roll the app that reads it, and only that app: each app
+# carries a digest of its own ConfigMap. Change the waitroom's and compare.
+digest() { awk -v d="$2" '/^---/{k=0;f=0} /^kind: Deployment$/{k=1} k && $0=="  name: "d{f=1} f && /checksum\/config:/{print $2; exit}' <<<"$1"; }
+r7=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=7)
+r8=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" --set waitroom.releaseRate=8)
+[ -n "$(digest "$r7" waitroom-service)" ] || fail "waitroom-service carries no checksum/config"
+[ "$(digest "$r7" waitroom-service)" != "$(digest "$r8" waitroom-service)" ] || fail "a waitroom config change does not roll the waitroom"
+[ "$(digest "$r7" order-service)" = "$(digest "$r8" order-service)" ] || fail "a waitroom config change rolls order-service too"
+echo "OK  a config change rolls the app that reads it, and only that app"
+
+# A migration reaches the database before the code that reads it rolls (0022). On a
+# first install it cannot: Postgres itself comes from this chart.
+helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" > "$actual"
+for svc in user event payment; do
+  hook=$(awk -v n="$svc-migrate" 'BEGIN { RS = "\n---\n" } /kind: Job/ && $0 ~ ("\n  name: " n "\n")' "$actual" \
+         | sed -n 's/^ *"helm.sh\/hook": *//p')
+  case ",$hook," in *,pre-upgrade,*) ;; *) fail "$svc-migrate runs as '$hook': an upgrade rolls new code before its schema";; esac
+  case ",$hook," in *,post-install,*) ;; *) fail "$svc-migrate runs as '$hook': a first install never migrates";; esac
+done
+echo "OK  migrations run before an upgrade's rollout, and after a first install"
+
 echo "all render assertions passed"

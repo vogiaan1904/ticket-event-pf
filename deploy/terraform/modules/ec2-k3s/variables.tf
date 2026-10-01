@@ -13,6 +13,11 @@ variable "instance_type" {
   type    = string
   default = "t3.large"
 }
+variable "cpu_credits" {
+  type        = string
+  default     = "unlimited"
+  description = "T-family CPU credit mode. The box's measured capacity needs unlimited: docs/design/admission-sizing.md"
+}
 variable "root_volume_gb" {
   type    = number
   default = 50

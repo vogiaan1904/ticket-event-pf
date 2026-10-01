@@ -27,7 +27,6 @@ type fakeQueue struct {
 
 	removeCalls [][]string
 
-
 	// buffered QUEUE_READY payloads awaiting republish
 	buffered        []string
 	bufferErr       error
@@ -156,7 +155,7 @@ func (f *fakeSessions) UpdateSessionStatus(_ context.Context, ssID string, st mo
 func (f *fakeSessions) CreateSession(context.Context, string, string, string, string, time.Time) (*models.Session, error) {
 	return nil, nil
 }
-func (f *fakeSessions) UpdateSession(context.Context, *models.Session) error          { return nil }
+func (f *fakeSessions) UpdateSession(context.Context, *models.Session) error { return nil }
 func (f *fakeSessions) ActiveSession(c context.Context, id, _ string) (*models.Session, error) {
 	return f.GetSession(c, id)
 }
@@ -186,17 +185,18 @@ func queuedSession(id string) *models.Session {
 }
 
 func newTestProcessor(q *fakeQueue, s *fakeSessions, p *fakeProducer) *queueProcessor {
+	l := logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"})
 	return &queueProcessor{
 		qSvc:  q,
 		ssSvc: s,
+		stock: NewStockGate(plentyOfStock(), time.Minute, l),
 		prod:  p,
-		l:     logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"}),
+		l:     l,
 		cfg: ProcessorConfig{
-			MaxConcurrentPerEvent: 10,
-			BatchSize:             10,
-			RetryAttempts:         2,
-			RetryDelay:            time.Millisecond,
-			CheckoutTTL:           15 * time.Minute,
+			BatchSize:     10,
+			RetryAttempts: 2,
+			RetryDelay:    time.Millisecond,
+			CheckoutTTL:   15 * time.Minute,
 		},
 		stopCh: make(chan struct{}),
 	}
@@ -368,22 +368,6 @@ func TestRemovalFailureIsSelfCorrecting(t *testing.T) {
 
 	if slices.Contains(q.queued, "ss-1") {
 		t.Errorf("second tick should have dropped the settled entry, queue = %v", q.queued)
-	}
-}
-
-func TestNoSlotsAvailableLeavesQueueUntouched(t *testing.T) {
-	q := newFakeQueue("ss-1")
-	for i := range 10 {
-		q.processing[string(rune('a'+i))] = true
-	}
-	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
-
-	if err := newTestProcessor(q, s, &fakeProducer{}).ProcessEventQueue(context.Background(), "e-1"); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if !slices.Equal(q.queued, []string{"ss-1"}) {
-		t.Errorf("queue = %v, want [ss-1] untouched when no slots are free", q.queued)
 	}
 }
 

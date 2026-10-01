@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { WAITROOM_SERVICE_NAME, WAITROOM_V1_PACKAGE_NAME } from '@/protogen/waitroom.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
+import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { join } from 'path';
             url: config.microservicesConfig.waitroomServiceUrl,
             package: WAITROOM_V1_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'waitroom.proto'),
+            loader: GRPC_LOADER_OPTIONS,
           },
         }),
         inject: [AppConfigService],

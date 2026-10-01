@@ -61,6 +61,8 @@ export interface EventConfig {
   requiresApproval: boolean;
   allowWaitRoom: boolean;
   isNewTrending: boolean;
+  /** Tickets one order may take; 0 means not set. */
+  maxTicketsPerOrder: number;
 }
 
 export interface EventLocation {
@@ -197,6 +199,8 @@ export interface CreateEventConfigRequest {
   requiresApproval: boolean;
   allowWaitRoom: boolean;
   isNewTrending: boolean;
+  /** 0 leaves it unset: the default on create, unchanged on update. */
+  maxTicketsPerOrder: number;
 }
 
 export interface CreateEventConfigResponse {
@@ -223,6 +227,8 @@ export interface UpdateEventConfigRequest {
   requiresApproval: boolean;
   allowWaitRoom: boolean;
   isNewTrending: boolean;
+  /** 0 leaves it unset: the default on create, unchanged on update. */
+  maxTicketsPerOrder: number;
 }
 
 export interface UpdateEventConfigResponse {

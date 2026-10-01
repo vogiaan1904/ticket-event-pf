@@ -144,4 +144,34 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0017](0017-an-exhausted-payment-event-pages.md) | How does a payment event that can never publish become visible on the cluster? | A gauge of rows past the retry cap, a page on any, recovery by one hand-run `UPDATE` | Also capping retries by time, so a long Kafka outage strands nothing | A Kafka outage longer than ~13 minutes strands every row it touches until someone resets them | accepted |
+
+### saga-orchestration-cost
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0018](0018-short-saga-steps-run-as-local-activities.md) | Which saga steps pay a Temporal task-queue hand-off? | Six short, idempotent steps run as local activities behind a workflow version; reserve, confirm and the payment intent stay remote | Merging steps into fewer regular activities | A local step re-runs when the workflow task that ran it fails, so every such step must be idempotent, and its workflow tests run real activities over fakes | accepted |
+
+### admission-sizing
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0019](0019-the-waitroom-door-speed-is-sized-per-target.md) | What sets how fast the waitroom admits buyers? | A door speed per deployment target, measured on it at the checkout SLO | One global constant, or a door that adapts to latency | A number that is wrong as soon as the machine, its CPU credit mode or the cost per purchase changes, until someone measures again | accepted |
+| [0020](0020-a-config-change-rolls-the-app-that-reads-it.md) | How does a changed ConfigMap reach the pods that read it? | Each app's pod template carries a digest of its own ConfigMap, so `helm upgrade` rolls exactly the apps whose config changed | `kubectl rollout restart` after a deploy | A template helper that finds each app's ConfigMap in `apps/config.yaml`, and one roll of every app when the digests first appear | accepted |
+| [0021](0021-an-order-takes-at-most-its-events-ticket-limit.md) | How many tickets may one order take? | A limit per event, default 4, checked in order-svc before anything is held | No limit; one limit for every event; a limit per ticket class | A field through five layers of event-svc and the gateway, and 0 on the wire has to mean "not set" | accepted |
+| [0023](0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md) | What does the waitroom do when an event's tickets run out? | Asks inventory each tick; pauses while nothing is available; ends the line once sold out; fails open | Admit regardless; inventory sends a message; keep waiters on a sold-out line; fail closed | Inventory joins the join and status paths, cached for half a tick; a waiter loses their place if tickets come back | accepted |
+| [0024](0024-an-unpaid-order-times-out-when-its-hold-expires.md) | Who notices a checkout nobody pays for, and when? | order-svc, from a Temporal workflow delayed by the hold's length, which times the order out and publishes `checkout.expired` | The chair's TTL following the hold; a payment-svc sweeper; nothing, as today | One more Temporal workflow per order, and one start call on the checkout path, both unmeasured | accepted |
+| [0025](0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md) | How many buyers may hold inventory at once, and can it vary per event? | As many as the event has tickets available: a tick admits only while `available` exceeds the buyers inside, and the global 100 is deleted | Inventory counting the orders that hold, so a buyer holding tickets is not counted twice; an organizer field on `EventConfig`; keeping 100, globally or per target | The last tickets of a sell-out can wait up to one payment time for a chair to free; no lever caps chairs on its own | accepted |
+| [0027](0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md) | How long may an admitted buyer hold a place before starting a checkout? | 5 minutes: the checkout token and its chair both last 5 minutes, down from 15 | A `checkout.started` event that frees a buyer's chair once their order holds tickets; freeing a refused buyer's chair at once; 3 or 10 minutes; keeping 15 | A buyer slower than 5 minutes joins again, behind whoever waits; a retried `POST /orders` after 5 minutes cannot recover a lost payment link | accepted |
+
+### schema-migrations
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0022](0022-a-migration-runs-before-the-code-that-needs-it.md) | When does a schema migration run, relative to the code that reads it? | Before an upgrade's rollout (`pre-upgrade`); after a first install (`post-install`) | After the rollout, as before; an init container in each service | Every migration must work with the code already running, and the Job reads the ConfigMap and Secret from before the upgrade | accepted |
+
+### order-contract
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0026](0026-the-order-contract-tells-the-buyer-what-happened.md) | What does the order contract tell a buyer, and who may read or cancel an order? | Every stored status gets its own wire value; order-svc checks the owner on read and cancel, with `user_id` in the contract; a cancel is a conditional `PENDING` → `CANCELLED` write; the gateway's routes follow the contract | Keeping `TIMEOUT` as `CANCELED` and refunds as `UNSPECIFIED`; an owner check in the gateway only; removing cancel | A contract change across order-svc and the gateway; until both have rolled, an old gateway's reads are refused for want of `user_id` | accepted |
 <!-- decisions:index:end -->

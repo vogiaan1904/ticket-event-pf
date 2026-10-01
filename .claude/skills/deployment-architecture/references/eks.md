@@ -251,8 +251,8 @@ not replica count. Measured ~1300 reserves/sec, peaking at four concurrent reser
 throughput on the contended path.
 
 **Ceiling 2 is not reached at the shipped configuration**, so it is not a to-do. The waitroom admits
-at `QUEUE_DEFAULT_MAX_CONCURRENT / checkout duration` — 100 slots against a 15-minute `JWT_EXPIRY`,
-i.e. under 1 admit/sec against a ~1300/sec ceiling. Lifting it is a data-model change worth making
+at most its door speed — 10 a second on EKS, unmeasured, and 2 on k3s — against a ~1300/sec
+ceiling. Lifting it is a data-model change worth making
 only if the admission rate is raised toward it.
 
 **3 — every PVC-backed pod is pinned to one availability zone.** The EBS CSI driver writes node

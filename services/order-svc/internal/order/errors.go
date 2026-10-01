@@ -18,6 +18,8 @@ var (
 	ErrTicketSoldOut        = errors.New("ticket sold out")
 	ErrNotEnoughTickets     = errors.New("not enough tickets available")
 	ErrEventConfigNotFound  = errors.New("event config not found")
+	// The order asks for more tickets than its event lets one order take.
+	ErrTooManyTicketsInOrder = errors.New("too many tickets in one order")
 
 	ErrInvalidCheckoutToken = errors.New("invalid checkout token")
 

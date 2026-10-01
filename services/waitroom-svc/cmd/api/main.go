@@ -90,15 +90,24 @@ func main() {
 	}
 	defer eventSvcClose()
 
+	invSvc, invSvcClose, err := pkgGrpc.NewInventoryClient(cfg.Microservice.Inventory)
+	if err != nil {
+		l.Fatalf(ctx, "Failed to initialize gRpc inventory service client: %v", err)
+	}
+	defer invSvcClose()
+
 	// Initialize services
 	ssSvc := service.NewSessionService(ssRepo, cfg.JWT, l)
 	qSvc := service.NewQueueService(qRepo, l)
 
+	// Half a tick, so every tick asks inventory afresh.
+	stock := service.NewStockGate(invSvc, cfg.Queue.ProcessInterval/2, l)
+
 	// Initialize queue processor
-	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, eventSvc, prod, l, cfg.Queue, cfg.JWT)
+	queueProcessor := service.NewQueueProcessor(qSvc, ssSvc, stock, prod, l, cfg.Queue, cfg.JWT)
 
 	// Initialize waitroom service with processor
-	wrSvc := service.NewWaitroomService(qSvc, ssSvc, eventSvc, prod, l, queueProcessor, cfg.Queue.EventCacheTTL)
+	wrSvc := service.NewWaitroomService(qSvc, ssSvc, eventSvc, stock, prod, l, queueProcessor, cfg.Queue.EventCacheTTL)
 
 	// Waitroom Consumer. Messages it cannot process are parked on <topic>.dlq
 	// rather than skipped, so a checkout slot is never silently stranded.

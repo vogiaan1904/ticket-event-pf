@@ -44,6 +44,8 @@ message QueueStatusResponse {
   string checkout_url = 8;
   string checkout_expires_at = 9;
   string admitted_at = 10;
+  // The door is shut until a ticket is available again; the place is kept.
+  bool paused = 11;
 }
 
 message LeaveQueueRequest {

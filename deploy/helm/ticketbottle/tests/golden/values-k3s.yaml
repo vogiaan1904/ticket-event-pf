@@ -147,13 +147,13 @@ data:
   # In-place retries before a message is parked on <topic>.dlq; backoff doubles.
   KAFKA_CONSUMER_RETRY_MAX: "5"
   KAFKA_CONSUMER_RETRY_BACKOFF: 500ms
-  QUEUE_DEFAULT_MAX_CONCURRENT: "100"
-  QUEUE_DEFAULT_RELEASE_RATE: "10"
+  QUEUE_DEFAULT_RELEASE_RATE: "2"
   QUEUE_PROCESS_INTERVAL: 1s
   QUEUE_SESSION_TTL: 7200s
   QUEUE_EVENT_CACHE_TTL: 30s
   EVENT_SERVICE_ADDR: event-service:50053
-  JWT_EXPIRY: 15m
+  INVENTORY_SERVICE_ADDR: inventory-service:50057
+  JWT_EXPIRY: "5m"
   LOGGER_LEVEL: debug
   LOGGER_MODE: development
   LOGGER_ENCODING: console
@@ -556,8 +556,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: cfa882c97d95d109e880a80a948ec536a7fd8695f3686e0f733a9c2d8e75995c
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: event-service }
     spec:
@@ -602,8 +603,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: c10cc4f239311bc6e60498ec591f4b000eecb747ec5df988c7ccf72e5508037e
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: app-gateway }
     spec:
@@ -649,8 +651,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: 42d5a58536ea220ae0000472ebdd6c83abbf194374fa0bd3e25c5a0c16ceede5
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: inventory-service }
     spec:
@@ -695,8 +698,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: e75b40ce12b071f72af3aae7da84d6a5ce7d0197bfbe1d9dd0cbb83a54f1a708
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: order-service }
     spec:
@@ -741,8 +745,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: e75b40ce12b071f72af3aae7da84d6a5ce7d0197bfbe1d9dd0cbb83a54f1a708
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: order-consumer }
     spec:
@@ -862,8 +867,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: 6faddf57faea5844750be0cbbdb7c2ca44b6cdc8c8d69e8eeadd426d2ab21ad9
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: payment-service }
     spec:
@@ -908,8 +914,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: fd7b7f9bed313d8e74d7881c51cc8f9ab1c95e4b73077e09e38f5a31dfe3cc93
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: user-service }
     spec:
@@ -954,8 +961,9 @@ spec:
   template:
     metadata:
       annotations:
-        # Env is resolved at container creation, so a Secret change alone leaves
-        # pods running the old values. The digest rolls them.
+        # Env is resolved at container creation, so a ConfigMap or Secret change
+        # alone leaves pods running the old values. The digests roll them.
+        checksum/config: c39add852448667f00803dcbb6d2d283ec740964cf193bcd01274be7dc2560c9
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: waitroom-service }
     spec:
@@ -1550,7 +1558,9 @@ metadata:
     app.kubernetes.io/part-of: ticketbottle
     app.kubernetes.io/managed-by: Helm
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
+    # Before an upgrade's rollout, so new code never reads a schema that is not there
+    # yet; after a first install, when Postgres comes from this chart. See 0022.
+    "helm.sh/hook": pre-upgrade,post-install
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
@@ -1582,7 +1592,9 @@ metadata:
     app.kubernetes.io/part-of: ticketbottle
     app.kubernetes.io/managed-by: Helm
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
+    # Before an upgrade's rollout, so new code never reads a schema that is not there
+    # yet; after a first install, when Postgres comes from this chart. See 0022.
+    "helm.sh/hook": pre-upgrade,post-install
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
@@ -1614,7 +1626,9 @@ metadata:
     app.kubernetes.io/part-of: ticketbottle
     app.kubernetes.io/managed-by: Helm
   annotations:
-    "helm.sh/hook": post-install,post-upgrade
+    # Before an upgrade's rollout, so new code never reads a schema that is not there
+    # yet; after a first install, when Postgres comes from this chart. See 0022.
+    "helm.sh/hook": pre-upgrade,post-install
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:

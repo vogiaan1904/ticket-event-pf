@@ -75,6 +75,7 @@ export class EventsService {
     const createConfigResp = await firstValueFrom(
       this.eventService.createConfig({
         ...dto,
+        maxTicketsPerOrder: dto.maxTicketsPerOrder ?? 0,
         eventId: id,
         userId: user.id,
       }),
@@ -85,7 +86,13 @@ export class EventsService {
 
   async updateConfig(user: RequestUser, id: string, dto: UpdateConfigDto): Promise<EventConfig> {
     const updateConfigResp = await firstValueFrom(
-      this.eventService.updateConfig({ ...dto, eventId: id, userId: user.id }),
+      this.eventService.updateConfig({
+        ...dto,
+        // 0 is unset on the wire: event-svc keeps the stored limit.
+        maxTicketsPerOrder: dto.maxTicketsPerOrder ?? 0,
+        eventId: id,
+        userId: user.id,
+      }),
     );
 
     return updateConfigResp.eventConfig;

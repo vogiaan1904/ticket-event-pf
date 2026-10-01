@@ -34,21 +34,10 @@ export class OrdersService {
     return createResp;
   }
 
-  async findById(id: string): Promise<Order> {
+  /** order-svc answers 404 when the order is not `user`'s. */
+  async findByCode(user: RequestUser, code: string): Promise<Order> {
     const getOrderResp = await firstValueFrom(
-      this.orderService.getOrder({
-        id,
-      }),
-    );
-
-    return getOrderResp.order;
-  }
-
-  async findByCode(code: string): Promise<Order> {
-    const getOrderResp = await firstValueFrom(
-      this.orderService.getOrder({
-        code,
-      }),
+      this.orderService.getOrder({ code, userId: user.id }),
     );
 
     return getOrderResp.order;
@@ -61,7 +50,7 @@ export class OrdersService {
   ): Promise<GetManyOrdersResponse> {
     const getManyResp = await firstValueFrom(
       this.orderService.getManyOrders({
-        page: pagination.page,
+        cursor: pagination.cursor ?? '',
         pageSize: pagination.limit,
         filter: {
           userId: user.id,
@@ -74,11 +63,8 @@ export class OrdersService {
     return getManyResp;
   }
 
-  async cancel(user: RequestUser, id: string): Promise<void> {
-    await firstValueFrom(
-      this.orderService.cancelOrder({
-        id,
-      }),
-    );
+  /** order-svc answers 404 when the order is not `user`'s, 409 once it is paid. */
+  async cancel(user: RequestUser, code: string): Promise<void> {
+    await firstValueFrom(this.orderService.cancelOrder({ code, userId: user.id }));
   }
 }

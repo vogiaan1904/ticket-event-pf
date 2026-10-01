@@ -30,6 +30,7 @@ export class EventMapper {
             ticketSaleEndDate: new Date(event.config.ticketSaleEndDate),
             isFree: event.config.isFree,
             maxAttendees: event.config.maxAttendees,
+            maxTicketsPerOrder: event.config.maxTicketsPerOrder,
             isPublic: event.config.isPublic,
             requiresApproval: event.config.requiresApproval,
             allowWaitRoom: event.config.allowWaitRoom,

@@ -27,6 +27,8 @@ inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in Dyna
 |---|---|---|
 | The steps of a purchase and their compensation | service `CLAUDE.md`, *Temporal workflows* | `services/order-svc/internal/workflows/create_order.go`, `services/order-svc/internal/workflows/steps.go` |
 | What happens after payment succeeds | same | `services/order-svc/internal/workflows/confirm_order.go` |
+| An order nobody pays for | `docs/design/admission-sizing.md`, *When a checkout is abandoned* | `services/order-svc/internal/workflows/expire_order.go` |
+| Who may read or cancel an order; which status reaches the wire | service `CLAUDE.md`, *Reading and cancelling an order*; `docs/decisions/0026-the-order-contract-tells-the-buyer-what-happened.md` | `services/order-svc/internal/order/service/order.go`, `services/order-svc/internal/order/delivery/grpc/presenter.go` |
 | Paid but not fulfillable — `REFUND_REQUIRED` | trace-purchase-flow skill, step 7; `docs/RUNBOOK.md`, *OrdersNeedingRefund* | `services/order-svc/internal/workflows/confirm_order.go` |
 | The buyer's purchase slot: a retried `CreateOrder`, and its release when one fails | `services/order-svc/docs/PURCHASE_SLOT.md` | `services/order-svc/internal/order/purchase_slot.go`, `services/order-svc/internal/order/service/order.go` |
 | Timeouts, hold length, retry policy | `services/order-svc/docs/RESERVATION_HOLD.md` | `services/order-svc/internal/workflows/shared.go`, `services/order-svc/internal/workflows/options.go` |

@@ -26,6 +26,7 @@ describing it for a week — because the fact had been copied rather than linked
 |---|---|---|
 | How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2) built; (b)–(f) specified, unbuilt |
 | What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
+| Why does the checkout miss its 2s SLO on the k3s box? | `docs/plans/2026-09-27-checkout-latency-decomposition.md` | Measured 2026-09-27: the box saturates at ten buyers; the opening burst queues in Temporal for up to 8s |
 | In what order are queued buyers admitted? | `services/waitroom-svc/CLAUDE.md` | Draw before sale open, arrival after; nothing admitted before the sale opens; 2026-09-23 |
 | Do the waitroom's stampede changes survive an end-to-end run? | `docs/plans/2026-09-23-waitroom-admission-correctness.md` | Yes, on k3s 2026-09-23, after five defects were fixed |
 | How does a waiting client learn its position and token? | `services/waitroom-svc/CLAUDE.md` | Polling; the push stream was removed 2026-09-23 |
@@ -41,17 +42,25 @@ describing it for a week — because the fact had been copied rather than linked
 | Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet |
 | How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; built; measured on k3s 2026-09-27 |
 | How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; built; verified on k3s 2026-09-27 |
+| Should the short saga steps run as local activities? | `docs/decisions/0018` | Yes: six steps local behind a workflow version; Temporal's CPU per purchase halved; measured on k3s 2026-09-29 |
+| How fast may the waitroom admit buyers, and what sets the rate? | `docs/design/admission-sizing.md` | Per deployment target, from a sweep at the checkout SLO; k3s admits 2 a second, measured 2026-09-29; EKS runs the unmeasured default of 10 |
+| How does a changed ConfigMap reach the pods that read it? | `docs/decisions/0020` | A digest of each app's own ConfigMap in its pod template; built and verified on k3s 2026-09-29 |
+| How many tickets may one order take? | `docs/decisions/0021` | A limit per event, default 4; refused before anything is held; built and verified on k3s 2026-09-29 |
+| When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
+| What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
+| What happens to an order nobody pays for? | `docs/decisions/0024` | Times out at its hold's expiry, frees the chair; built and verified on k3s 2026-09-30 |
+| How many buyers may hold inventory at once, and can it vary per event? | `docs/decisions/0025` | As many as the event has tickets available, checked each tick; the global 100 is deleted; built and verified on k3s 2026-10-01 |
+| How long does an admitted buyer have to start a checkout? | `docs/decisions/0027` | 5 minutes, the token's and its chair's lifetime, from `waitroom.checkoutWindow`; built and verified on k3s 2026-10-01 |
+| What does an order tell its buyer, and who may read or cancel it? | `docs/decisions/0026` | Every stored status has its own wire value; only the owner reads or cancels, checked in order-svc; a cancel never overwrites a payment; built and verified on k3s 2026-10-01 |
 
 ### Open
 
 | Question | Why it is open |
 |---|---|
-| How many buyers may hold inventory at once, and can it vary per event? | `QUEUE_DEFAULT_MAX_CONCURRENT: 100` is global. `queue_processor.go` reads it once at construction, so `MaxConcurrentPerEvent` is per-event in name only — a 100k on-sale and a 500-seat show cannot be tuned apart. The per-event config path now exists (`internal/service/event_gate.go`), so this is a field and a knob, not a new mechanism. |
-| What fails first as concurrent checkouts rise into the thousands? | Unmeasured. Temporal's persistence shares the app's Postgres (`templates/infra/temporal.yaml:28`) against a stock `max_connections=100`, and its load scales with in-flight orders — so it is the suspect, but that is a reading, not a measurement. |
+| What fails first as concurrent checkouts rise into the thousands? | Not measurable on the k3s box: its 2 vCPUs saturate at ten buyers, so higher concurrency measures the box. What the box did measure is cost per purchase: Temporal and its Postgres (`templates/infra/temporal.yaml:28`) were the largest consumers until 0018 halved Temporal's share, and no per-workload breakdown has been taken since. Which testbed answers it is the architect's call: `docs/plans/2026-09-27-checkout-latency-decomposition.md#the-architects-calls-this-raises`. |
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
 | Why did one refused reconnect cost the gateway ~40s on 2026-09-25, and what bounds it when a backend crashes? | A rollout no longer triggers it (0015); a crash, out-of-memory kill or eviction still can. On 2026-09-25 the gateway's gRPC calls failed for 40.7s after a 1.8s TCP refusal, in 4 of 5 rollouts. On 2026-09-27 three traced rollouts of the same build recovered in about 1s — one `ECONNREFUSED`, then grpc-js's first backoff — and the 40s did not recur, so its cause is unknown: `docs/plans/2026-09-27-rollout-drain-fixes.md#results`. |
-| Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports
 
@@ -71,7 +80,7 @@ Ports below are the **authoritative** values (from each service's config/`main`)
 
 ## Architecture in one paragraph
 
-The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (dotted topic names: `queue.ready`, `payment.completed`, `checkout.completed`, `order.refund_required`, and their failure counterparts). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory, writes the order, then creates a payment intent → payment webhook → Payment writes an outbox row → the relay publishes it to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
+The **API Gateway** is the only HTTP entry point; everything behind it is gRPC. The **Order** service is the saga orchestrator: it drives a **Temporal** workflow that calls Event → Inventory → Payment synchronously over gRPC, and compensates on failure. Cross-service eventual consistency flows over **Kafka** (dotted topic names: `queue.ready`, `payment.completed`, `checkout.completed`, `checkout.expired`, `order.refund_required`, and their failure counterparts). Canonical chain: Waitroom admits a user → Gateway calls Order → Temporal `CreateOrder` reserves inventory, writes the order, then creates a payment intent → payment webhook → Payment writes an outbox row → the relay publishes it to Kafka → Order's `ConfirmOrder` workflow confirms inventory and completes the order → Waitroom frees the checkout slot.
 
 ## Communication patterns (where to look when tracing a flow)
 
@@ -99,7 +108,7 @@ make -C deploy k3s-gate2       # full purchase-flow acceptance test
 make -C deploy stop-ec2-k3s    # the cost switch
 ```
 
-Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. The API Gateway is reachable at `localhost:3000` through the tunnel (NodePort 30000).
+Per-service config is baked into the chart's ConfigMaps (`deploy/helm/ticketbottle/templates/apps/config.yaml`), **not** env files. A config change rolls the app that reads it (0020). A migration runs before an upgrade rolls the code (0022), so it must work with the code already running. Never hand-edit a chart-managed object, or the next deploy that changes the edited field fails. The API Gateway is reachable at `localhost:3000` through the tunnel (NodePort 30000).
 
 ## Branches
 
@@ -116,7 +125,7 @@ it is a promotion step that only ever goes stale.
 
 There is **one source of truth: the root `proto/` directory.** Edit contracts there, then regenerate in every consumer. Generated code is committed (TS under `src/protogen/`, Go under `pkg/grpc/` or `protogen/`), so a fresh checkout builds without regenerating.
 
-- **TS services** (`api-gateway`, `event`, `user`, `payment`): `npm run update:proto` — syncs the contracts into the service's `src/protos/` and runs `proto:all` (`protoc` + `ts-proto`, `-I=../../proto`) into `src/protogen/`. **Why `src/protos/` exists:** the NestJS gRPC transport loads `.proto` at *runtime* (`protoPath`) and `nest-cli.json` copies `src/protos/**` into `dist` as build assets — so each TS service needs a local copy. It is a **generated, synced-from-root** artifact: never hand-edit it, edit `proto/` and re-run `update:proto`.
+- **TS services** (`api-gateway`, `event`, `user`, `payment`): `npm run update:proto` — syncs the contracts into the service's `src/protos/` and runs `proto:all` (`protoc` + `ts-proto`, `-I=../../proto`) into `src/protogen/`. **Why `src/protos/` exists:** the NestJS gRPC transport loads `.proto` at *runtime* (`protoPath`) and `nest-cli.json` copies `src/protos/**` into `dist` as build assets — so each TS service needs a local copy. It is a **generated, synced-from-root** artifact: never hand-edit it, edit `proto/` and re-run `update:proto`. CI (`.github/workflows/proto-copies.yml`) fails when any copy differs from its contract in `proto/`, in every service, including those that never load it.
 - **Go services** (`order`, `inventory`, `waitroom`): `make protoc-all` — runs `protoc` with the Go plugins against `../../proto` into `pkg/grpc/<svc>/` (waitroom: `protogen/`). Go uses **compiled stubs only** (no runtime `.proto`), so Go services keep **no** local `.proto` copy.
 
 Do **not** reintroduce the old redundant copies (`protos/`, `protos-submodule/`) — those were dead submodule remnants. The only legitimate local copy is each TS service's `src/protos/`, kept in sync by `update:proto`. (Target state is `buf generate` from a single root module, which removes even the TS copy.)

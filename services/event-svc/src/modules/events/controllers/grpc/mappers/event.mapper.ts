@@ -57,6 +57,7 @@ export class EventResponseMapper {
       ticketSaleEndDate: entity.ticketSaleEndDate.toISOString(),
       isFree: entity.isFree,
       maxAttendees: entity.maxAttendees,
+      maxTicketsPerOrder: entity.maxTicketsPerOrder,
       isPublic: entity.isPublic,
       requiresApproval: entity.requiresApproval,
       allowWaitRoom: entity.allowWaitRoom,

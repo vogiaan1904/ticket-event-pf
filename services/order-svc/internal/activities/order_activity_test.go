@@ -113,3 +113,37 @@ func counterValue(t *testing.T, c prometheus.Counter) float64 {
 	}
 	return m.GetCounter().GetValue()
 }
+
+func TestExpireOrder_TimesOutAnUnpaidOrderAndCountsIt(t *testing.T) {
+	a := newTestOrderActivities(t)
+	ctx := context.Background()
+	opt := repo.CreateOrderOption{
+		Code: "TB-EXPACT-0001", UserID: "u1", EventID: "e1",
+		Currency: "VND", TotalAmount: 1000, Status: models.OrderStatusPending,
+	}
+	if _, err := a.CreateOrder(ctx, opt); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	before := counterValue(t, metrics.CheckoutsExpired)
+
+	res, err := a.ExpireOrder(ctx, opt.Code)
+	if err != nil {
+		t.Fatalf("expire: %v", err)
+	}
+	if !res.Expired || res.Order.Status != models.OrderStatusTimeout {
+		t.Fatalf("result = %+v, want expired TIMEOUT", res)
+	}
+	if got := counterValue(t, metrics.CheckoutsExpired) - before; got != 1 {
+		t.Fatalf("expired counter moved by %v, want 1", got)
+	}
+}
+
+func TestExpireOrder_AMissingOrderIsNotRetried(t *testing.T) {
+	a := newTestOrderActivities(t)
+
+	_, err := a.ExpireOrder(context.Background(), "TB-EXPACT-NONE")
+	var appErr *temporal.ApplicationError
+	if !errors.As(err, &appErr) || !appErr.NonRetryable() {
+		t.Fatalf("err = %v, want a non-retryable application error", err)
+	}
+}

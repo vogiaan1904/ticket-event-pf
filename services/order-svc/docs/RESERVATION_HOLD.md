@@ -4,10 +4,12 @@ The inventory hold an order takes must outlive the payment window, or a buyer
 who pays at the edge of it ends up paid with no seat.
 
 ```
-hold expiry = PaymentTimeout (6m) + ReservationHoldGrace (3m)
+hold expiry = CheckoutLifetime = PaymentTimeout (6m) + ReservationHoldGrace (3m)
 ```
 
-`internal/workflows/shared.go`.
+`internal/workflows/shared.go`. `CheckoutLifetime` is also the delay before
+`ExpireOrder` times out an order nobody paid for, so the order, the hold and the
+buyer's chair end together.
 
 ## Why the grace exists
 
@@ -24,3 +26,7 @@ alone, well past the grace.
 That tail is covered on the other side: inventory's `Confirm` re-acquires a hold
 the worker already swept, as long as the stock has not been resold. The grace
 removes the common race; the re-acquire is the backstop.
+
+The same backstop covers a payment that lands on an order `ExpireOrder` has already
+timed out. `ConfirmOrder` confirms a `TIMEOUT` order like a `PENDING` one, and marks
+it `REFUND_REQUIRED` only when inventory cannot re-acquire the ticket.

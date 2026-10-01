@@ -1,0 +1,37 @@
+name: proto-copies
+
+# Each TS service keeps a runtime copy of the contracts in src/protos/, synced from
+# proto/. A contract change that reaches only some copies leaves the rest describing
+# a wire that no longer exists, and nothing else notices.
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - "proto/**"
+      - "services/*/src/protos/**"
+      - ".github/workflows/proto-copies.yml"
+  pull_request:
+    paths:
+      - "proto/**"
+      - "services/*/src/protos/**"
+      - ".github/workflows/proto-copies.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  copies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Every copy matches its contract in proto/
+        run: |
+          status=0
+          for f in services/*/src/protos/*.proto; do
+            root="proto/$(basename "$f")"
+            if [ ! -f "$root" ]; then echo "no contract in proto/ for $f"; status=1
+            elif ! cmp -s "$root" "$f"; then echo "$f differs from $root"; status=1; fi
+          done
+          exit $status

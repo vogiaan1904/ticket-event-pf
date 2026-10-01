@@ -88,8 +88,8 @@ operations per waiter. See `../CLAUDE.md`, "Admission is discovered by polling".
 Background Goroutine (Every 1 second):
   ├─ Get active events from Event Service
   ├─ For each event:
-  │   ├─ Check available checkout slots (max 100)
-  │   ├─ Calculate: available = maxConcurrent - processingCount
+  │   ├─ Ask inventory what the event has left (cached half a tick)
+  │   ├─ Calculate: admit = min(due, tickets available - buyers inside)
   │   ├─ Pop N users from front of queue
   │   ├─ For each user:
   │   │   ├─ Generate JWT checkout token
@@ -223,7 +223,7 @@ LRANGE waitroom:queue_ready:pending 0 -1
 |-------|-------|------|---------|
 | **CHECKOUT_COMPLETED** | `checkout.completed` | Payment success | Free slot, update session |
 | **CHECKOUT_FAILED** | `checkout.failed` | Payment failed | Free slot, mark failed |
-| **CHECKOUT_EXPIRED** | `checkout.expired` | 15-min timeout | Free slot, mark expired |
+| **CHECKOUT_EXPIRED** | `checkout.expired` | the order's hold expired unpaid (~9 min) | Free slot, mark expired |
 
 **File:** [internal/delivery/kafka/consumer/consumer.go](../internal/delivery/kafka/consumer/consumer.go)
 
@@ -246,7 +246,6 @@ Key config values that control queue behavior:
 
 ```bash
 # Queue Processing
-QUEUE_DEFAULT_MAX_CONCURRENT=100   # Max users in checkout per event
 QUEUE_DEFAULT_RELEASE_RATE=10      # Users admitted per batch
 QUEUE_PROCESS_INTERVAL=1s          # How often processor runs
 QUEUE_SESSION_TTL=7200s            # Session expiry (2 hours)

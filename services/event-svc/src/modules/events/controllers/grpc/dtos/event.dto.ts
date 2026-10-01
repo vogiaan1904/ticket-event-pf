@@ -25,6 +25,7 @@ class ConfigDto implements EventConfig {
   ticketSaleEndDate: string;
   isFree: boolean;
   maxAttendees: number;
+  maxTicketsPerOrder: number;
   isPublic: boolean;
   requiresApproval: boolean;
   allowWaitRoom: boolean;

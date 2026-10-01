@@ -4,6 +4,7 @@ export class EventConfigRespDto {
   ticketSaleEndDate: Date;
   isFree: boolean;
   maxAttendees: number;
+  maxTicketsPerOrder: number;
   isPublic: boolean;
   requiresApproval: boolean;
   allowWaitRoom: boolean;

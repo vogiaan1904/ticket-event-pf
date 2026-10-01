@@ -14,7 +14,9 @@ not reshape one module on the side.
   `ClientsModule.registerAsync` in `<feature>.module.ts`: the address from
   `AppConfigService.microservicesConfig`, and `protoPath`
   `join(__dirname, '../../protos/<svc>.proto')` — the runtime copy `nest-cli.json`
-  ships into `dist`.
+  ships into `dist`. `loader: GRPC_LOADER_OPTIONS`, always: without it a zero value
+  (`false`, `0`, `''`) a Go server leaves off the wire arrives `undefined`, and the
+  field drops out of the HTTP body.
 - **Service.** Resolves the client in `onModuleInit` with
   `getService<…ServiceClient>(…_SERVICE_NAME)`, wraps every call in
   `firstValueFrom`, and returns proto types.

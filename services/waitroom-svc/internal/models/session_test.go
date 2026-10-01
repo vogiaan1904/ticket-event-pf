@@ -84,3 +84,11 @@ func TestASessionStoredBeforeTheDrawKeepsArrivalOrder(t *testing.T) {
 		t.Errorf("got %v, want the arrival timestamp %v", got, float64(at.Unix()))
 	}
 }
+
+// A session ended by its line closing is over, like any other ending.
+func TestASoldOutSessionIsEnded(t *testing.T) {
+	s := &Session{Status: SessionStatusSoldOut}
+	if !s.IsTerminal() || s.IsActive() {
+		t.Fatal("a sold_out session must be terminal and not active")
+	}
+}

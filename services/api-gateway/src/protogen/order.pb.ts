@@ -17,11 +17,15 @@ export enum OrderStatus {
   ORDER_STATUS_COMPLETED = 2,
   ORDER_STATUS_CANCELED = 3,
   ORDER_STATUS_FAILED = 4,
+  /** ORDER_STATUS_EXPIRED - Its hold expired before anyone paid. */
+  ORDER_STATUS_EXPIRED = 5,
+  /** ORDER_STATUS_REFUND_REQUIRED - Paid, but the tickets could not be issued: the buyer is owed the money. */
+  ORDER_STATUS_REFUND_REQUIRED = 6,
+  ORDER_STATUS_REFUNDED = 7,
   UNRECOGNIZED = -1,
 }
 
 export interface Order {
-  id: string;
   code: string;
   eventId: string;
   userId: string;
@@ -67,17 +71,14 @@ export interface CreateOrderResponse {
 }
 
 export interface PaginationInfo {
-  page: number;
+  nextCursor: string;
   pageSize: number;
   count: number;
-  lastPage: number;
-  total: number;
   hasNext: boolean;
-  hasPrevious: boolean;
 }
 
 export interface GetManyOrdersRequest {
-  page: number;
+  cursor: string;
   pageSize: number;
   filter?: OrderFilter | undefined;
 }
@@ -94,8 +95,9 @@ export interface GetManyOrdersResponse {
 }
 
 export interface GetOrderRequest {
-  code?: string | undefined;
-  id?: string | undefined;
+  code: string;
+  /** The caller. Only the order's owner may read it; anyone else is told it does not exist. */
+  userId: string;
 }
 
 export interface GetOrderResponse {
@@ -111,7 +113,9 @@ export interface ListOrdersResponse {
 }
 
 export interface CancelOrderRequest {
-  id: string;
+  code: string;
+  /** The caller. Only the order's owner may cancel it; anyone else is told it does not exist. */
+  userId: string;
 }
 
 export const ORDER_PACKAGE_NAME = "order";

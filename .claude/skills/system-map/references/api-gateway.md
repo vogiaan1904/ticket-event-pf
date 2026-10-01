@@ -28,7 +28,7 @@ the gateway's gRPC clients, and its request metrics.
 | Rate limiting, security headers, trusted proxies | `docs/decisions/0013-the-gateway-throttles-sign-in-not-purchase.md` | `services/api-gateway/src/common/guards/auth-rate-limit.guard.ts`, `services/api-gateway/src/common/security.ts` |
 | CORS | service `CLAUDE.md`, *Role* | `services/api-gateway/src/main.ts` |
 | How a stopping gateway drains its keep-alive clients | `docs/decisions/0016-the-gateway-drains-for-up-to-65s.md` | `services/api-gateway/src/shared/utils/http-drain.util.ts`, wired in `services/api-gateway/src/main.ts`; `shutdown` in `deploy/helm/ticketbottle/values.yaml` |
-| Why the gateway sends order fields the contract lacks | root `CLAUDE.md`, register — **open** | `services/api-gateway/src/protogen/order.pb.ts` against `services/api-gateway/src/protos/order.proto` |
+| Who may read, list or cancel an order, and which statuses it reads | `docs/decisions/0026-the-order-contract-tells-the-buyer-what-happened.md` | `services/api-gateway/src/modules/orders/orders.service.ts`, `services/api-gateway/src/modules/orders/mappers/order-status.mapper.ts` |
 | Whose waitroom session a request may touch | `docs/decisions/0008-the-waitroom-enforces-session-ownership.md` | `services/api-gateway/src/modules/waitroom/waitroom.service.ts` |
 | What it records per request | `docs/METRICS.md` | `services/api-gateway/src/common/middlewares/metrics.middleware.ts` |
 
@@ -53,5 +53,4 @@ the gateway's gRPC clients, and its request metrics.
 
 ## Don't trust for current behaviour
 
-- `services/api-gateway/src/protogen/order.pb.ts` — stale against the runtime proto.
 - `services/api-gateway/src/CLAUDE.md` as the layout for a **new** module.

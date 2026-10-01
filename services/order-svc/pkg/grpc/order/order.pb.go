@@ -30,6 +30,11 @@ const (
 	OrderStatus_ORDER_STATUS_COMPLETED   OrderStatus = 2
 	OrderStatus_ORDER_STATUS_CANCELED    OrderStatus = 3
 	OrderStatus_ORDER_STATUS_FAILED      OrderStatus = 4
+	// Its hold expired before anyone paid.
+	OrderStatus_ORDER_STATUS_EXPIRED OrderStatus = 5
+	// Paid, but the tickets could not be issued: the buyer is owed the money.
+	OrderStatus_ORDER_STATUS_REFUND_REQUIRED OrderStatus = 6
+	OrderStatus_ORDER_STATUS_REFUNDED        OrderStatus = 7
 )
 
 // Enum value maps for OrderStatus.
@@ -40,13 +45,19 @@ var (
 		2: "ORDER_STATUS_COMPLETED",
 		3: "ORDER_STATUS_CANCELED",
 		4: "ORDER_STATUS_FAILED",
+		5: "ORDER_STATUS_EXPIRED",
+		6: "ORDER_STATUS_REFUND_REQUIRED",
+		7: "ORDER_STATUS_REFUNDED",
 	}
 	OrderStatus_value = map[string]int32{
-		"ORDER_STATUS_UNSPECIFIED": 0,
-		"ORDER_STATUS_PENDING":     1,
-		"ORDER_STATUS_COMPLETED":   2,
-		"ORDER_STATUS_CANCELED":    3,
-		"ORDER_STATUS_FAILED":      4,
+		"ORDER_STATUS_UNSPECIFIED":     0,
+		"ORDER_STATUS_PENDING":         1,
+		"ORDER_STATUS_COMPLETED":       2,
+		"ORDER_STATUS_CANCELED":        3,
+		"ORDER_STATUS_FAILED":          4,
+		"ORDER_STATUS_EXPIRED":         5,
+		"ORDER_STATUS_REFUND_REQUIRED": 6,
+		"ORDER_STATUS_REFUNDED":        7,
 	}
 )
 
@@ -738,8 +749,10 @@ func (x *GetManyOrdersResponse) GetPagination() *PaginationInfo {
 }
 
 type GetOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The caller. Only the order's owner may read it; anyone else is told it does not exist.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -777,6 +790,13 @@ func (*GetOrderRequest) Descriptor() ([]byte, []int) {
 func (x *GetOrderRequest) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *GetOrderRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -914,8 +934,10 @@ func (x *ListOrdersResponse) GetOrders() []*Order {
 }
 
 type CancelOrderRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// The caller. Only the order's owner may cancel it; anyone else is told it does not exist.
+	UserId        string `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -953,6 +975,13 @@ func (*CancelOrderRequest) Descriptor() ([]byte, []int) {
 func (x *CancelOrderRequest) GetCode() string {
 	if x != nil {
 		return x.Code
+	}
+	return ""
+}
+
+func (x *CancelOrderRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
 	}
 	return ""
 }
@@ -1029,24 +1058,29 @@ const file_order_proto_rawDesc = "" +
 	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\x125\n" +
 	"\n" +
 	"pagination\x18\x02 \x01(\v2\x15.order.PaginationInfoR\n" +
-	"pagination\"%\n" +
+	"pagination\">\n" +
 	"\x0fGetOrderRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code\"6\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"6\n" +
 	"\x10GetOrderResponse\x12\"\n" +
 	"\x05order\x18\x01 \x01(\v2\f.order.OrderR\x05order\"O\n" +
 	"\x11ListOrdersRequest\x12/\n" +
 	"\x06filter\x18\x01 \x01(\v2\x12.order.OrderFilterH\x00R\x06filter\x88\x01\x01B\t\n" +
 	"\a_filter\":\n" +
 	"\x12ListOrdersResponse\x12$\n" +
-	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\"(\n" +
+	"\x06orders\x18\x01 \x03(\v2\f.order.OrderR\x06orders\"A\n" +
 	"\x12CancelOrderRequest\x12\x12\n" +
-	"\x04code\x18\x01 \x01(\tR\x04code*\x95\x01\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId*\xec\x01\n" +
 	"\vOrderStatus\x12\x1c\n" +
 	"\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14ORDER_STATUS_PENDING\x10\x01\x12\x1a\n" +
 	"\x16ORDER_STATUS_COMPLETED\x10\x02\x12\x19\n" +
 	"\x15ORDER_STATUS_CANCELED\x10\x03\x12\x17\n" +
-	"\x13ORDER_STATUS_FAILED\x10\x042\xe2\x02\n" +
+	"\x13ORDER_STATUS_FAILED\x10\x04\x12\x18\n" +
+	"\x14ORDER_STATUS_EXPIRED\x10\x05\x12 \n" +
+	"\x1cORDER_STATUS_REFUND_REQUIRED\x10\x06\x12\x19\n" +
+	"\x15ORDER_STATUS_REFUNDED\x10\a2\xe2\x02\n" +
 	"\fOrderService\x12D\n" +
 	"\vCreateOrder\x12\x19.order.CreateOrderRequest\x1a\x1a.order.CreateOrderResponse\x12;\n" +
 	"\bGetOrder\x12\x16.order.GetOrderRequest\x1a\x17.order.GetOrderResponse\x12J\n" +

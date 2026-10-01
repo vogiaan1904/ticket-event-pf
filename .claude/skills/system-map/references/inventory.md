@@ -46,7 +46,8 @@ The schema is owned by `services/inventory-svc/internal/models/` and
 ## Edges
 
 - **Serves** `proto/inventory.proto` — to order-svc
-  (`services/order-svc/internal/activities/inventory_activity.go`). The gateway's
+  (`services/order-svc/internal/activities/inventory_activity.go`), and `GetEventStock`
+  to waitroom-svc (`services/waitroom-svc/internal/service/stock_gate.go`). The gateway's
   module is an empty stub (`services/api-gateway/src/modules/inventory/inventory.service.ts`).
 - **Calls** nothing; no Kafka.
 - **Store** — Postgres, database `ticketbottle_inventory`, via GORM.

@@ -8,11 +8,41 @@ This is the **Order** service for TicketBottle V2 — the saga orchestrator. For
 
 gRPC service (port **50054**) that coordinates the distributed purchase transaction using **Temporal** workflows. It calls Event, Inventory, and Payment over gRPC and reacts to Kafka events. It ships as **two binaries**:
 - `cmd/api` — gRPC server + Temporal client (starts workflows).
-- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`.
+- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`; its worker also runs `ExpireOrder`.
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
-- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`.
+- **An order takes at most its event's `max_tickets_per_order` tickets**, counted across
+  its items and checked in `Create` before the purchase slot or any hold
+  ([0021](../../docs/decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md)).
+  Over it: `INVALID_ARGUMENT`, `ORD020`. 0 means no limit is set, which is what an
+  event-svc that predates the field sends.
+- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded.
+- `ExpireOrder` — started by `Create` once the order exists, on the confirm-order
+  queue, delayed by `CheckoutLifetime` (the hold's own length, 9m). It flips `PENDING`
+  to `TIMEOUT` with a conditional write; if it flipped, it releases the hold, frees the
+  purchase slot and publishes `checkout.expired`. An order paid, failed or cancelled
+  first is left alone. A failed start is logged, not returned
+  ([0024](../../docs/decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md)).
+- **Short steps run as local activities** through `executeShortStep`
+  ([0018](../../docs/decisions/0018-short-saga-steps-run-as-local-activities.md)):
+  `GetOrder`, `CreateOrder`, `CreateOrderItems`, `UpdateOrderStatus`,
+  `ReleasePurchaseSlot`, `PublishCheckoutCompleted`, `ExpireOrder`,
+  `PublishCheckoutExpired`. A local step re-runs when the
+  workflow task that ran it fails, so a step routed there must be safe to run
+  twice. Their workflow tests run real activities over fakes
+  (`short_steps_test.go`); the SDK's test suite cannot mock them by name.
+
+### Reading and cancelling an order
+
+- **Only the owner.** `GetOrder` and `CancelOrder` carry the caller's `user_id`; an
+  order the caller does not own answers `NOT_FOUND`, before any state check
+  ([0026](../../docs/decisions/0026-the-order-contract-tells-the-buyer-what-happened.md)).
+- **Every stored status has its own wire value:** `TIMEOUT` reads `EXPIRED`, and
+  `REFUND_REQUIRED` and `REFUNDED` read as themselves.
+- **A cancel never overwrites a payment.** It flips `PENDING` to `CANCELLED` with the
+  conditional write `ExpireIfPending` uses, and releases the hold only if the flip
+  landed; otherwise `FAILED_PRECONDITION`.
 
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.

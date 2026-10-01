@@ -296,8 +296,10 @@ type QueueStatusResponse struct {
 	CheckoutUrl       string                 `protobuf:"bytes,8,opt,name=checkout_url,json=checkoutUrl,proto3" json:"checkout_url,omitempty"`
 	CheckoutExpiresAt string                 `protobuf:"bytes,9,opt,name=checkout_expires_at,json=checkoutExpiresAt,proto3" json:"checkout_expires_at,omitempty"`
 	AdmittedAt        string                 `protobuf:"bytes,10,opt,name=admitted_at,json=admittedAt,proto3" json:"admitted_at,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The door is shut until a ticket is available again; the place is kept.
+	Paused        bool `protobuf:"varint,11,opt,name=paused,proto3" json:"paused,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QueueStatusResponse) Reset() {
@@ -398,6 +400,13 @@ func (x *QueueStatusResponse) GetAdmittedAt() string {
 		return x.AdmittedAt
 	}
 	return ""
+}
+
+func (x *QueueStatusResponse) GetPaused() bool {
+	if x != nil {
+		return x.Paused
+	}
+	return false
 }
 
 type LeaveQueueRequest struct {
@@ -639,7 +648,7 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x15GetQueueStatusRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\tR\x06userId\"\xfe\x02\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\"\x96\x03\n" +
 	"\x13QueueStatusResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x122\n" +
@@ -654,7 +663,8 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x13checkout_expires_at\x18\t \x01(\tR\x11checkoutExpiresAt\x12\x1f\n" +
 	"\vadmitted_at\x18\n" +
 	" \x01(\tR\n" +
-	"admittedAt\"K\n" +
+	"admittedAt\x12\x16\n" +
+	"\x06paused\x18\v \x01(\bR\x06paused\"K\n" +
 	"\x11LeaveQueueRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +

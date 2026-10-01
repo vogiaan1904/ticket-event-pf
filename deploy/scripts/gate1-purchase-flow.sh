@@ -54,9 +54,10 @@ echo "== 3. create event config (allowWaitRoom) =="
 CFG=$(curl -s -X POST "$GW/events/$EVENT_ID/config" -H "$AUTH" -H 'Content-Type: application/json' -d '{
   "ticketSaleStartDate":"2020-01-01T00:00:00Z","ticketSaleEndDate":"2030-01-01T00:00:00Z",
   "isFree":false,"maxAttendees":100,"isPublic":true,"requiresApproval":false,
-  "allowWaitRoom":true,"isNewTrending":false
+  "allowWaitRoom":true,"isNewTrending":false,"maxTicketsPerOrder":2
 }')
 echo "  config response: $CFG"
+[ "$(echo "$CFG" | getval data.maxTicketsPerOrder)" = 2 ] || fail "config did not keep maxTicketsPerOrder: $CFG"
 
 echo "== 4. publish event (order-svc requires EventStatus=PUBLISHED; no gateway route) =="
 kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -c \
@@ -77,16 +78,27 @@ echo "  sessionId=$SESSION"
 echo "== 7. poll status until admitted, as a client does =="
 CHECKOUT=""
 for i in $(seq 1 30); do
-  ST=$(curl -s "$GW/waitroom/status/$SESSION" -H "$AUTH")
+  CODE=$(curl -s -o /tmp/g1-status.json -w '%{http_code}' "$GW/waitroom/status/$SESSION" -H "$AUTH")
+  ST=$(cat /tmp/g1-status.json)
+  # An ended session answers 4xx (409 expired or sold out), never a status: stop.
+  # A 5xx means retry.
+  case "$CODE" in 4*) fail "session ended before admission ($CODE): $ST" ;; esac
   CHECKOUT=$(echo "$ST" | getval data.checkoutToken)
   [ -n "$CHECKOUT" ] && break
-  case "$(echo "$ST" | getval data.status)" in
-    EXPIRED|CANCELLED|FAILED) fail "session ended before admission: $ST" ;;
-  esac
   sleep 1
 done
 [ -n "$CHECKOUT" ] || fail "not admitted within 30s: $ST"
 echo "  checkoutToken=${CHECKOUT:0:16}... (from GET /waitroom/status)"
+
+echo "== 7b. an order over the event's limit of 2 is refused =="
+OVER=$(curl -s -o /tmp/g1-over.json -w '%{http_code}' -X POST "$GW/orders" -H "$AUTH" -H 'Content-Type: application/json' -d "{
+  \"eventId\":\"$EVENT_ID\",\"userFullname\":\"Gate One\",\"userEmail\":\"$EMAIL\",
+  \"userPhone\":\"0900000000\",\"paymentMethod\":\"ZALOPAY\",
+  \"items\":[{\"ticketClassId\":\"$TCID\",\"quantity\":3}],\"currency\":\"VND\",
+  \"checkoutToken\":\"$CHECKOUT\",\"redirectUrl\":\"https://example.com/done\"}")
+[ "$OVER" = 400 ] || fail "an order of 3 at a limit of 2 answered $OVER: $(cat /tmp/g1-over.json)"
+grep -q ORD020 /tmp/g1-over.json || fail "the refusal is not ORD020: $(cat /tmp/g1-over.json)"
+echo "  refused: 400 ORD020"
 
 echo "== 8. create order =="
 ORD=$(curl -s -X POST "$GW/orders" -H "$AUTH" -H 'Content-Type: application/json' -d "{

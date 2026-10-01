@@ -49,6 +49,13 @@ only punish them for a failure on our side.
 An unrecognised status is refused instead. Guessing either double-sells or
 strands the buyer.
 
+### An unpaid order
+
+`ExpireOrder` releases the slot when it times out an order nobody paid for, at the
+hold's expiry. Nothing else ends such a checkout: without it the order stays
+`PENDING`, and with no waiting room every retry resumes it and its dead payment
+link until the slot's TTL.
+
 ### Pending order with no payment intent
 
 The saga writes the order row two steps before it creates the payment intent,

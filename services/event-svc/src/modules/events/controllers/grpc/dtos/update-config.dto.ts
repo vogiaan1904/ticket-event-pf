@@ -1,6 +1,6 @@
 import { IsISODateString } from '@/common/decorators/is-date-string.decorator';
 import { UpdateEventConfigRequest } from '@/protogen/event.pb';
-import { IsBoolean, IsNotEmpty, IsNumber, IsString } from 'class-validator';
+import { IsBoolean, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 import { UpdateConfigDto as ServiceUpdateConfigDto } from '../../../dtos';
 
 export class UpdateConfigDto implements UpdateEventConfigRequest {
@@ -11,6 +11,8 @@ export class UpdateConfigDto implements UpdateEventConfigRequest {
       ticketSaleEndDate: new Date(this.ticketSaleEndDate),
       isFree: this.isFree,
       maxAttendees: this.maxAttendees,
+      // 0 is proto3's unset.
+      maxTicketsPerOrder: this.maxTicketsPerOrder || undefined,
       isPublic: this.isPublic,
       requiresApproval: this.requiresApproval,
       allowWaitRoom: this.allowWaitRoom,
@@ -41,6 +43,12 @@ export class UpdateConfigDto implements UpdateEventConfigRequest {
   @IsNotEmpty()
   @IsNumber()
   maxAttendees: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  maxTicketsPerOrder: number;
 
   @IsNotEmpty()
   @IsBoolean()

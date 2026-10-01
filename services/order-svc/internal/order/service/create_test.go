@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/vogiaan1904/ticketbottle-order/internal/infra/temporal"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
@@ -31,7 +32,8 @@ const (
 
 type stubEventClient struct {
 	event.EventServiceClient
-	allowWaitRoom bool
+	allowWaitRoom      bool
+	maxTicketsPerOrder int32
 }
 
 func (c stubEventClient) FindOne(ctx context.Context, in *event.FindOneEventRequest, opts ...grpc.CallOption) (*event.FindOneEventResponse, error) {
@@ -44,8 +46,9 @@ func (c stubEventClient) FindOne(ctx context.Context, in *event.FindOneEventRequ
 
 func (c stubEventClient) GetConfig(ctx context.Context, in *event.GetEventConfigRequest, opts ...grpc.CallOption) (*event.GetEventConfigResponse, error) {
 	return &event.GetEventConfigResponse{EventConfig: &event.EventConfig{
-		Id:            in.EventId,
-		AllowWaitRoom: c.allowWaitRoom,
+		Id:                 in.EventId,
+		AllowWaitRoom:      c.allowWaitRoom,
+		MaxTicketsPerOrder: c.maxTicketsPerOrder,
 	}}, nil
 }
 
@@ -89,6 +92,9 @@ type fakeWorkflowRun struct {
 	// the cancellation path.
 	outliveCaller bool
 	getErr        error
+
+	// afterGet runs once Get has succeeded: a caller giving up as the saga ends.
+	afterGet func()
 }
 
 func (r *fakeWorkflowRun) GetID() string    { return r.id }
@@ -109,6 +115,9 @@ func (r *fakeWorkflowRun) Get(ctx context.Context, valuePtr any) error {
 			Order:      &models.Order{Code: r.id},
 		}
 	}
+	if r.afterGet != nil {
+		r.afterGet()
+	}
 
 	return nil
 }
@@ -126,9 +135,20 @@ type fakeTemporalClient struct {
 
 	startedInput *workflows.CreateOrderWorkflowInput
 	cancelCalls  int
+
+	expireOpts     *temporalCli.StartWorkflowOptions
+	expireInput    *workflows.ExpireOrderWorkflowInput
+	expireStartErr error
+	expireCtxErr   error
 }
 
 func (c *fakeTemporalClient) ExecuteWorkflow(ctx context.Context, options temporalCli.StartWorkflowOptions, workflow any, args ...any) (temporalCli.WorkflowRun, error) {
+	if len(args) > 0 {
+		if in, ok := args[0].(*workflows.ExpireOrderWorkflowInput); ok {
+			c.expireOpts, c.expireInput, c.expireCtxErr = &options, in, ctx.Err()
+			return &fakeWorkflowRun{id: options.ID}, c.expireStartErr
+		}
+	}
 	if len(args) > 0 {
 		if in, ok := args[0].(*workflows.CreateOrderWorkflowInput); ok {
 			c.startedInput = in
@@ -307,5 +327,67 @@ func TestCreate_AWorkflowThatNeverStartedGivesTheSlotBack(t *testing.T) {
 
 	if held := slotHolder(t, r, testUserEventSlotKey); held != "" {
 		t.Fatalf("slot %s is still held by %q after the workflow failed to start", testUserEventSlotKey, held)
+	}
+}
+
+// The clock runs as long as the hold, and lives on the worker that has the producer.
+func TestCreate_StartsTheCheckoutClockForTheHoldsLength(t *testing.T) {
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{}}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	if _, err := s.Create(context.Background(), createInput()); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	code := tprCli.startedInput.OrderCode
+	if tprCli.expireOpts == nil {
+		t.Fatal("no clock was started for the order")
+	}
+	if o := tprCli.expireOpts; o.StartDelay != workflows.CheckoutLifetime ||
+		o.ID != workflows.GetExpireOrderWorkflowID(code) || o.TaskQueue != temporal.ConfirmOrderTaskQueue ||
+		tprCli.expireInput.OrderCode != code {
+		t.Fatalf("clock = %+v for %+v; want %s on %s after %s", *o, tprCli.expireInput,
+			workflows.GetExpireOrderWorkflowID(code), temporal.ConfirmOrderTaskQueue, workflows.CheckoutLifetime)
+	}
+}
+
+// The order is live; without its clock it only ends as it did before one existed.
+func TestCreate_AFailedClockDoesNotFailThePurchase(t *testing.T) {
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{}, expireStartErr: errors.New("frontend unavailable")}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	if _, err := s.Create(context.Background(), createInput()); err != nil {
+		t.Fatalf("a failed clock start failed the purchase: %v", err)
+	}
+}
+
+func TestCreate_ALostRaceStartsNoClock(t *testing.T) {
+	tprCli := &fakeTemporalClient{
+		run: &fakeWorkflowRun{getErr: workflows.NewInsufficientInventoryError(workflows.ErrInsufficientInventory)},
+	}
+	s, _ := newCreateService(t, tprCli, false, "")
+
+	_, _ = s.Create(context.Background(), createInput())
+
+	if tprCli.expireOpts != nil {
+		t.Fatal("an order that was never written got a clock")
+	}
+}
+
+// The order is live once the saga returns; its clock must not share the deadline
+// the caller spent waiting for it.
+func TestCreate_TheClockOutlivesTheCallersDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tprCli := &fakeTemporalClient{run: &fakeWorkflowRun{afterGet: cancel}}
+	s, _ := newCreateService(t, tprCli, true, "sess-1")
+
+	_, _ = s.Create(ctx, createInput())
+
+	if tprCli.expireOpts == nil {
+		t.Fatal("no clock was started for the order")
+	}
+	if tprCli.expireCtxErr != nil {
+		t.Fatalf("the clock was started on a spent context (%v); Temporal would refuse it", tprCli.expireCtxErr)
 	}
 }

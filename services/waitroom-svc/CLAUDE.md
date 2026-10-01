@@ -9,9 +9,10 @@ This is the **Waitroom** (virtual queue) service for TicketBottle V2. For the sy
 gRPC service (port **50056**, Redis-backed) that fairly throttles access to checkout under high load. Users join a **queue** (Redis sorted set; see the draw below); a background **queue processor** admits them as checkout slots free up, mints a short-lived **JWT checkout token**, and publishes a `queue.ready` event to Kafka. It also consumes downstream events (e.g. `checkout.completed`) to release slots and admit the next user.
 
 Key behaviors (`internal/service/queue_processor.go`):
-- Bounded concurrency — at most N users in "checkout" at once (configurable via `Queue` config; ~100 default).
-- Checkout tokens are JWTs with ~15-min expiry; clients poll `GetQueueStatus` for position and, once admitted, for the token.
+- Room size per event — a tick admits only while the event has more tickets available than buyers inside (`admitCount`); there is no fixed cap ([0025](../../docs/decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md)).
+- Checkout tokens are JWTs that last `JWT_EXPIRY`, 5 minutes in the chart: the time to start a checkout, and the chair's lifetime ([0027](../../docs/decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)). Clients poll `GetQueueStatus` for position and, once admitted, for the token.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
+- Asks the **Inventory** service (`INVENTORY_SERVICE_ADDR`, default `localhost:50057`) what each event has left, through `StockGate`, and pauses or closes the door on the answer.
 
 ## Commands (Makefile is the source of truth — `make help`)
 
@@ -31,7 +32,7 @@ make protoc / make update-proto
 
 ## Layout
 
-- `cmd/api/main.go` — wiring: config → logger → Redis → repos → Kafka producer/consumer → Event gRPC client → services → queue processor → gRPC server.
+- `cmd/api/main.go` — wiring: config → logger → Redis → repos → Kafka producer/consumer → Event and Inventory gRPC clients → stock gate → services → queue processor → gRPC server.
 - `internal/service/` — `session` (Redis-backed sessions + JWT), `queue` (sorted-set ops), `waitroom` (facade), `queue_processor` (admission loop).
 - `internal/delivery/{grpc,http,kafka}` — transports; `internal/repository/redis`, `internal/infra/redis`.
 - `pkg/` — shared `kafka`, `redis`, `grpc`, `logger`, `errors`, `response`, `util`.
@@ -117,6 +118,33 @@ convenience:
 The shared fetch runs on a detached context, because every joiner collapsed behind it
 shares its result and one of them hanging up must not fail the others.
 
+### The door asks inventory whether tickets are left
+
+The rule, and why it fails open, is owned by `docs/design/admission-sizing.md`, *When
+tickets run out*. The mechanism is `internal/service/stock_gate.go`:
+
+- **One answer per event, cached for half a tick.** The tick, `JoinQueue` and
+  `GetQueueStatus` share one `StockGate`, built in `main.go` with TTL
+  `QUEUE_PROCESS_INTERVAL / 2`. Half, because a TTL of a full tick is always still fresh
+  when the next tick reads it, so the tick would ask only every other tick.
+- **The tick asks only with someone due**, before it counts chairs. So a sold-out line
+  closes even when every chair is taken, and an empty line costs inventory nothing.
+- **The same answer sizes the room.** `Stock` carries `available` as well as the door,
+  and the tick admits only while it exceeds the buyers inside (`admitCount`).
+  Unanswered, or with no class that can still sell, it sets no limit.
+- **It fails open, and caches the failure.** An unanswered question reads as open, so
+  the waitroom admits as before this existed. `tb_waitroom_stock_checks_total{result}`
+  counts each question, and `unavailable` is a fail-open.
+- **A paused door drops its dead head** (`dropDeadHead`): entries whose session is
+  gone, ended or expired, from the front up to the first live one. Admission is what
+  normally drops them, and a paused door admits nobody.
+- **Closing a line** (`closeLine`) sets a queued session to `sold_out` *before*
+  removing its entry, 100 per tick. **Invariant: closing never removes an admitted
+  session.** It holds a token, and its checkout gets inventory's own answer.
+- `sold_out` is terminal. `ActiveSession` answers it with `ErrSoldOut`, which is
+  `FAILED_PRECONDITION` `WTR012`, a 409. So a closed waiter hears "sold out", not
+  "invalid session status".
+
 ### Admission is discovered by polling, never pushed
 
 There is deliberately no position stream. A per-waiter push meant one SSE connection,
@@ -155,6 +183,14 @@ Nothing consumes the `.dlq` topics yet. A dead-lettered slot-release is therefor
 tolerable because slots self-expire (above) — the two mechanisms are load-bearing for
 each other. Add DLQ-depth alerting before relying on either alone.
 
+## Door speed is set per deployment target
+
+`QUEUE_DEFAULT_RELEASE_RATE` is how fast buyers are admitted, and so how fast work
+reaches the box. It comes from the chart's `waitroom.releaseRate`, measured per target
+(`docs/design/admission-sizing.md`); the chart default of 10 is unmeasured. Room size
+is not a setting: it is each event's tickets available, read each tick
+(`docs/design/admission-sizing.md`, *Room size per event*).
+
 ## Single-replica constraint
 
 The admission loop is **not safe above `replicas: 1`** (which is what
@@ -177,9 +213,9 @@ The processing set moved from `waitroom:{event}:processing` (SET) to
 `waitroom:{event}:checkouts` (sorted set). Redis is persistent in the chart, so the type
 could not change in place without `WRONGTYPE`. The old key carries a TTL and ages out on
 its own, but **at cutover every in-flight slot is forgotten** and `:checkouts` starts
-empty — the service can briefly admit up to `MaxConcurrent` extra users on top of those
-already checking out. Bounded (<=100/event, <=15 min) but real: deploy during a quiet
-period.
+empty — the service can briefly admit extra users on top of those already
+checking out, as many as the event's tickets available allow, for up to the checkout
+window. Real: deploy during a quiet period.
 
 ## Notes
 

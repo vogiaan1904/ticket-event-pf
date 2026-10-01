@@ -5,6 +5,7 @@ import (
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/activities"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 )
 
 // The activity structs are registered as zero values: the test environment
@@ -18,6 +19,9 @@ func newTestEnv(t *testing.T) *testsuite.TestWorkflowEnvironment {
 	env.RegisterActivity(&activities.OrderActivities{})
 	env.RegisterActivity(&activities.PaymentActivities{})
 	env.RegisterActivity(&activities.EventPublishingActivities{})
+	// These tests mock short steps by name, which the test suite cannot do for a
+	// local activity; short_steps_test.go covers the local path.
+	env.OnGetVersion(shortStepsChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion).Maybe()
 	t.Cleanup(func() { env.AssertExpectations(t) })
 	return env
 }

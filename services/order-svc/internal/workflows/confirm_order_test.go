@@ -288,3 +288,38 @@ func TestConfirmOrder_AFailedSlotReleaseDoesNotFailTheOrder(t *testing.T) {
 		t.Fatalf("a failed slot release failed the order: %v", err)
 	}
 }
+
+// The provider took the money inside its window; the confirmation ran long. A
+// ticket that is still there is theirs, as it was before orders could time out.
+func TestConfirmOrder_APaymentOnATimedOutOrderStillGetsItsTicket(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{Code: "TB-TEST-0101", Status: models.OrderStatusTimeout, SessionID: "sess-9", UserID: "u9", EventID: "e9"}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, "TB-TEST-0101").Return(nil).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, "TB-TEST-0101", models.OrderStatusCompleted).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("PublishCheckoutCompleted", mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{OrderCode: "TB-TEST-0101", Status: models.OrderStatusCompleted})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("a payment on a timed-out order with stock left failed: %v", err)
+	}
+}
+
+func TestConfirmOrder_APaymentOnATimedOutOrderWhoseStockIsGoneIsRefunded(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{Code: "TB-TEST-0102", Status: models.OrderStatusTimeout, UserID: "u9", EventID: "e9"}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).
+		Return(temporal.NewNonRetryableApplicationError("stock is gone", order.ErrTypeInventoryCannotConfirm, errors.New("stock is gone"))).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).Return(nil).Once()
+	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{OrderCode: "TB-TEST-0102", Status: models.OrderStatusCompleted})
+
+	if env.GetWorkflowError() == nil {
+		t.Fatal("an unfulfillable paid order must still fail the workflow so it is visible")
+	}
+}

@@ -145,6 +145,11 @@ func (s *sessionService) ActiveSession(ctx context.Context, ssID, userID string)
 		return nil, ErrSessionExpired
 	}
 
+	// Ended by its line closing: the buyer needs "sold out", not "invalid status".
+	if ss.Status == models.SessionStatusSoldOut {
+		return nil, ErrSoldOut
+	}
+
 	if !ss.IsActive() {
 		return nil, ErrInvalidSessionStatus
 	}

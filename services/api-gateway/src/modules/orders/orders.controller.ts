@@ -22,19 +22,14 @@ export class OrdersController {
     return CreateOrderMapper.toDto(protoResponse);
   }
 
-  @Get(':id')
-  @UseGuards(AccessGuard)
-  @ResponseDto(OrderRespDto)
-  async findById(@Param('id') id: string): Promise<OrderRespDto> {
-    const protoOrder = await this.ordersService.findById(id);
-    return OrderMapper.toDto(protoOrder);
-  }
-
   @Get('code/:code')
   @UseGuards(AccessGuard)
   @ResponseDto(OrderRespDto)
-  async findByCode(@Param('code') code: string): Promise<OrderRespDto> {
-    const protoOrder = await this.ordersService.findByCode(code);
+  async findByCode(
+    @Req() req: RequestWithUser,
+    @Param('code') code: string,
+  ): Promise<OrderRespDto> {
+    const protoOrder = await this.ordersService.findByCode(req.user, code);
     return OrderMapper.toDto(protoOrder);
   }
 
@@ -47,22 +42,12 @@ export class OrdersController {
     @Query() filter: FilterOrderDto,
   ): Promise<GetManyOrdersRespDto> {
     const resp = await this.ordersService.findMany(req.user, pagination, filter);
-    return {
-      data: resp.orders?.map(OrderMapper.toDto) || [],
-      meta: {
-        currentPage: resp.pagination.page,
-        perPage: Number(resp.pagination.pageSize),
-        total: Number(resp.pagination.total),
-        lastPage: resp.pagination.lastPage,
-        hasNext: resp.pagination.hasNext,
-        hasPrevious: resp.pagination.hasPrevious,
-      },
-    };
+    return OrderMapper.toListDto(resp);
   }
 
-  @Delete(':id')
+  @Delete('code/:code')
   @UseGuards(AccessGuard)
-  async cancel(@Req() req: RequestWithUser, @Param('id') id: string): Promise<void> {
-    await this.ordersService.cancel(req.user, id);
+  async cancel(@Req() req: RequestWithUser, @Param('code') code: string): Promise<void> {
+    await this.ordersService.cancel(req.user, code);
   }
 }

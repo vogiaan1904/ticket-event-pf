@@ -2,7 +2,6 @@ import { OrderStatus } from '../../enums';
 import { OrderItemRespDto } from './order-item.resp.dto';
 
 export class OrderRespDto {
-  id: string;
   code: string;
   eventId: string;
   userId: string;

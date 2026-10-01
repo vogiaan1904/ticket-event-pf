@@ -42,10 +42,9 @@ type RedisConfig struct {
 }
 
 type QueueConfig struct {
-	DefaultMaxConcurrent   int
-	DefaultReleaseRate     int
-	ProcessInterval        time.Duration
-	SessionTTL             time.Duration
+	DefaultReleaseRate int
+	ProcessInterval    time.Duration
+	SessionTTL         time.Duration
 	// EventCacheTTL bounds how stale an event's queueing rules may be. Longer
 	// blunts an on-sale stampede against event-svc; shorter propagates a config
 	// change sooner. Concurrent misses collapse, so the stampede is bounded either way.
@@ -66,7 +65,8 @@ type KafkaConfig struct {
 }
 
 type MicroserviceConfig struct {
-	Event string
+	Event     string
+	Inventory string
 }
 
 type JWTConfig struct {
@@ -103,11 +103,10 @@ func Load() (*Config, error) {
 			MinIdleConns: getEnvAsInt("REDIS_MIN_IDLE_CONNS", 5),
 		},
 		Queue: QueueConfig{
-			DefaultMaxConcurrent:   getEnvAsInt("QUEUE_DEFAULT_MAX_CONCURRENT", 100),
-			DefaultReleaseRate:     getEnvAsInt("QUEUE_DEFAULT_RELEASE_RATE", 10),
-			ProcessInterval:        getEnvAsDuration("QUEUE_PROCESS_INTERVAL", 1*time.Second),
-			SessionTTL:             getEnvAsDuration("QUEUE_SESSION_TTL", 2*time.Hour),
-			EventCacheTTL:          getEnvAsDuration("QUEUE_EVENT_CACHE_TTL", 30*time.Second),
+			DefaultReleaseRate: getEnvAsInt("QUEUE_DEFAULT_RELEASE_RATE", 10),
+			ProcessInterval:    getEnvAsDuration("QUEUE_PROCESS_INTERVAL", 1*time.Second),
+			SessionTTL:         getEnvAsDuration("QUEUE_SESSION_TTL", 2*time.Hour),
+			EventCacheTTL:      getEnvAsDuration("QUEUE_EVENT_CACHE_TTL", 30*time.Second),
 		},
 		JWT: JWTConfig{
 			Secret: getEnv("JWT_SECRET", "jwt-secret"),
@@ -128,7 +127,8 @@ func Load() (*Config, error) {
 			ConsumerRetryBackoff: getEnvAsDuration("KAFKA_CONSUMER_RETRY_BACKOFF", 500*time.Millisecond),
 		},
 		Microservice: MicroserviceConfig{
-			Event: getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),
+			Event:     getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),
+			Inventory: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50057"),
 		},
 	}
 

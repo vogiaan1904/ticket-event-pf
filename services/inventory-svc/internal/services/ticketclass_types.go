@@ -36,3 +36,10 @@ type GetManyTicketClassInput struct {
 	EventID string
 	IDs     []int64
 }
+
+// EventStock is what an event has left, over the classes that can still sell.
+type EventStock struct {
+	Total     int64
+	Sold      int64
+	Available int64 // on sale now, neither held nor sold
+}

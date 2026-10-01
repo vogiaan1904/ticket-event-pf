@@ -9,6 +9,7 @@ import (
 	resp "github.com/vogiaan1904/ticketbottle-waitroom/pkg/response"
 	"github.com/vogiaan1904/ticketbottle-waitroom/pkg/util"
 	waitroompb "github.com/vogiaan1904/ticketbottle-waitroom/protogen/waitroom"
+	"google.golang.org/grpc/status"
 )
 
 type grpcService struct {
@@ -24,6 +25,18 @@ func NewGrpcService(svc service.WaitroomService, l logger.Logger) waitroompb.Wai
 	}
 }
 
+// failed logs a call that did not succeed, once, at a level that matches its code,
+// and returns its wire error.
+func (s *grpcService) failed(ctx context.Context, call string, err error) error {
+	wire := resp.ParseGRPCError(s.mapGRPCError(err))
+	if isFault(status.Code(wire)) {
+		s.l.Errorf(ctx, "grpc.%s: %v", call, err)
+	} else {
+		s.l.Debugf(ctx, "grpc.%s refused: %v", call, err)
+	}
+	return wire
+}
+
 func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRequest) (*waitroompb.JoinQueueResponse, error) {
 	input := service.JoinQueueInput{
 		UserID:    req.UserId,
@@ -34,9 +47,7 @@ func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRe
 
 	out, err := s.svc.JoinQueue(ctx, &input)
 	if err != nil {
-		s.l.Errorf(ctx, "Failed to join queue: %v", err)
-		err = s.mapGRPCError(err)
-		return nil, resp.ParseGRPCError(err)
+		return nil, s.failed(ctx, "JoinQueue", err)
 	}
 
 	return &waitroompb.JoinQueueResponse{
@@ -51,9 +62,7 @@ func (s *grpcService) JoinQueue(ctx context.Context, req *waitroompb.JoinQueueRe
 func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQueueStatusRequest) (*waitroompb.QueueStatusResponse, error) {
 	out, err := s.svc.GetQueueStatus(ctx, req.SessionId, req.UserId)
 	if err != nil {
-		s.l.Errorf(ctx, "Failed to get queue status: %v", err)
-		err = s.mapGRPCError(err)
-		return nil, resp.ParseGRPCError(err)
+		return nil, s.failed(ctx, "GetQueueStatus", err)
 	}
 
 	res := &waitroompb.QueueStatusResponse{
@@ -65,6 +74,7 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 		ExpiresAt:     util.TimeToISO8601Str(out.ExpiresAt),
 		CheckoutToken: out.CheckoutToken,
 		CheckoutUrl:   out.CheckoutURL,
+		Paused:        out.Paused,
 	}
 	if out.CheckoutExpiresAt != nil {
 		res.CheckoutExpiresAt = util.TimeToISO8601Str(*out.CheckoutExpiresAt)
@@ -78,8 +88,7 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 
 func (s *grpcService) LeaveQueue(ctx context.Context, req *waitroompb.LeaveQueueRequest) (*waitroompb.LeaveQueueResponse, error) {
 	if err := s.svc.LeaveQueue(ctx, req.SessionId, req.UserId); err != nil {
-		s.l.Errorf(ctx, "Failed to leave queue: %v", err)
-		return nil, resp.ParseGRPCError(s.mapGRPCError(err))
+		return nil, s.failed(ctx, "LeaveQueue", err)
 	}
 
 	return &waitroompb.LeaveQueueResponse{

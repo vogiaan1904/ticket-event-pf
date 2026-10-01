@@ -13,6 +13,7 @@ service InventoryService {
     rpc DeleteTicketClass(DeleteTicketClassRequest) returns (google.protobuf.Empty);
     rpc CheckAvailability(CheckAvailabilityRequest) returns (CheckAvailabilityResponse);
     rpc GetAvailability(GetAvailabilityRequest) returns (GetAvailabilityResponse);
+    rpc GetEventStock(GetEventStockRequest) returns (GetEventStockResponse);
 
     rpc Reserve(ReserveRequest) returns (google.protobuf.Empty);
     rpc Confirm(ConfirmRequest) returns (google.protobuf.Empty);
@@ -107,6 +108,18 @@ message GetAvailabilityRequest {
 
 message GetAvailabilityResponse {
     int32 available_quantity = 1;
+}
+
+message GetEventStockRequest {
+    string event_id = 1;
+}
+
+// Counted over the event's classes that can still sell: ACTIVE, not past their end.
+message GetEventStockResponse {
+    int64 total = 1;
+    int64 sold = 2;
+    // On sale now, and neither held nor sold.
+    int64 available = 3;
 }
 
 message CheckAvailabilityItem {

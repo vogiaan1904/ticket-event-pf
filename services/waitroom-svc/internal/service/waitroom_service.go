@@ -44,6 +44,7 @@ type waitroomService struct {
 	qSvc  QueueService
 	ssSvc SessionService
 	eGate *eventGate
+	stock *StockGate
 	prod  producer.Producer
 	l     pkgLog.Logger
 	proc  QueueProcessor
@@ -53,6 +54,7 @@ func NewWaitroomService(
 	qSvc QueueService,
 	ssSvc SessionService,
 	eSvc event.EventServiceClient,
+	stock *StockGate,
 	prod producer.Producer,
 	l pkgLog.Logger,
 	proc QueueProcessor,
@@ -62,6 +64,7 @@ func NewWaitroomService(
 		qSvc:  qSvc,
 		ssSvc: ssSvc,
 		eGate: newEventGate(eSvc, eventCacheTTL),
+		stock: stock,
 		prod:  prod,
 		l:     l,
 		proc:  proc,
@@ -69,15 +72,18 @@ func NewWaitroomService(
 }
 
 func (s *waitroomService) JoinQueue(ctx context.Context, in *JoinQueueInput) (*JoinQueueOutput, error) {
+	// Refusals are logged once, by the gRPC handler, at the level their code earns.
 	eInfo, err := s.eGate.Get(ctx, in.EventID)
 	if err != nil {
-		s.l.Errorf(ctx, "service.waitroomService.JoinQueue: %v", err)
 		return nil, err
 	}
 
 	if !eInfo.AllowWaitRoom {
-		s.l.Warnf(ctx, "service.waitroomService.JoinQueue: %v", ErrWaitRoomNotAllowed)
 		return nil, ErrWaitRoomNotAllowed
+	}
+
+	if s.stock.Get(ctx, in.EventID) == DoorSoldOut {
+		return nil, ErrSoldOut
 	}
 
 	ss, err := s.ssSvc.CreateSession(
@@ -127,18 +133,27 @@ func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID strin
 		return nil, err
 	}
 
+	// A waiter reads the same answer the tick admits by.
+	door := DoorOpen
+	if ss.Status == models.SessionStatusQueued {
+		door = s.stock.Get(ctx, ss.EventID)
+	}
+	if door == DoorSoldOut {
+		return nil, ErrSoldOut
+	}
+
 	stt, err := s.qSvc.GetQueueStatus(ctx, ssID, ss)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get queue status: %w", err)
 	}
 
+	stt.Paused = door == DoorPaused
 	return stt, nil
 }
 
 func (s *waitroomService) LeaveQueue(ctx context.Context, ssID, userID string) error {
 	ss, err := s.ssSvc.GetSession(ctx, ssID)
 	if err != nil {
-		s.l.Errorf(ctx, "waitroomService.LeaveQueue: %v", err)
 		return err
 	}
 	if ss.UserID != userID {

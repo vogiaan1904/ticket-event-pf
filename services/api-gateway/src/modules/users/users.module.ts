@@ -5,6 +5,7 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { USER_PACKAGE_NAME, USER_SERVICE_NAME } from '@/protogen/user.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
+import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { join } from 'path';
             url: config.microservicesConfig.userServiceUrl,
             package: USER_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'user.proto'),
+            loader: GRPC_LOADER_OPTIONS,
           },
         }),
         inject: [AppConfigService],

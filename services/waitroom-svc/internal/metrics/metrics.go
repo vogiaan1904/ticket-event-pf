@@ -54,14 +54,24 @@ var (
 		[]string{"event_id"},
 	)
 
-	// Per event, because the limit this is read against is per event
-	// (MaxConcurrentPerEvent). A cluster-wide sum cannot be compared to it.
+	// Per event, because what it is read against, the event's tickets available, is
+	// per event. A cluster-wide sum cannot be compared to it.
 	SlotsInUse = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "tb_waitroom_slots_in_use",
 			Help: "Checkout slots currently held, by event.",
 		},
 		[]string{"event_id"},
+	)
+
+	// One per question asked of inventory, not per cached read. "unavailable"
+	// is the door failing open. See docs/design/admission-sizing.md#when-tickets-run-out.
+	StockChecks = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "tb_waitroom_stock_checks_total",
+			Help: "Questions asked of inventory about an event's tickets, by answer.",
+		},
+		[]string{"result"},
 	)
 )
 

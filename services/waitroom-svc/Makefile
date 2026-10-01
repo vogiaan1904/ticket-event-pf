@@ -74,6 +74,7 @@ dev: docker-up run ## Start development environment
 protoc-all:
 	$(MAKE) protoc PROTO=../../proto/waitroom.proto OUT_DIR=protogen/waitroom
 	$(MAKE) protoc PROTO=../../proto/event.proto OUT_DIR=protogen/event
+	$(MAKE) protoc PROTO=../../proto/inventory.proto OUT_DIR=protogen/inventory
 
 protoc:
 	protoc --go_out=$(OUT_DIR) --go_opt=paths=source_relative \

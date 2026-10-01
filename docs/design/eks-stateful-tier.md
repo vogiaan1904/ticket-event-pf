@@ -63,12 +63,18 @@ survives, because nothing irreplaceable is left in the cluster.
 > **"Low traffic" describes today's load, not the design.** Temporal writes
 > workflow history, polls task queues and updates visibility once per in-flight
 > order, so its database load scales with **concurrent checkouts**, not with
-> traffic generally. At the ~100 the platform is configured for, `shared` is
-> idle. Raise `QUEUE_DEFAULT_MAX_CONCURRENT` into the thousands and Temporal
-> becomes the platform's heaviest writer — at which point this grouping, and
+> traffic generally. Concurrent checkouts are bounded by each event's tickets
+> and by about door speed × the 9-minute hold: up to 5400 at EKS's unmeasured door of
+> 10 a second ([0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md),
+> [0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)).
+> Into the thousands, Temporal becomes the platform's heaviest writer — at which point this grouping, and
 > `db.t4g.micro` at 2 burstable vCPU and 1 GiB, both invert. The split below is
 > sized for failure isolation; re-size it against measured load before any
 > on-sale admitting more than low hundreds concurrently.
+>
+> Measured on k3s 2026-09-27, `shared` is not idle even at ten to forty
+> concurrent checkouts: Temporal is Postgres's heaviest writer by far.
+> `docs/plans/2026-09-27-checkout-latency-decomposition.md#what-this-says`.
 
 Five instances (one per service) was considered and rejected: the two extra
 instances buy isolation between `user` and `event`, which have no meaningful
@@ -206,9 +212,8 @@ work are resolved:
 
 - The four NestJS services are under CI.
 - The inventory ceiling was measured, and it is **not reachable**. Reserve
-  sustains ~1300/sec; the waitroom admits at `maxConcurrent / checkout duration`,
-  which at the shipped `QUEUE_DEFAULT_MAX_CONCURRENT: 100` against a 15-minute
-  `JWT_EXPIRY` is under 1/sec. Method and numbers:
+  sustains ~1300/sec; the waitroom admits at most its door speed, 10 a
+  second at EKS's unmeasured default and 2 on k3s. Method and numbers:
   `docs/plans/2026-09-22-inventory-contention-benchmark.md`.
 
 So (b)–(f) are no longer deferred *for the stated reason*. Whether they are the

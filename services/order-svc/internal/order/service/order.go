@@ -30,6 +30,10 @@ const cancelWorkflowTimeout = 5 * time.Second
 // it, for the same reason cancellation does.
 const releaseSlotTimeout = 5 * time.Second
 
+// Starting an order's clock has to outlive the deadline its saga spent, for the
+// same reason: the order is already live.
+const startClockTimeout = 5 * time.Second
+
 // claimAttempts bounds the retake loop: a second pass is normal, a fourth means
 // the slot is churning rather than settling.
 const claimAttempts = 3
@@ -121,6 +125,11 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 	if e.Status != event.EventStatus_EVENT_STATUS_PUBLISHED {
 		s.l.Errorf(ctx, "internal.order.service.Create: %v", in.EventID)
 		return order.CreateOrderOutput{}, order.ErrEventNotReadyForSale
+	}
+
+	// Checked before the slot or any hold is taken; 0 is an event with no limit set.
+	if limit := eCfg.GetMaxTicketsPerOrder(); limit > 0 && ticketsInOrder(in.Items) > limit {
+		return order.CreateOrderOutput{}, order.ErrTooManyTicketsInOrder
 	}
 
 	code := util.GenerateOrderCodeWithEventPrefix(e.Name)
@@ -261,12 +270,30 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 		return order.CreateOrderOutput{}, mapWorkflowError(err)
 	}
 
+	s.startCheckoutClock(ctx, code)
 	observeDuration("completed")
 	return order.CreateOrderOutput{
 		Order:      wfRes.Order,
 		OrderItems: wfRes.OrderItems,
 		PaymentUrl: wfRes.PaymentUrl,
 	}, nil
+}
+
+// startCheckoutClock schedules ExpireOrder for when the order's hold expires.
+// Logged, not returned: the order is live, and without its clock it ends as it did
+// before one existed -- chair at its TTL, order left PENDING.
+func (s *implService) startCheckoutClock(ctx context.Context, code string) {
+	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), startClockTimeout)
+	defer cancel()
+
+	_, err := s.temporal.ExecuteWorkflow(startCtx, client.StartWorkflowOptions{
+		ID:         workflows.GetExpireOrderWorkflowID(code),
+		TaskQueue:  temporal.ConfirmOrderTaskQueue,
+		StartDelay: workflows.CheckoutLifetime,
+	}, workflows.ExpireOrder, &workflows.ExpireOrderWorkflowInput{OrderCode: code})
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.startCheckoutClock: order %s will not time out: %v", code, err)
+	}
 }
 
 // claimPurchaseSlot takes the buyer's slot for this request: a non-nil order
@@ -441,14 +468,9 @@ func (s *implService) handlePaymentFailure(ctx context.Context, code string) err
 	return nil
 }
 
-func (s *implService) Cancel(ctx context.Context, code string) error {
-	o, err := s.repo.GetByCode(ctx, code)
+func (s *implService) Cancel(ctx context.Context, code, userID string) error {
+	o, err := s.ownedOrder(ctx, code, userID)
 	if err != nil {
-		if err == repo.ErrOrderNotFound {
-			s.l.Warnf(ctx, "internal.order.service.Cancel: %v", order.ErrOrderNotFound)
-			return order.ErrOrderNotFound
-		}
-		s.l.Errorf(ctx, "internal.order.service.Cancel.repo.GetByCode:%v", err)
 		return err
 	}
 
@@ -457,16 +479,20 @@ func (s *implService) Cancel(ctx context.Context, code string) error {
 		return order.ErrOrderNotPending
 	}
 
-	if err := s.releaseTickets(ctx, o.Code); err != nil {
-		s.l.Errorf(ctx, "internal.order.service.Cancel.releaseTickets: %v", err)
+	// Flipped before the release: a payment that lands after the read keeps its
+	// tickets, and this cancel is refused.
+	_, cancelled, err := s.repo.CancelIfPending(ctx, o.Code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.Cancel.repo.CancelIfPending: %v", err)
+		return order.ErrOrderCancellationFailed
+	}
+	if !cancelled {
+		return order.ErrOrderNotPending
 	}
 
-	_, err = s.repo.Update(ctx, o.Code, repo.UpdateOrderOption{
-		Status: models.OrderStatusCancelled,
-	})
-	if err != nil {
-		s.l.Errorf(ctx, "Failed to update order status to cancelled for %s: %v", o.Code, err)
-		return order.ErrOrderCancellationFailed
+	// A failed release is not retried: the hold expires on its own.
+	if err := s.releaseTickets(ctx, o.Code); err != nil {
+		s.l.Errorf(ctx, "internal.order.service.Cancel.releaseTickets: %v", err)
 	}
 
 	if o.SessionID != "" {
@@ -495,15 +521,34 @@ func (s *implService) GetMany(ctx context.Context, in order.GetManyOrderInput) (
 	}, nil
 }
 
-func (s *implService) GetByID(ctx context.Context, code string) (models.Order, error) {
+func (s *implService) GetByID(ctx context.Context, code, userID string) (order.GetOrderOutput, error) {
+	o, err := s.ownedOrder(ctx, code, userID)
+	if err != nil {
+		return order.GetOrderOutput{}, err
+	}
+
+	itms, err := s.repo.ListItemByOrderCode(ctx, code)
+	if err != nil {
+		s.l.Errorf(ctx, "internal.order.service.GetByID.repo.ListItemByOrderCode: %v", err)
+		return order.GetOrderOutput{}, err
+	}
+
+	return order.GetOrderOutput{Order: o, Items: itms}, nil
+}
+
+// ownedOrder reads an order for its owner. Anyone else is told it does not exist,
+// before any state is checked, so a stranger learns nothing about it.
+func (s *implService) ownedOrder(ctx context.Context, code, userID string) (models.Order, error) {
 	o, err := s.repo.GetByCode(ctx, code)
 	if err != nil {
 		if err == repo.ErrOrderNotFound {
-			s.l.Warnf(ctx, "internal.order.service.GetByID: %v", order.ErrOrderNotFound)
 			return models.Order{}, order.ErrOrderNotFound
 		}
-		s.l.Errorf(ctx, "internal.order.service.GetByID.repo.GetByCode:%v", err)
+		s.l.Errorf(ctx, "internal.order.service.ownedOrder.repo.GetByCode: %v", err)
 		return models.Order{}, err
+	}
+	if o.UserID != userID {
+		return models.Order{}, order.ErrOrderNotFound
 	}
 
 	return o, nil

@@ -7,18 +7,26 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/pkg/util"
 )
 
+// GrpcOrderStatusValue gives every stored status its own wire value, so a buyer
+// owed money never reads the same as one who was never charged.
 var GrpcOrderStatusValue = map[models.OrderStatus]orderpb.OrderStatus{
-	models.OrderStatusPending:       orderpb.OrderStatus_ORDER_STATUS_PENDING,
-	models.OrderStatusCompleted:     orderpb.OrderStatus_ORDER_STATUS_COMPLETED,
-	models.OrderStatusCancelled:     orderpb.OrderStatus_ORDER_STATUS_CANCELED,
-	models.OrderStatusPaymentFailed: orderpb.OrderStatus_ORDER_STATUS_FAILED,
+	models.OrderStatusPending:        orderpb.OrderStatus_ORDER_STATUS_PENDING,
+	models.OrderStatusCompleted:      orderpb.OrderStatus_ORDER_STATUS_COMPLETED,
+	models.OrderStatusCancelled:      orderpb.OrderStatus_ORDER_STATUS_CANCELED,
+	models.OrderStatusPaymentFailed:  orderpb.OrderStatus_ORDER_STATUS_FAILED,
+	models.OrderStatusTimeout:        orderpb.OrderStatus_ORDER_STATUS_EXPIRED,
+	models.OrderStatusRefundRequired: orderpb.OrderStatus_ORDER_STATUS_REFUND_REQUIRED,
+	models.OrderStatusRefunded:       orderpb.OrderStatus_ORDER_STATUS_REFUNDED,
 }
 
 var OrderStatus = map[orderpb.OrderStatus]models.OrderStatus{
-	orderpb.OrderStatus_ORDER_STATUS_PENDING:   models.OrderStatusPending,
-	orderpb.OrderStatus_ORDER_STATUS_COMPLETED: models.OrderStatusCompleted,
-	orderpb.OrderStatus_ORDER_STATUS_CANCELED:  models.OrderStatusCancelled,
-	orderpb.OrderStatus_ORDER_STATUS_FAILED:    models.OrderStatusPaymentFailed,
+	orderpb.OrderStatus_ORDER_STATUS_PENDING:         models.OrderStatusPending,
+	orderpb.OrderStatus_ORDER_STATUS_COMPLETED:       models.OrderStatusCompleted,
+	orderpb.OrderStatus_ORDER_STATUS_CANCELED:        models.OrderStatusCancelled,
+	orderpb.OrderStatus_ORDER_STATUS_FAILED:          models.OrderStatusPaymentFailed,
+	orderpb.OrderStatus_ORDER_STATUS_EXPIRED:         models.OrderStatusTimeout,
+	orderpb.OrderStatus_ORDER_STATUS_REFUND_REQUIRED: models.OrderStatusRefundRequired,
+	orderpb.OrderStatus_ORDER_STATUS_REFUNDED:        models.OrderStatusRefunded,
 }
 
 func (s *grpcService) newOrderItems(itms []models.OrderItem) []*orderpb.OrderItem {
@@ -81,6 +89,7 @@ func (s *grpcService) newOrderResponse(o models.Order) *orderpb.Order {
 		EventId:          o.EventID,
 		UserFullname:     o.UserFullName,
 		UserEmail:        o.Email,
+		UserPhone:        o.Phone,
 		TotalAmountCents: o.TotalAmount,
 		Currency:         o.Currency,
 		PaymentMethod:    string(o.PaymentMethod),
@@ -101,10 +110,10 @@ func (s *grpcService) newListOrderResponse(os []models.Order) *orderpb.ListOrder
 	}
 }
 
-func (s *grpcService) newGetOrderResponse(o models.Order) *orderpb.GetOrderResponse {
-	return &orderpb.GetOrderResponse{
-		Order: s.newOrderResponse(o),
-	}
+func (s *grpcService) newGetOrderResponse(out order.GetOrderOutput) *orderpb.GetOrderResponse {
+	o := s.newOrderResponse(out.Order)
+	o.Items = s.newOrderItems(out.Items)
+	return &orderpb.GetOrderResponse{Order: o}
 }
 
 func (s *grpcService) newOrderFilter(reqFil *orderpb.OrderFilter) order.FilterOrder {
@@ -120,4 +129,27 @@ func (s *grpcService) newOrderFilter(reqFil *orderpb.OrderFilter) order.FilterOr
 	}
 
 	return fil
+}
+
+func newCreateOrderInput(req *orderpb.CreateOrderRequest) order.CreateOrderInput {
+	itms := make([]order.OrderItemInput, len(req.Items))
+	for i, item := range req.Items {
+		itms[i] = order.OrderItemInput{
+			TicketClassID: item.TicketClassId,
+			Quantity:      item.Quantity,
+		}
+	}
+
+	return order.CreateOrderInput{
+		UserID:        req.UserId,
+		EventID:       req.EventId,
+		UserFullName:  req.UserFullname,
+		Email:         req.UserEmail,
+		Phone:         req.UserPhone,
+		Currency:      req.Currency,
+		PaymentMethod: models.PaymentMethod(req.PaymentMethod),
+		RedirectUrl:   req.RedirectUrl,
+		CheckoutToken: req.CheckoutToken,
+		Items:         itms,
+	}
 }

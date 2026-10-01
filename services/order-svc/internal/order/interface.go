@@ -8,8 +8,9 @@ import (
 
 type Service interface {
 	Create(ctx context.Context, in CreateOrderInput) (CreateOrderOutput, error)
-	Cancel(ctx context.Context, code string) error
-	GetByID(ctx context.Context, code string) (models.Order, error)
+	// Cancel and GetByID answer ErrOrderNotFound for an order userID does not own.
+	Cancel(ctx context.Context, code, userID string) error
+	GetByID(ctx context.Context, code, userID string) (GetOrderOutput, error)
 	GetOne(ctx context.Context, in GetOneOrderInput) (models.Order, error)
 	GetMany(ctx context.Context, in GetManyOrderInput) (GetManyOrderOutput, error)
 	List(ctx context.Context, in ListOrderInput) ([]models.Order, error)

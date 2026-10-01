@@ -94,7 +94,7 @@ longer grace period to drain its keep-alive clients. Both come from `shutdown` i
 why and how long: `docs/decisions/0015-app-pods-sleep-before-sigterm.md`,
 `docs/decisions/0016-the-gateway-drains-for-up-to-65s.md`.
 
-Plus migration **Jobs** (`user-migrate`, `event-migrate`, `payment-migrate`) that run Prisma migrations before the services come up.
+Plus migration **Jobs** (`user-migrate`, `event-migrate`, `payment-migrate`): Helm hooks that run Prisma migrations before an upgrade rolls the services, and after a first install, when Postgres is new. Why: `docs/decisions/0022-a-migration-runs-before-the-code-that-needs-it.md`.
 
 **Infra tier — trimmed to fit one box:**
 
