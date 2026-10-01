@@ -107,8 +107,9 @@ done
 CODE=$(poll "${TOKS[$W]}" "${SESSIONS[$W]}" /tmp/room-w.json)
 [ "$CODE" = 200 ] || fail "the waiter's poll answered $CODE: $(cat /tmp/room-w.json)"
 ST=$(getval data.status < /tmp/room-w.json); PAUSED=$(getval data.paused < /tmp/room-w.json)
-[ "$ST" = QUEUED ] && [ "$PAUSED" = False ] || fail "waiter reads status=$ST paused=$PAUSED, want QUEUED and False"
-echo "  waiter: QUEUED, paused False, position $(getval data.position < /tmp/room-w.json)"
+# The gateway leaves a false `paused` out of the body, so absent reads as not paused.
+[ "$ST" = QUEUED ] && { [ -z "$PAUSED" ] || [ "$PAUSED" = False ]; } || fail "waiter reads status=$ST paused=$PAUSED, want QUEUED and not paused"
+echo "  waiter: QUEUED, not paused, position $(getval data.position < /tmp/room-w.json)"
 
 echo "== 5. the organizer adds two tickets; both waiters are admitted =="
 kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -qc \
