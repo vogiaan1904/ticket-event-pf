@@ -174,4 +174,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0026](0026-the-order-contract-tells-the-buyer-what-happened.md) | What does the order contract tell a buyer, and who may read or cancel an order? | Every stored status gets its own wire value; order-svc checks the owner on read and cancel, with `user_id` in the contract; a cancel is a conditional `PENDING` → `CANCELLED` write; the gateway's routes follow the contract | Keeping `TIMEOUT` as `CANCELED` and refunds as `UNSPECIFIED`; an owner check in the gateway only; removing cancel | A contract change across order-svc and the gateway; until both have rolled, an old gateway's reads are refused for want of `user_id` | accepted |
+
+### read-back
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0028](0028-what-a-client-sends-is-read-back.md) | How do we know a field a client sends is stored and read back, and a stub matches its contract? | A k3s gate that sends every field through each gateway create and update and reads it back; CI regenerating every stub and failing on any difference; repository suites against a real database where a mapping layer sits between request and store | Unit tests with mocks alone; a contract-testing framework between gateway and services; a repository suite for every store, pass-through ones included | CI needs Postgres services and protoc pinned to the stubs' versions; the gate runs on k3s, not in CI | accepted |
 <!-- decisions:index:end -->
