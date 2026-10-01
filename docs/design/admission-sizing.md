@@ -5,7 +5,8 @@
 [0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md),
 [0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md),
 [0023](../decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md),
-[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md).
+[0024](../decisions/0024-an-unpaid-order-times-out-when-its-hold-expires.md),
+[0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md).
 **Applies to:** `waitroom-service` and the chart's per-target values.
 
 ## The problem
@@ -46,8 +47,8 @@ under 2s against an SLO of 99%:
 
 - Door speed is set in each target's values overlay, from a measurement on that
   target. The chart default stays 10 and counts as unmeasured.
-- Room size stays one global default until the per-event question is decided:
-  root `CLAUDE.md`, decision register, open.
+- Room size is each event's tickets available, read each tick: *Room size per event*
+  below.
 
 ## What "the machine" is
 
@@ -202,7 +203,7 @@ counts them.
 Not in this step:
 - a sale that is over, every class past its end with tickets unsold: the door stays
   open, as today;
-- chairs that outnumber the tickets left: step 4, room size per event;
+- chairs that outnumber the tickets left: *Room size per event* below;
 - a chair freed when its hold expires: step 3.
 
 ## When a checkout is abandoned
@@ -258,6 +259,75 @@ Not in this step:
 - `REFUND_REQUIRED` and `REFUNDED` orders read `UNSPECIFIED` on the wire, as they
   already do.
 
+## Room size per event
+
+**Status:** specified 2026-10-01; its two calls answered the same day; not built.
+[0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md), proposed.
+
+Room size is how many buyers may be inside an event at once: admitted, and holding a
+checkout pass. It is `QUEUE_DEFAULT_MAX_CONCURRENT`, 100, for every event, and that is
+wrong twice:
+- **For real buyers it is the limit, not the door.** A full room admits only as fast
+  as buyers leave: 100 ÷ stay. At a 3-minute stay that is 0.56 a second, under a third
+  of k3s's measured door of 2. Load tests stay 2–4s, so the room never fills there,
+  and no test shows it.
+- **It knows nothing about tickets.** A 3-ticket event admits up to 100, and a buyer
+  whose checkout `Reserve` refuses keeps their chair for the token's 15 minutes.
+
+Door speed already bounds the machine, and a buyer who is paying costs it nothing. So
+all that is left for room size is matching buyers to tickets, and that is per event.
+
+The rule: **a tick admits only while the event has more tickets available than
+buyers inside.**
+
+```
+inventory counted the event -> admit min(due, available - inside)
+nothing to judge by         -> admit every buyer due: the door speed alone paces
+```
+
+| | |
+|---|---|
+| `due` | the door speed's batch: the buyers at the front whose turn has come |
+| `available` | inventory's `GetEventStock`, the answer the door already asks for each tick |
+| `inside` | chairs in `waitroom:<event>:checkouts`, once expired ones are swept |
+| Nothing to judge by | inventory did not answer, or the event has no class that can still sell |
+| `QUEUE_DEFAULT_MAX_CONCURRENT` | deleted |
+
+**Every buyer inside counts as one ticket still to take.** A buyer inside has either
+not ordered yet, and may take a ticket, or already holds theirs, which `available` no
+longer counts. The tick cannot tell them apart:
+- a buyer who already holds tickets is counted twice, so the last tickets of a
+  sell-out can wait up to one payment time for a chair to free;
+- a buyer who has not ordered yet may take up to `max_tickets_per_order`, so a tick
+  can still admit someone who finds nothing left.
+
+Telling them apart needs inventory to count the orders that hold tickets, an
+additive field on `GetEventStock`. An inventory without the field answers 0, which
+reads as this rule, so that refinement can follow without a coordinated rollout.
+
+**No cap on chairs.** Each tick admits at most the door's batch, and a chair lives at
+most the token's 15 minutes. So chairs never exceed door speed × 900s: 1800 on k3s,
+9000 on EKS. A cap below that can only hold admission under the measured door.
+
+**What a waiter sees.** `paused` keeps meaning "no ticket available". A waiter held
+back only because the buyers inside could take every ticket left sees their position
+stop moving, without `paused`.
+
+**What changes for EKS.** The 100 also held real buyers under EKS's unmeasured door of
+10 a second. Without it, that door is EKS's only limit. EKS has no real buyers and its
+load tests never filled the room, so nothing measured changes. Its door is still
+unmeasured (*Current values* above).
+
+**Any rollout order is safe.** Only the waitroom changes, and its ConfigMap digest
+rolls it when the key leaves the chart
+([0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md)).
+
+Not in this step:
+- telling the buyers who hold tickets from those who have not ordered: the refinement
+  above;
+- a chair whose checkout `Reserve` refuses is still held for the token's 15 minutes.
+  This rule admits fewer such buyers; it does not free their chairs.
+
 ## What comes next, in order
 
 Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
@@ -276,12 +346,13 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
    chair for the token's 15 minutes, 6 minutes after its tickets went back on sale.
    The section *When a checkout is abandoned* above; built and verified on k3s
    2026-09-30: an abandoned chair frees at about 9 minutes.
-4. **Room size per event:** the smaller of the event's size and door speed × time to
-   pay. It is only well defined once 1–3 exist.
+4. **Room size per event.** The section *Room size per event* above; specified
+   2026-10-01. The design first read "the smaller of the event's size and door speed ×
+   time to pay". Door speed × time to pay is a property of the target, and it cannot
+   bind, so only the event's tickets are left.
 
 ## Not in scope
 
-- **Room size per event.** Step 4 of *What comes next*; the register keeps it open.
 - **An adaptive door**, one that slows admission as checkout latency rises. It
   would follow capacity without being measured again, but it puts a control loop
   in the admission path, and such a loop can oscillate. It would still need a
@@ -297,6 +368,9 @@ Agreed on 2026-09-29. Each gets its own plan once the one before it lands:
 - The door speed reaches `config.yaml` from values: a default in
   `deploy/helm/ticketbottle/values.yaml`, and the measured k3s value in
   `deploy/helm/ticketbottle/values-k3s.yaml`.
+- The room rule is `admitCount` in
+  `services/waitroom-svc/internal/service/queue_processor.go`, fed by `StockGate.Stock`
+  in `services/waitroom-svc/internal/service/stock_gate.go`.
 - The credit mode is a `cpu_credits` variable on `deploy/terraform/modules/ec2-k3s/`,
   default `unlimited`, instead of the account's default for the family, which an
   account can change.

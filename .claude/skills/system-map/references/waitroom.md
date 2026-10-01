@@ -29,7 +29,7 @@ the waitroom's Kafka consumer.
 | What admission does to a queue entry | service `CLAUDE.md`, *Admission is claim/ack* | `services/waitroom-svc/internal/service/queue_processor.go` |
 | How fast buyers are admitted, and what sets it | `docs/design/admission-sizing.md` — built; k3s measured 2026-09-29 | `services/waitroom-svc/internal/service/queue_processor.go`, `deploy/helm/ticketbottle/templates/apps/config.yaml` |
 | When the door pauses, or a sold-out line closes | `docs/design/admission-sizing.md`, *When tickets run out*; `docs/decisions/0023-the-waitroom-stops-admitting-when-no-ticket-is-left.md` | `services/waitroom-svc/internal/service/stock_gate.go`, `services/waitroom-svc/internal/service/queue_processor.go` |
-| How many buyers may hold a slot at once | root `CLAUDE.md`, register — **open** | `services/waitroom-svc/internal/service/queue_processor.go`, `services/waitroom-svc/config/config.go` |
+| How many buyers may hold a slot at once | `docs/design/admission-sizing.md`, *Room size per event*; `docs/decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md` | `services/waitroom-svc/internal/service/queue_processor.go`, `services/waitroom-svc/internal/service/stock_gate.go` |
 | What a join asks event-svc | service `CLAUDE.md`, *JoinQueue asks event-svc…* | `services/waitroom-svc/internal/service/event_gate.go` |
 | How a client learns its position and token | service `CLAUDE.md`, *Admission is discovered by polling* | `services/waitroom-svc/internal/service/waitroom_service.go` |
 | Who may read or leave a session | `docs/decisions/0008-the-waitroom-enforces-session-ownership.md`, `docs/decisions/0009-a-strangers-request-reads-as-not-found.md` | `services/waitroom-svc/internal/service/waitroom_service.go` |
