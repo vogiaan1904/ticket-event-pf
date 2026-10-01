@@ -147,7 +147,6 @@ data:
   # In-place retries before a message is parked on <topic>.dlq; backoff doubles.
   KAFKA_CONSUMER_RETRY_MAX: "5"
   KAFKA_CONSUMER_RETRY_BACKOFF: 500ms
-  QUEUE_DEFAULT_MAX_CONCURRENT: "100"
   QUEUE_DEFAULT_RELEASE_RATE: "2"
   QUEUE_PROCESS_INTERVAL: 1s
   QUEUE_SESSION_TTL: 7200s
@@ -964,7 +963,7 @@ spec:
       annotations:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
-        checksum/config: 3c6cac78d3ea42490bd5b0b1122fa8f637fab1581d5ce555d78d2b0493ac4b07
+        checksum/config: bd57dcbf5a777e401da6c03ed36727eea8c894c131d8a2331df4117900163894
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: waitroom-service }
     spec:

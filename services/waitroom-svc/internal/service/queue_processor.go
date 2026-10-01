@@ -52,7 +52,6 @@ type queueProcessor struct {
 
 type ProcessorConfig struct {
 	ProcessInterval       time.Duration // How often to process queues
-	MaxConcurrentPerEvent int           // Max users in checkout per event
 	BatchSize             int           // Max users to admit per batch
 	RetryAttempts         int           // Retry attempts for failed operations
 	RetryDelay            time.Duration // Delay between retries
@@ -78,11 +77,10 @@ func NewQueueProcessor(
 		prod:  prod,
 		l:     l,
 		cfg: ProcessorConfig{
-			ProcessInterval:       cfg.ProcessInterval,
-			MaxConcurrentPerEvent: cfg.DefaultMaxConcurrent,
-			BatchSize:             cfg.DefaultReleaseRate,
-			RetryAttempts:         3,
-			RetryDelay:            time.Second,
+			ProcessInterval: cfg.ProcessInterval,
+			BatchSize:       cfg.DefaultReleaseRate,
+			RetryAttempts:   3,
+			RetryDelay:      time.Second,
 			// The slot TTL and the token lifetime must be the same window --
 			// a slot outliving its token holds capacity nobody can use.
 			CheckoutTTL:           jwtCfg.Expiry,
@@ -102,8 +100,8 @@ func (qp *queueProcessor) Start(ctx context.Context) error {
 		return errors.New("queue processor is already running")
 	}
 
-	qp.l.Infof(ctx, "Starting queue processor - interval: %v, max_concurrent: %d, batch_size: %d",
-		qp.cfg.ProcessInterval, qp.cfg.MaxConcurrentPerEvent, qp.cfg.BatchSize)
+	qp.l.Infof(ctx, "Starting queue processor - interval: %v, batch_size: %d",
+		qp.cfg.ProcessInterval, qp.cfg.BatchSize)
 
 	qp.isRunning = true
 	qp.startedAt = time.Now()
@@ -223,7 +221,8 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 	}
 
 	// Asked only with someone due, so an empty line costs inventory nothing.
-	switch qp.stock.Get(processingCtx, eventID) {
+	stock := qp.stock.Stock(processingCtx, eventID)
+	switch stock.Door {
 	case DoorPaused:
 		qp.l.Debugf(processingCtx, "Door paused, no ticket available - event_id: %s", eventID)
 		return qp.dropDeadHead(processingCtx, eventID)
@@ -231,17 +230,17 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 		return qp.closeLine(processingCtx, eventID)
 	}
 
-	processingCount, err := qp.qSvc.GetProcessingCount(processingCtx, eventID)
+	inside, err := qp.qSvc.GetProcessingCount(processingCtx, eventID)
 	if err != nil {
 		return fmt.Errorf("failed to get processing count: %w", err)
 	}
 
-	availableSlots := int64(qp.cfg.MaxConcurrentPerEvent) - processingCount
-	if availableSlots <= 0 {
-		qp.l.Debugf(processingCtx, "No available slots for event, event_id: %s, processing_count: %d, max_concurrent: %d", eventID, processingCount, qp.cfg.MaxConcurrentPerEvent)
+	n := admitCount(len(ssIDs), stock, inside)
+	if n == 0 {
+		qp.l.Debugf(processingCtx, "No ticket left beyond the buyers inside - event_id: %s, inside: %d, available: %d", eventID, inside, stock.Available)
 		return nil
 	}
-	ssIDs = ssIDs[:min(int64(len(ssIDs)), availableSlots)]
+	ssIDs = ssIDs[:n]
 
 	qp.l.Infof(processingCtx, "Starting batch admission, event_id: %s, session_count: %d", eventID, len(ssIDs))
 
@@ -287,6 +286,20 @@ func (qp *queueProcessor) ProcessEventQueue(ctx context.Context, eventID string)
 		eventID, len(ssIDs), admittedCount)
 
 	return nil
+}
+
+// admitCount is how many of the buyers due a tick lets in.
+//
+//	inventory counted the event -> while tickets available outnumber the buyers inside
+//	nothing to judge by         -> all of them: the door speed alone paces admission
+//
+// Each buyer inside counts as one ticket still to take.
+// See docs/design/admission-sizing.md#room-size-per-event.
+func admitCount(due int, s Stock, inside int64) int {
+	if !s.Counted {
+		return due
+	}
+	return int(max(0, min(int64(due), s.Available-inside)))
 }
 
 // sweepBatchSize is how many entries one tick may end or drop while the door is shut.

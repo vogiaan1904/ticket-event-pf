@@ -117,14 +117,13 @@ func TestClosingKeepsASessionItCouldNotRead(t *testing.T) {
 }
 
 // Sold out closes the line whatever the room: nobody is getting in either way.
-func TestASoldOutLineClosesEvenWithEveryChairTaken(t *testing.T) {
+func TestASoldOutLineClosesWithBuyersStillInside(t *testing.T) {
 	inv := &fakeInventoryClient{}
 	inv.set(10, 10, 0)
 	q := newFakeQueue("ss-1")
 	q.processing["ss-0"] = true
 	s := &fakeSessions{sessions: map[string]*models.Session{"ss-1": queuedSession("ss-1")}}
 	qp, _ := newDoorProcessor(q, s, inv)
-	qp.cfg.MaxConcurrentPerEvent = 1
 
 	tick(t, qp)
 

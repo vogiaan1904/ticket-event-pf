@@ -54,8 +54,8 @@ var (
 		[]string{"event_id"},
 	)
 
-	// Per event, because the limit this is read against is per event
-	// (MaxConcurrentPerEvent). A cluster-wide sum cannot be compared to it.
+	// Per event, because what it is read against, the event's tickets available, is
+	// per event. A cluster-wide sum cannot be compared to it.
 	SlotsInUse = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "tb_waitroom_slots_in_use",

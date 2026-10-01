@@ -10,7 +10,7 @@ import (
 )
 
 func TestAJoinToASoldOutEventIsRefused(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 	r.inv.set(10, 10, 0)
 
 	_, err := r.svc.JoinQueue(context.Background(), &JoinQueueInput{UserID: "u-1", EventID: r.eID})
@@ -20,7 +20,7 @@ func TestAJoinToASoldOutEventIsRefused(t *testing.T) {
 }
 
 func TestAPausedLineKeepsTheWaiterQueuedAndSaysSo(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 	r.inv.set(10, 7, 0)
 
 	ssID := r.join(t, "u-1")
@@ -35,7 +35,7 @@ func TestAPausedLineKeepsTheWaiterQueuedAndSaysSo(t *testing.T) {
 
 // Ended is final for the session, even once tickets come back.
 func TestAWaiterOnALineThatSoldOutStaysSoldOut(t *testing.T) {
-	r := newAdmissionRig(t, time.Now().Add(-time.Hour), 10, &interleavingProducer{})
+	r := newAdmissionRig(t, time.Now().Add(-time.Hour), &interleavingProducer{})
 	r.inv.set(10, 7, 0)
 	ssID := r.join(t, "u-1")
 
