@@ -20,7 +20,7 @@ There is **one source of truth**: the root `proto/` directory (`user`, `event`, 
    make proto-ts       # api-gateway, event, user, payment
    ```
    TS regen needs the service's `node_modules` — run `npm install` in the service first if `protoc-gen-ts_proto` fails with `MODULE_NOT_FOUND`.
-3. **Review the generated diff** (`git diff` in `*/src/protogen`, `*/pkg/grpc`, `waitroom-svc/protogen`) and **commit the stubs together with the `.proto` change** in the same commit.
+3. **Review the generated diff** (`git diff` in `*/src/protogen`, `*/pkg/grpc`, `waitroom-svc/protogen`) and **commit the stubs together with the `.proto` change** in the same commit. CI's `proto-copies` workflow regenerates every stub with protoc 29.3, protoc-gen-go v1.36.6, protoc-gen-go-grpc v1.5.1 and each service's ts-proto, and fails on any difference.
 
 ## Who consumes what (so you know what breaks)
 
