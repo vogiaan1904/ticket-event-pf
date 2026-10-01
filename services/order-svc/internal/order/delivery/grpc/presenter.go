@@ -35,7 +35,7 @@ func (s *grpcService) newOrderItems(itms []models.OrderItem) []*orderpb.OrderIte
 		pbItems[i] = &orderpb.OrderItem{
 			TicketClassId: itm.TicketClassID,
 			Quantity:      itm.Quantity,
-			PriceCents:    itm.TotalAmount,
+			PriceCents:    itm.PriceAtPurchase,
 		}
 	}
 

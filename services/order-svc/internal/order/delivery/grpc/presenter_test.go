@@ -63,3 +63,11 @@ func TestCreateOrderInput_KeepsEveryFieldTheBuyerSent(t *testing.T) {
 		t.Fatalf("input = %+v", in)
 	}
 }
+
+// price_cents is what one ticket cost; a client multiplies it by the quantity.
+func TestOrderItemsCarryTheUnitPrice(t *testing.T) {
+	itms := (&grpcService{}).newOrderItems([]models.OrderItem{{TicketClassID: "tc1", Quantity: 2, PriceAtPurchase: 12345, TotalAmount: 24690}})
+	if len(itms) != 1 || itms[0].PriceCents != 12345 {
+		t.Fatalf("items = %+v, want price_cents 12345 for one ticket", itms)
+	}
+}
