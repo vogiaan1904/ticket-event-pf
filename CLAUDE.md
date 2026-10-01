@@ -50,6 +50,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What does the waitroom do when an event's tickets run out? | `docs/decisions/0023` | Asks inventory each tick; pauses while nothing is available, ends the line once sold out (409 `WTR012`), fails open; built and verified on k3s 2026-09-30 |
 | What happens to an order nobody pays for? | `docs/decisions/0024` | Times out at its hold's expiry, frees the chair; built and verified on k3s 2026-09-30 |
 | How many buyers may hold inventory at once, and can it vary per event? | `docs/decisions/0025` | As many as the event has tickets available, checked each tick; the global 100 is deleted; built and verified on k3s 2026-10-01 |
+| What does an order tell its buyer, and who may read or cancel it? | `docs/decisions/0026` | Every stored status has its own wire value; only the owner reads or cancels, checked in order-svc; a cancel never overwrites a payment; built, not yet verified on k3s |
 
 ### Open
 
@@ -59,7 +60,6 @@ describing it for a week — because the fact had been copied rather than linked
 | Are the deferred stateful-tier phases (b)–(f) the next work? | The ranking that deferred them dissolved on 2026-09-23: the ceiling they were postponed for is not reachable. Nothing has replaced the ranking. |
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. Only `Reserve` has been measured. |
 | Why did one refused reconnect cost the gateway ~40s on 2026-09-25, and what bounds it when a backend crashes? | A rollout no longer triggers it (0015); a crash, out-of-memory kill or eviction still can. On 2026-09-25 the gateway's gRPC calls failed for 40.7s after a 1.8s TCP refusal, in 4 of 5 rollouts. On 2026-09-27 three traced rollouts of the same build recovered in about 1s — one `ECONNREFUSED`, then grpc-js's first backoff — and the 40s did not recur, so its cause is unknown: `docs/plans/2026-09-27-rollout-drain-fixes.md#results`. |
-| Why does the gateway send order fields the contract no longer has? | `src/protogen/order.pb.ts` is stale: it describes orders keyed by `id` with offset pagination, while the runtime `src/protos/order.proto` is cursor-based. Regenerating breaks `src/modules/orders/`, which is written against the old shape. |
 
 ## Services & ports
 

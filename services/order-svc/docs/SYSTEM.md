@@ -388,15 +388,15 @@ type Service interface {
 - Initiates order creation workflow
 - Returns order details and payment URL
 
-**CancelOrder** (`CancelOrderRequest → CancelOrderResponse`)
-- Cancels pending order
-- Releases reserved tickets
+**CancelOrder** (`CancelOrderRequest → google.protobuf.Empty`)
+- Cancels the caller's order while it is still `PENDING`, then releases its tickets
+- Owner and conditional write: service `CLAUDE.md`, *Reading and cancelling an order*
 
 **GetOrder** (`GetOrderRequest → GetOrderResponse`)
-- Retrieves order by ID or code
+- Retrieves the caller's order by code, with its items
 
 **GetManyOrders** (`GetManyOrdersRequest → GetManyOrdersResponse`)
-- Paginated order list with filters
+- Cursor-paged order list with filters; an empty cursor is the first page
 
 **ListOrders** (`ListOrdersRequest → ListOrdersResponse`)
 - Filtered order list for admin

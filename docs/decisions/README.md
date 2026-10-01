@@ -167,4 +167,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0022](0022-a-migration-runs-before-the-code-that-needs-it.md) | When does a schema migration run, relative to the code that reads it? | Before an upgrade's rollout (`pre-upgrade`); after a first install (`post-install`) | After the rollout, as before; an init container in each service | Every migration must work with the code already running, and the Job reads the ConfigMap and Secret from before the upgrade | accepted |
+
+### order-contract
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0026](0026-the-order-contract-tells-the-buyer-what-happened.md) | What does the order contract tell a buyer, and who may read or cancel an order? | Every stored status gets its own wire value; order-svc checks the owner on read and cancel, with `user_id` in the contract; a cancel is a conditional `PENDING` → `CANCELLED` write; the gateway's routes follow the contract | Keeping `TIMEOUT` as `CANCELED` and refunds as `UNSPECIFIED`; an owner check in the gateway only; removing cancel | A contract change across order-svc and the gateway; until both have rolled, an old gateway's reads are refused for want of `user_id` | proposed |
 <!-- decisions:index:end -->

@@ -243,9 +243,8 @@ anything else       -> nothing: it was paid, failed or cancelled first
   re-acquire the ticket, and marked `REFUND_REQUIRED` only if it cannot. That keeps
   the backstop in `services/order-svc/docs/RESERVATION_HOLD.md`: a payment made
   inside the provider's 6-minute window whose confirmation ran long.
-- **On the wire a `TIMEOUT` order reads `CANCELED`.** The order contract has no
-  expired status, and adding one means regenerating the gateway's stale
-  `order.pb.ts`, which the register's open row covers.
+- **On the wire a `TIMEOUT` order reads `EXPIRED`**, since
+  [0026](../decisions/0026-the-order-contract-tells-the-buyer-what-happened.md) gave every stored status its own wire value.
 - **Rollout.** An order already `PENDING` at the deploy has no timer and behaves as
   today. The consumer registers `ExpireOrder` long before the first one fires, 9
   minutes after the first new checkout.
@@ -255,9 +254,7 @@ step 4 sizes the room by.
 
 Not in this step:
 - a chair whose buyer is admitted and never starts a checkout: it holds for the
-  token's 15 minutes, since there is no hold to expire;
-- `REFUND_REQUIRED` and `REFUNDED` orders read `UNSPECIFIED` on the wire, as they
-  already do.
+  token's 15 minutes, since there is no hold to expire.
 
 ## Room size per event
 

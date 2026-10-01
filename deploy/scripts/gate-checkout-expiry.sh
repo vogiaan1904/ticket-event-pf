@@ -139,7 +139,7 @@ echo "  A's chair freed ${AFTER}s after the order"
 echo "== 6. A's checkout expired everywhere; B's is untouched =="
 [ "$AFTER" -ge 510 ] && [ "$AFTER" -le 660 ] || fail "chair freed at ${AFTER}s, want 510-660s (the hold is 540s, the chair's TTL 900s)"
 STATUS=$(order_status "$TOK_A" "$CODE_A")
-[ "$STATUS" = CANCELED ] || fail "A's order reads ${STATUS:-?}, want CANCELED"
+[ "$STATUS" = EXPIRED ] || fail "A's order reads ${STATUS:-?}, want EXPIRED"
 KEY="{\"PK\":{\"S\":\"ORDER#$CODE_A\"},\"SK\":{\"S\":\"ORDER#$CODE_A\"}}"
 STORED=$(aws dynamodb get-item --region "$REGION" --table-name "$TABLE" --key "$KEY" --query 'Item.status.S' --output text)
 [ "$STORED" = TIMEOUT ] || fail "A's order is $STORED in DynamoDB, want TIMEOUT"
@@ -151,7 +151,7 @@ RSV=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_i
 ! echo "$RSV" | grep -q ACTIVE || fail "A's reservation is still ACTIVE: $RSV"
 STATUS=$(order_status "$TOK_B" "$CODE_B")
 [ "$STATUS" = COMPLETED ] || fail "B's order reads ${STATUS:-?}, want COMPLETED"
-echo "  A: CANCELED on the wire, TIMEOUT stored, session expired, reservation $(echo $RSV); B: COMPLETED"
+echo "  A: EXPIRED on the wire, TIMEOUT stored, session expired, reservation $(echo $RSV); B: COMPLETED"
 
 echo "== 7. B's clock found nothing to expire =="
 SEEN=""

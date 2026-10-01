@@ -33,6 +33,17 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
   twice. Their workflow tests run real activities over fakes
   (`short_steps_test.go`); the SDK's test suite cannot mock them by name.
 
+### Reading and cancelling an order
+
+- **Only the owner.** `GetOrder` and `CancelOrder` carry the caller's `user_id`; an
+  order the caller does not own answers `NOT_FOUND`, before any state check
+  ([0026](../../docs/decisions/0026-the-order-contract-tells-the-buyer-what-happened.md)).
+- **Every stored status has its own wire value:** `TIMEOUT` reads `EXPIRED`, and
+  `REFUND_REQUIRED` and `REFUNDED` read as themselves.
+- **A cancel never overwrites a payment.** It flips `PENDING` to `CANCELLED` with the
+  conditional write `ExpireIfPending` uses, and releases the hold only if the flip
+  landed; otherwise `FAILED_PRECONDITION`.
+
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.
 
