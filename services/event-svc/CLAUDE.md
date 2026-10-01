@@ -46,6 +46,5 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
   It migrates that database itself. Without the variable it skips locally and fails in CI.
 - **An update's empty `categoryIds` keeps the categories.** proto3 sends an unset repeated field
   as empty, so "none named" and "clear them" look the same; clearing is not possible by update.
-
 - This service does **not** use `@nestjs/cqrs` — it is a plain service + repository. Don't add CQRS scaffolding expecting it to already exist.
 - Role-based access (organizer vs admin) gates lifecycle transitions; keep authorization checks in the service layer alongside the status update.

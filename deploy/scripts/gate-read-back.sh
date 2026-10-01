@@ -154,7 +154,7 @@ for i in $(seq 1 30); do
   sleep 1
 done
 [ -n "$CHECKOUT" ] || fail "not admitted within 30s: $(cat /tmp/rb-st.json)"
-expect "admitted session" /tmp/rb-st.json "data.sessionId==$SESSION" "data.status==ADMITTED" "data.paused==false"
+expect "admitted session" /tmp/rb-st.json "data.sessionId==$SESSION" "data.status==READY" "data.paused==false"
 OR="{\"eventId\":\"$EVENT_ID\",\"userFullname\":\"Grace Hopper\",\"userEmail\":\"$EMAIL\",\"userPhone\":\"0912345678\",
  \"paymentMethod\":\"ZALOPAY\",\"items\":[{\"ticketClassId\":\"$TCID\",\"quantity\":2}],\"currency\":\"VND\",
  \"checkoutToken\":\"$CHECKOUT\",\"redirectUrl\":\"https://example.com/done\"}"
