@@ -119,3 +119,35 @@ func TestStockGateAsksAgainOnceTheAnswerIsStale(t *testing.T) {
 		t.Fatalf("door = %s, want sold out", got)
 	}
 }
+
+func TestStockGateKeepsTheCountItWasGiven(t *testing.T) {
+	inv := &fakeInventoryClient{}
+	inv.set(20, 5, 3)
+	g := NewStockGate(inv, time.Minute, quietLogger())
+
+	want := Stock{Door: DoorOpen, Available: 3, Counted: true}
+	if got := g.Stock(context.Background(), "e-1"); got != want {
+		t.Fatalf("stock = %+v, want %+v", got, want)
+	}
+}
+
+// Unanswered, the door fails open and sets no limit on who may be inside.
+func TestStockGateCountsNothingWhenUnanswered(t *testing.T) {
+	inv := &fakeInventoryClient{err: status.Error(codes.Unavailable, "down")}
+	g := NewStockGate(inv, time.Minute, quietLogger())
+
+	if got := g.Stock(context.Background(), "e-1"); got != (Stock{Door: DoorOpen}) {
+		t.Fatalf("stock = %+v, want an open door with nothing counted", got)
+	}
+}
+
+// With no class that can still sell there is nothing to judge a room by.
+func TestStockGateCountsNothingWhenNoClassCanSell(t *testing.T) {
+	inv := &fakeInventoryClient{}
+	inv.set(0, 0, 0)
+	g := NewStockGate(inv, time.Minute, quietLogger())
+
+	if got := g.Stock(context.Background(), "e-1"); got != (Stock{Door: DoorOpen}) {
+		t.Fatalf("stock = %+v, want an open door with nothing counted", got)
+	}
+}

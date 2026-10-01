@@ -31,6 +31,14 @@ func (d Door) String() string {
 	}
 }
 
+// Stock is one answer about an event's tickets. Counted is false when inventory gave
+// nothing to judge by: it did not answer, or no class can still sell.
+type Stock struct {
+	Door      Door
+	Available int64
+	Counted   bool
+}
+
 // stockFetchTimeout bounds one question to inventory; past it the door fails open.
 const stockFetchTimeout = time.Second
 
@@ -50,7 +58,7 @@ type StockGate struct {
 }
 
 type stockGateEntry struct {
-	door      Door
+	stock     Stock
 	expiresAt time.Time
 }
 
@@ -60,8 +68,13 @@ func NewStockGate(inv inventory.InventoryServiceClient, ttl time.Duration, l log
 
 // Get returns the event's door, asking inventory at most once per TTL.
 func (g *StockGate) Get(ctx context.Context, eID string) Door {
-	if d, ok := g.lookup(eID); ok {
-		return d
+	return g.Stock(ctx, eID).Door
+}
+
+// Stock returns the event's answer, asking inventory at most once per TTL.
+func (g *StockGate) Stock(ctx context.Context, eID string) Stock {
+	if s, ok := g.lookup(eID); ok {
+		return s
 	}
 
 	v, _, _ := g.group.Do(eID, func() (any, error) {
@@ -70,41 +83,41 @@ func (g *StockGate) Get(ctx context.Context, eID string) Door {
 		defer cancel()
 
 		// Stored even when failed open, so a down inventory is not asked per join.
-		d := g.fetch(fetchCtx, eID)
-		g.store(eID, d)
-		return d, nil
+		s := g.fetch(fetchCtx, eID)
+		g.store(eID, s)
+		return s, nil
 	})
-	return v.(Door)
+	return v.(Stock)
 }
 
-func (g *StockGate) lookup(eID string) (Door, bool) {
+func (g *StockGate) lookup(eID string) (Stock, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 
 	e, ok := g.entries[eID]
 	if !ok || time.Now().After(e.expiresAt) {
-		return DoorOpen, false
+		return Stock{}, false
 	}
-	return e.door, true
+	return e.stock, true
 }
 
-func (g *StockGate) store(eID string, d Door) {
+func (g *StockGate) store(eID string, s Stock) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.entries[eID] = stockGateEntry{door: d, expiresAt: time.Now().Add(g.ttl)}
+	g.entries[eID] = stockGateEntry{stock: s, expiresAt: time.Now().Add(g.ttl)}
 }
 
-func (g *StockGate) fetch(ctx context.Context, eID string) Door {
+func (g *StockGate) fetch(ctx context.Context, eID string) Stock {
 	out, err := g.inv.GetEventStock(ctx, &inventory.GetEventStockRequest{EventId: eID})
 	if err != nil {
 		metrics.StockChecks.WithLabelValues("unavailable").Inc()
 		g.l.Warnf(ctx, "StockGate: inventory did not answer for event_id=%s, door stays open: %v", eID, err)
-		return DoorOpen
+		return Stock{Door: DoorOpen}
 	}
 
 	d := doorFor(out.GetTotal(), out.GetSold(), out.GetAvailable())
 	metrics.StockChecks.WithLabelValues(d.String()).Inc()
-	return d
+	return Stock{Door: d, Available: out.GetAvailable(), Counted: out.GetTotal() > 0}
 }
 
 // doorFor turns an event's counts into what its door does.
