@@ -54,6 +54,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How do we know what a client sends is stored and read back, and stubs match their contracts? | `docs/decisions/0028` | A k3s gate reads every field back through the gateway; CI regenerates every stub and fails on a difference; repository suites run against a real database; built and verified on k3s 2026-10-01 |
 | What does an order tell its buyer, and who may read or cancel it? | `docs/decisions/0026` | Every stored status has its own wire value; only the owner reads or cancels, checked in order-svc; a cancel never overwrites a payment; built and verified on k3s 2026-10-01 |
 | What fails first as concurrent checkouts rise? | `docs/plans/2026-10-09-capacity-on-a-bigger-box.md` | The `payment.completed` consumer: one partition, one confirm at a time, about 9.5 purchases a second on any box. Past it, about 24 on 16 vCPUs, in Temporal and its Postgres. Measured on one node 2026-10-11 ([0029](docs/decisions/0029-the-next-testbed-is-one-bigger-box.md)) |
+| How do payment confirmations keep up as purchases rise? | `docs/decisions/0030` | 8 partitions on `payment.completed`, made so before order-consumer starts; a partition without an offset is read from its oldest message; chosen 2026-10-11, not built |
 
 ### Open
 

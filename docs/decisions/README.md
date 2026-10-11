@@ -186,4 +186,5 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0029](0029-the-next-testbed-is-one-bigger-box.md) | Which testbed answers "what fails first as checkouts rise"? | The k3s box resized in place to 2, 16 and 8 vCPUs for one session, with no workload limits and payment on the simulated provider | Ephemeral EKS with Temporal's database split out, or cost per purchase on the 2-vCPU box | One node: a limit found belongs to a topology where every service and database shares one machine and one disk, and what changes across nodes stays unmeasured | accepted |
+| [0030](0030-payment-confirmations-run-across-partitions.md) | How do payment confirmations keep up as purchases rise? | `payment.completed` with 8 partitions, made so before order-consumer starts; a partition the consumer has no offset for is read from its oldest message | Confirming without waiting for each `ConfirmOrder`, or both | Order holds per payment, not across the topic; the count can grow but never shrink, and growing it moves keys; the consumer cannot start while the broker is down | proposed |
 <!-- decisions:index:end -->
