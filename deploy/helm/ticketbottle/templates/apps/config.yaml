@@ -86,6 +86,9 @@ data:
   NODE_ENV: development
   LOG_LEVEL: debug
   ZALOPAY_APP_ID: "2554"
+  {{- with .Values.payment.zalopayCreateUrl }}
+  ZALOPAY_CREATE_URL: {{ . | quote }}
+  {{- end }}
   DATABASE_HOST: {{ .Values.postgres.hosts.payment }}
   DATABASE_PORT: "5432"
   DATABASE_NAME: ticketbottle_payment

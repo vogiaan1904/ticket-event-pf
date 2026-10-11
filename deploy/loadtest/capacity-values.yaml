@@ -1,0 +1,34 @@
+# Layered on values-k3s.yaml for a capacity session only, never deployed as a
+# target (decision 0029):
+#   make -C deploy k3s-deploy REF=<sha-tag> HELM_EXTRA="-f loadtest/capacity-values.yaml"
+# The box runs nothing else, so no CPU or memory limit should bind before the
+# design does; requests still schedule.
+resources:
+  order-service:     { limits: null }
+  order-consumer:    { limits: null }
+  inventory-service: { limits: null }
+  waitroom-service:  { limits: null }
+  app-gateway:       { limits: null }
+  user-service:      { limits: null }
+  event-service:     { limits: null }
+  payment-service:   { limits: null }
+  payment-webhook:   { limits: null }
+  outbox-relay:      { limits: null }
+  postgres:          { limits: null }
+  redpanda:          { limits: null }
+  temporal:          { limits: null }
+  temporal-ui:       { limits: null }
+  redis:             { limits: null }
+
+postgres:
+  # Prisma sizes its pool from the node's physical cores, so a bigger box opens
+  # more connections than the default 100 allows.
+  args: ["postgres", "-c", "max_connections=500"]
+
+payment:
+  # The simulated provider: a capacity run measures this system, not the sandbox.
+  zalopayCreateUrl: http://payment-webhook:8080/v2/create
+
+waitroom:
+  # Open, so the system and not the door limits the run.
+  releaseRate: 1000

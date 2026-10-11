@@ -153,4 +153,15 @@ for svc in user event payment; do
 done
 echo "OK  migrations run before an upgrade's rollout, and after a first install"
 
+# A capacity session (decision 0029) lifts every limit, points payment at the
+# simulated provider, and lets Postgres take the pools a large node opens.
+cap=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" -f "$CHART/../../loadtest/capacity-values.yaml")
+grep -q 'ZALOPAY_CREATE_URL: "http://payment-webhook:8080/v2/create"' <<<"$cap" \
+  || fail "the capacity overlay does not point payment at the simulated provider"
+grep -q 'max_connections=500' <<<"$cap" || fail "the capacity overlay does not raise Postgres's max_connections"
+limited=$(awk 'BEGIN { RS = "\n---\n" } /kind: (Deployment|StatefulSet)/ && /limits:/ {
+  match($0, /\n  name: [a-z0-9-]+/); print substr($0, RSTART + 9, RLENGTH - 9) }' <<<"$cap" | tr '\n' ' ')
+[ -z "$limited" ] || fail "under the capacity overlay these keep a limit: $limited"
+echo "OK  the capacity overlay lifts every limit, uses the simulated provider, raises max_connections"
+
 echo "all render assertions passed"
