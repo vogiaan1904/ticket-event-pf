@@ -1,7 +1,8 @@
 # What bounds purchase throughput as the box grows
 
-**Status: WRITTEN 2026-10-09, not executed.** Decision:
-→ [0029](../decisions/0029-the-next-testbed-is-one-bigger-box.md), proposed.
+**Status: COMPLETE 2026-10-11.** The first wall is the `payment.completed` consumer,
+at about 9.5 purchases a second on any box; past it, about 24, in Temporal and its
+Postgres. Decision: → [0029](../decisions/0029-the-next-testbed-is-one-bigger-box.md), accepted.
 
 **Goal:** Name the first part of the design that stops purchase throughput from
 growing with CPU, or show that nothing does up to 16 vCPUs. Measured on one box,
@@ -1066,9 +1067,11 @@ make -C deploy k3s-gate2                                                        
 
   Then kill the port-forward and the tunnel, run `make -C deploy stop-ec2-k3s`, and
   confirm both `stopped` and `grep instance_type deploy/terraform/envs/k3s/terraform.tfvars`
-  printing `t3.large`. Last, `terraform -chdir=deploy/terraform/envs/k3s plan` must print
-  `No changes.`: a T instance resized from an m5 takes the account's credit default, and
-  the box's measured capacity needs `unlimited` (`modules/ec2-k3s/variables.tf`).
+  printing `t3.large`. Last, `aws ec2 describe-instance-credit-specifications --instance-ids
+  $(make -s -C deploy k3s-instance)` must print `unlimited`: a T instance resized from an m5
+  takes the account's credit default, and the box's measured capacity needs `unlimited`
+  (`modules/ec2-k3s/variables.tf`). `terraform -chdir=deploy/terraform/envs/k3s plan` must
+  show no resource change; on a stopped box its outputs always differ.
 
 ---
 
@@ -1107,14 +1110,101 @@ git commit -m "docs: record what bounds purchase throughput as the box grows"
 
 ## Results
 
-| Size | vCPU | Buyers | Purchases/s | Checkout p50 / p99 | Busy / vCPU | IOPS | Postgres conns | Postgres CPU / IO / Lock | First task p50 / max | Temporal / Postgres core-s | Verdict |
-|---|---|---|---|---|---|---|---|---|---|---|---|
+| Setup | Size | vCPU | Buyers | Purchases/s | Checkout p50 / p99 | Busy / vCPU | IOPS | Postgres conns | Postgres CPU / IO / Lock | First task p50 / max | Temporal / Postgres core-s | Verdict |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 partition, 1 worker | m5.large | 2 | 10 | 2.11 | 0.58 / 1.33s | 1.0 / 2 | 188 | 65 | 49 / 40 / 0% | 0.02 / 0.11s | 0.101 / 0.092 | none |
+| | m5.large | 2 | 20 | 3.97 | 0.90 / 2.93s | 1.6 / 2 | 234 | 70 | 62 / 26 / 0% | 0.03 / 0.35s | 0.090 / 0.098 | none |
+| | m5.large | 2 | 40 | **4.26** | 1.42 / 3.92s | 1.9 / 2 | 295 | 72 | 41 / 42 / 0% | 0.12 / 2.60s | 0.098 / 0.103 | cpu |
+| | m5.large | 2 | 80 | 3.80 | 1.75 / 12.76s | 1.8 / 2 | 322 | 76 | 50 / 39 / 0% | 0.10 / 2.34s | 0.104 / 0.109 | cpu |
+| 1 partition, 1 worker | m5.4xlarge | 16 | 80 | 9.44 | 0.56 / 2.43s | 2.8 / 16 | 608 | 112 | 28 / 47 / 0% | 0.02 / 0.09s | 0.091\* / 0.068\* | none |
+| | m5.4xlarge | 16 | 160 | **9.59** | 0.56 / 3.27s | 3.2 / 16 | 604 | 109 | 26 / 55 / 0% | 0.02 / 2.03s | 0.084 / 0.071 | disk |
+| | m5.4xlarge | 16 | 320 | 9.09 | 0.61 / 5.94s | 3.8 / 16 | 710 | 111 | 22 / 53 / 0% | 0.02 / 0.09s | 0.099 / 0.083 | disk |
+| | m5.4xlarge | 16 | 640 | 8.74 | 0.84 / 12.79s | 5.4 / 16 | 756 | 121 | 28 / 52 / 0% | 0.03 / 0.09s | 0.112 / 0.100 | event loop: app-gateway, disk |
+| 8 partitions, 1 worker | m5.4xlarge | 16 | 160 | 23.30 | 1.22 / 4.47s | 7.1 / 16 | 1342 | 119 | 20 / 55 / 0% | 0.25 / 2.28s | 0.092 / 0.082 | disk |
+| | m5.4xlarge | 16 | 320 | **25.49** | 6.97 / 15.30s | 7.2 / 16 | 1524 | 120 | 21 / 58 / 0% | 5.72 / 13.87s | 0.091 / 0.078 | disk, temporal dispatch |
+| 1 partition, 2 workers | m5.4xlarge | 16 | 320 | 9.56 | 0.59 / 4.96s | 3.7 / 16 | 831 | 118 | 27 / 51 / 0% | 0.01 / 0.07s | 0.095 / 0.078 | disk |
+| 8 partitions, 2 workers | m5.4xlarge | 16 | 320 | 23.39 | 0.91 / 6.44s | 7.9 / 16 | 1467 | 99 | 27 / 52 / 0% | 0.08 / 3.69s | 0.098 / 0.087 | event loop: app-gateway, disk |
+| control, cold | t3.large | 2 | 40 | 2.70 | 1.82 / 10.23s | 1.7 / 2 | 331 | 83† | 58 / 28 / 0%† | 0.10 / 2.12s | 0.133 / 0.139 | cpu |
+| control, warm | t3.large | 2 | 40 | 2.71 | 1.87 / 11.29s | 1.8 / 2 | 246 | 84 | 54 / 29 / 0% | 0.23 / 2.23s | 0.131 / 0.135 | cpu |
 
-Temporal history shards: not yet read.
+2026-10-11, 07:38–09:39Z, build `sha-e83dd91`, runs of 3 minutes on the capacity
+overlay, each row recomputed from its run's files with `capacity.py`. *1 partition,
+1 worker* is the chart as shipped: `payment.completed` has one partition and one
+order-service replica runs the CreateOrder worker. The 8-partition rows raised the
+topic by hand (`rpk topic add-partitions`), the 2-worker rows added
+`--set replicas.order-service=2`, and both were reverted before the box went back.
+The 1-partition, 2-worker run met a topic already reverted; its ConfirmOrders ran one
+at a time, so it shows the second worker alone leaves the first wall where it is.
+No run was void: no container restarted inside a run, and k6 was throttled in at most
+0.8% of its periods. The plateaus are in bold.
+
+\* The run began minutes after the resize, while Prometheus still returned each
+restarted container's last sample from before it, so its per-pod counters ran
+backwards (Temporal 354 to 159 core-s). These two are `increase()` over the run.
+Node CPU, IOPS and throughput are unaffected.
+† The warm rerun's sampler overwrote this run's Postgres file; the values are from the
+line `capacity.py` printed when the run ended.
+
+
+Temporal history shards: 4 (`historyShardCount`, `temporal operator cluster describe`,
+read on the m5.large on 2026-10-11).
 
 ## What this says
 
-Not yet measured.
+**The first wall is the `payment.completed` consumer, at about 9.5 purchases a second
+on any box.**
+- On 16 vCPUs, throughput held at 9.44, 9.59, 9.09 and 8.74 from 80 to 640 buyers,
+  with 2.8 to 5.4 of 16 cores busy.
+- Every topic has one partition (`rpk topic list`): the chart creates none, and
+  Redpanda's default is one. `order-consumer` takes a partition's messages in order,
+  and for each starts `ConfirmOrder` and waits for it to finish
+  (`services/order-svc/internal/order/service/consumer.go`, `wfRun.Get`).
+- In 30 seconds of the 640-buyer run, 256 ConfirmOrders ran with no overlap: 109ms
+  each on average, 7ms from one closing to the next starting, the consumer busy 93% of
+  the time. One per 116ms is 8.5 a second, the confirm rate over the same window.
+- With 8 partitions and nothing else changed, 160 buyers bought 23.30 a second
+  instead of 9.59.
+
+**Past it, the ceiling is about 24 a second, in Temporal and its Postgres. Which part
+of that path binds is not separated.**
+- With 8 partitions: 23.30 at 160 buyers, 25.49 at 320. Busy 7.1 to 7.9 of 16 cores,
+  IOPS at most 1,524 of gp3's 3,000, no Lock waits.
+- At 320 buyers checkout p50 rose to 6.97s, all of it the CreateOrder workflow's first
+  task waiting for a worker (p50 5.72s). The worker runs the SDK's default of 2
+  workflow-task pollers (`services/order-svc/internal/infra/temporal/workers.go`). A
+  second order-service replica cut that wait to 0.08s and checkout p50 to 0.91s, and
+  served 23.39 a second: the pollers set the latency, not the ceiling.
+- About 90% of Postgres's active sessions belong to Temporal's two databases, and
+  their IO waits are WAL flushes (`WALSync`, `WALWrite`). What is left is Temporal's
+  4 history shards or commit flushes on the one volume every database shares. Telling
+  them apart takes a server-side change, `synchronous_commit` or a shard count.
+
+**From 2 to 16 vCPUs:** 2.25 times the throughput as shipped (4.26 to 9.59), 6.0
+times with the consumer's wall removed (4.26 to 25.49).
+
+**The prediction.**
+- 2 vCPUs: 2.7 to 3.6 predicted, 4.26 measured, verdict `cpu`. The anchor was wrong:
+  3.15 came from a run with the door at 4 a second, the sandbox in the path and the
+  chart's limits on (`docs/plans/2026-09-29-admission-sizing.md#results`), not an
+  open-door ceiling.
+- 16 vCPUs: under 6 times held (2.25), and the first verdict was not `cpu`. The
+  suspects it named, `disk` and `temporal dispatch`, were not the first wall; they are
+  where the second one shows.
+
+**What the run did not foresee.**
+- **The verdict cannot see a serial stage.** The first run on the plateau read `none`,
+  and later runs read `disk` from Postgres's IO share while IOPS sat at a fifth of
+  the baseline. A stage that handles one item at a time saturates no resource; only
+  ConfirmOrder's concurrency named it.
+- **The m5.large is not the t3.large.** Under the same settings at 40 buyers, the
+  t3.large served 2.70 and 2.71 a second, cold and warm, against the m5.large's 4.26,
+  and spent about a third more CPU a purchase (Temporal 0.131 to 0.133 core-s against
+  0.098), with no steal and the same CPU model (Xeon Platinum 8259CL). The cause is
+  not identified. Earlier t3 numbers, the door speed of 2 among them, stand for the
+  t3 and do not compare with the m5 runs.
+- **Postgres would have run out of connections.** The 16-vCPU runs peaked at 99 to
+  121; the default allows 100.
+- **The first run after a resize reads stale counters** (the v80 note above).
 
 ## Limits of these numbers
 

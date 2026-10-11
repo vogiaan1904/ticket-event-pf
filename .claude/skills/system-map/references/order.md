@@ -33,7 +33,7 @@ inventory hold window, `REFUND_REQUIRED`, the order consumer, and orders in Dyna
 | The buyer's purchase slot: a retried `CreateOrder`, and its release when one fails | `services/order-svc/docs/PURCHASE_SLOT.md` | `services/order-svc/internal/order/purchase_slot.go`, `services/order-svc/internal/order/service/order.go` |
 | Timeouts, hold length, retry policy | `services/order-svc/docs/RESERVATION_HOLD.md` | `services/order-svc/internal/workflows/shared.go`, `services/order-svc/internal/workflows/options.go` |
 | How a domain error becomes a gRPC code | root `CLAUDE.md`, *Error taxonomy* | `services/order-svc/internal/order/delivery/grpc/errors.go` |
-| What fails first as checkouts rise | root `CLAUDE.md`, register — **open** (Temporal shares the app's Postgres) | `deploy/helm/ticketbottle/templates/infra/temporal.yaml` |
+| What fails first as checkouts rise | root `CLAUDE.md`, register — decided 2026-10-11: the `payment.completed` consumer, then Temporal and its Postgres | `services/order-svc/internal/order/delivery/kafka/consumer/consumer.go`, `services/order-svc/internal/order/service/consumer.go` |
 | Saga alerts | `docs/RUNBOOK.md`, *SagaCompensationSpike* | `deploy/helm/ticketbottle/templates/apps/prometheusrule.yaml` |
 
 ## Code entry points

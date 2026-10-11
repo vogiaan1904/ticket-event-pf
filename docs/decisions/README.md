@@ -185,5 +185,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0029](0029-the-next-testbed-is-one-bigger-box.md) | Which testbed answers "what fails first as checkouts rise"? | The k3s box resized in place to 2, 16 and 8 vCPUs for one session, with no workload limits and payment on the simulated provider | Ephemeral EKS with Temporal's database split out, or cost per purchase on the 2-vCPU box | One node: a limit found belongs to a topology where every service and database shares one machine and one disk, and what changes across nodes stays unmeasured | proposed |
+| [0029](0029-the-next-testbed-is-one-bigger-box.md) | Which testbed answers "what fails first as checkouts rise"? | The k3s box resized in place to 2, 16 and 8 vCPUs for one session, with no workload limits and payment on the simulated provider | Ephemeral EKS with Temporal's database split out, or cost per purchase on the 2-vCPU box | One node: a limit found belongs to a topology where every service and database shares one machine and one disk, and what changes across nodes stays unmeasured | accepted |
 <!-- decisions:index:end -->
