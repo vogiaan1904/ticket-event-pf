@@ -152,6 +152,8 @@ export class AppConfigService {
       appID: this.getNumber('ZALOPAY_APP_ID'),
       key1: this.get('ZALOPAY_KEY1'),
       key2: this.get('ZALOPAY_KEY2'),
+      // A capacity run points this at the simulated provider (decision 0029).
+      createUrl: this.get('ZALOPAY_CREATE_URL') || 'https://sb-openapi.zalopay.vn/v2/create',
     };
   }
 
