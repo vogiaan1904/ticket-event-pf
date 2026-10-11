@@ -17,6 +17,9 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 NS=ticketbottle
 TOTAL=${TOTAL:-200}
 VUS=${VUS:-300}
+# k6's own ceiling; a capacity run at hundreds of buyers needs more than a gate.
+K6_CPU=${K6_CPU:-1}
+K6_MEMORY=${K6_MEMORY:-512Mi}
 GW=${GW:?set GW to the ALB url, e.g. http://<alb>/api}
 USER_PREFIX=gate4a-u
 # Set by Gate 4b only. Switches purchase.js to a sustained constant-vus run and
@@ -93,6 +96,7 @@ kubectl -n $NS delete job k6-load --ignore-not-found >/dev/null
 PURCHASE_JS=$(sed 's/^/    /' "$HERE/../loadtest/purchase.js") \
 EVENT_ID="$EVENT_ID" TICKET_CLASS_ID="$TCID" VUS="$VUS" USER_PREFIX="$USER_PREFIX" \
 DURATION="$DURATION" \
+K6_CPU="$K6_CPU" K6_MEMORY="$K6_MEMORY" \
   envsubst < "$HERE/../loadtest/job.yaml" | kubectl apply -f -
 
 # Watch both terminal conditions: --for=condition=complete alone never fires on
