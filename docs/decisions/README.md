@@ -180,4 +180,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0028](0028-what-a-client-sends-is-read-back.md) | How do we know a field a client sends is stored and read back, and a stub matches its contract? | A k3s gate that sends every field through each gateway create and update and reads it back; CI regenerating every stub and failing on any difference; repository suites against a real database where a mapping layer sits between request and store | Unit tests with mocks alone; a contract-testing framework between gateway and services; a repository suite for every store, pass-through ones included | CI needs Postgres services and protoc pinned to the stubs' versions; the gate runs on k3s, not in CI | accepted |
+
+### checkout-capacity
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0029](0029-the-next-testbed-is-one-bigger-box.md) | Which testbed answers "what fails first as checkouts rise"? | The k3s box resized in place to 2, 16 and 8 vCPUs for one session, with no workload limits and payment on the simulated provider | Ephemeral EKS with Temporal's database split out, or cost per purchase on the 2-vCPU box | One node: a limit found belongs to a topology where every service and database shares one machine and one disk, and what changes across nodes stays unmeasured | proposed |
 <!-- decisions:index:end -->
