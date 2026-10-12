@@ -1,7 +1,9 @@
 # Payment confirmations run across partitions
 
-**Status: WRITTEN 2026-10-11, not executed.** Decision:
-→ [0030](../decisions/0030-payment-confirmations-run-across-partitions.md), proposed.
+**Status: COMPLETE 2026-10-12.** `payment.completed` has 8 partitions before
+order-consumer starts. On k3s, `ConfirmOrder` ran up to 4 at once where one partition
+never ran 2, and all 368 purchases completed. Decision:
+→ [0030](../decisions/0030-payment-confirmations-run-across-partitions.md), accepted.
 
 **Goal:** `payment.completed` has 8 partitions before order-consumer starts, on a
 fresh install, an upgrade and a restart, and the consumer reads a partition it has
@@ -654,4 +656,47 @@ git commit -m "docs: record payment confirmations across partitions as verified 
 
 ## Results
 
-Not yet run.
+Build `sha-021a129`, k3s t3.large, 2026-10-12. Tasks 1–4 landed as `39a4c81`,
+`323f4f8`, `b4810b9`, `021a129`.
+
+**The partitions.**
+
+| Check | Result |
+|---|---|
+| `payment.completed` before the deploy | 1 partition |
+| After `k3s-deploy` | 8 partitions |
+| `ensure-topics` log | `payment.completed OK` from `add-partitions`, then `payment.completed: 8 partitions`; no wait for the broker |
+| Partitions the group claims | 8 |
+| gate2 | `GATE 1 PASSED`, order `TB-GATE1-20261012-8W8JQARJ` |
+| Pod deleted and restarted | the log is only `payment.completed: 8 partitions`; still 8 |
+
+**The load.** 20 buyers for 3 minutes at the k3s door of 2 a second. Order outcomes
+are each order's stored status in DynamoDB.
+
+| Run | Box | Purchases | Unexpected | Timeouts | Checkout p50 / max | At once | Confirm mean | Create→COMPLETED p99 / max |
+|---|---|---|---|---|---|---|---|---|
+| 11:48Z, void | Postgres 0.9 and Temporal 0.5 cores busy before the load | 77 in the window; all 94 created ended `COMPLETED` | 2 | 4 | 9.1s / 43.6s | 6 | 12,852ms | 254s (p90) / 312s |
+| 12:40Z | idle: Postgres 131m, Temporal 53m | 368, all `COMPLETED` | 0 | 0 | 0.96s / 4.0s | **4** | 320ms | 2.76s / 3.30s |
+
+The prediction held on the clean run: `at most 4 at once`, against `at most 1` on
+both 2026-10-11 lists, and no buyer failed to complete. Confirms kept pace with the
+door: 2.02 a second.
+
+**Found.**
+- **A stopped box replays overdue retention.** Temporal deletes a closed workflow
+  24 hours after it closes. The 2026-10-11 sweep's workflows came due while the box
+  was stopped, and all were deleted from its start at 11:33Z, with no workflow
+  running. Those closed before 2026-10-12 fell from 19,905 to 17,780 in a minute. The
+  clean run started once fewer than 100 were left. A load must wait for an idle box,
+  not only for every pod `Running`.
+- **`purchase.js` counts a timed-out checkout nowhere.** Status 0 passes
+  `or.status < 400`, `or.json()` then throws, and the iteration ends uncounted: 4 on
+  the void run. Not fixed here.
+- **The void run's 2 unexpected completed late.** Both were `never-completed`: the
+  buyer stopped polling after 3 minutes, and DynamoDB shows the order `COMPLETED`.
+- **The plan's ensure-topics test exited silently on its mutation.** The script's
+  own last check exits under `set -e` before the test's assertion runs, so `run` now
+  fails with `ensure-topics <args> exited non-zero`.
+
+**Review focus.** 2 (a cold boot) showed a clean first try. 1, 3, 4 and 5 were not
+exercised, as written.
