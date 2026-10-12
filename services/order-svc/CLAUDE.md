@@ -8,7 +8,7 @@ This is the **Order** service for TicketBottle V2 — the saga orchestrator. For
 
 gRPC service (port **50054**) that coordinates the distributed purchase transaction using **Temporal** workflows. It calls Event, Inventory, and Payment over gRPC and reacts to Kafka events. It ships as **two binaries**:
 - `cmd/api` — gRPC server + Temporal client (starts workflows).
-- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`; its worker also runs `ExpireOrder`.
+- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`; its worker also runs `ExpireOrder`. One `ConfirmOrder` runs at a time per partition; the partition count comes from `redpanda.partitions` in the chart, and a partition without a committed offset is read from its oldest message ([0030](../../docs/decisions/0030-payment-confirmations-run-across-partitions.md)).
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
