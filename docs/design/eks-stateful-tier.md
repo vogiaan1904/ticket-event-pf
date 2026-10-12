@@ -1,7 +1,8 @@
 # EKS stateful tier — design
 
 **Status:** phases (a) and (a2) built and proven; **phases (b)–(f) deferred
-2026-09-19** — see *Relationship to the scope pivot*.
+2026-09-19**, and kept deferred on 2026-10-12 until a door is planned above about 20
+a second ([0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)).
 Phase (a)'s work order: `docs/plans/2026-09-19-eks-stateful-tier-phase-a.md`.
 **Target:** the `values-eks.yaml` deploy target only. k3s is unchanged.
 
