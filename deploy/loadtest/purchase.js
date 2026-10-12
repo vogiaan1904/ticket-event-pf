@@ -55,6 +55,12 @@ export const options = {
 
 const b64url = (s) => encoding.b64encode(s, 'rawurl');
 
+// A field of a JSON response, or undefined. A timed-out or dropped request has no
+// body, and json() would throw, ending the iteration with nothing counted.
+function field(res, path) {
+  try { return res.json(path); } catch (_) { return undefined; }
+}
+
 function jwtClaims(token) {
   const payload = token.split('.')[1];
   return JSON.parse(encoding.b64decode(payload, 'rawurl', 's'));
@@ -86,7 +92,7 @@ export default function () {
       unexpected.add(1, { step: 'signup', status: su.status });
       return;
     }
-    accessToken = su.json('data.accessToken');
+    accessToken = field(su, 'data.accessToken');
     if (!accessToken) { unexpected.add(1, { step: 'signup-token' }); return; }
     userId = jwtClaims(accessToken).sub;
   }
@@ -97,15 +103,15 @@ export default function () {
   //    would put every VU into checkout at once -- what the queue prevents.
   const jr = http.post(`${GW}/waitroom/join`,
     JSON.stringify({ eventId: EVENT_ID }), auth);
-  const sessionId = jr.json('data.sessionId');
+  const sessionId = field(jr, 'data.sessionId');
   if (!sessionId) { unexpected.add(1, { step: 'waitroom', status: jr.status }); return; }
 
   let checkoutToken;
   for (let i = 0; i < ADMIT_POLLS; i++) {
     const st = http.get(`${GW}/waitroom/status/${sessionId}`, auth);
-    checkoutToken = st.json('data.checkoutToken');
+    checkoutToken = field(st, 'data.checkoutToken');
     if (checkoutToken) break;
-    const status = st.json('data.status');
+    const status = field(st, 'data.status');
     if (status === 'EXPIRED' || status === 'CANCELLED' || status === 'FAILED') {
       unexpected.add(1, { step: 'admission', status });
       return;
@@ -125,7 +131,7 @@ export default function () {
   }), auth);
 
   // saga_latency.py joins this line to the order's saga by its code.
-  const code = or.status < 400 ? or.json('data.order.code') : null;
+  const code = or.status < 400 ? field(or, 'data.order.code') : null;
   console.log(`CHECKOUT ${code || '-'} ${or.timings.duration.toFixed(1)} ${or.status}`);
 
   // 409 is the only correct rejection: sold out / sale closed / wrong-state all
@@ -144,7 +150,7 @@ export default function () {
   //    ConfirmOrder) lags under load; too small a budget fails a working saga.
   for (let i = 0; i < CONFIRM_POLLS; i++) {
     const o = http.get(`${GW}/orders/code/${code}`, auth);
-    if (o.json('data.status') === 'COMPLETED') { completed.add(1); return; }
+    if (field(o, 'data.status') === 'COMPLETED') { completed.add(1); return; }
     sleep(2);
   }
   unexpected.add(1, { step: 'never-completed', code });
