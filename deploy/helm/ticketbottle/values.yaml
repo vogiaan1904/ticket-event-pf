@@ -63,6 +63,10 @@ redis:
 redpanda:
   image: redpandadata/redpanda:v24.2.7
   storage: 2Gi
+  # Partitions a topic has before order-consumer starts (decision 0030). A count
+  # can grow but never shrink, and growing it moves keys to other partitions.
+  partitions:
+    payment.completed: 8
 
 paymentEvents:
   enabled: true

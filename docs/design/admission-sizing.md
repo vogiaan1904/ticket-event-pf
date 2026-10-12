@@ -49,6 +49,9 @@ under 2s against an SLO of 99%:
   target. The chart default stays 10 and counts as unmeasured.
 - Room size is each event's tickets available, read each tick: *Room size per event*
   below.
+- A door must stay below the confirm leg's capacity, which its sizing does not
+  measure: about partitions ÷ confirm latency
+  ([0030](../decisions/0030-payment-confirmations-run-across-partitions.md)).
 
 ## What "the machine" is
 

@@ -751,6 +751,17 @@ spec:
         checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
       labels: { app: order-consumer }
     spec:
+      initContainers:
+        - name: ensure-topics
+          image: redpandadata/redpanda:v24.2.7
+          command:
+            - sh
+            - -c
+            - "#!/bin/sh\n# Gives each topic at least its partition count, waiting for the broker first, and\n# fails unless every topic has it. Never shrinks one: Kafka cannot remove a\n# partition. Run by order-consumer's init container (decision 0030).\n#   ensure-topics.sh BROKER TOPIC=PARTITIONS...\nset -eu\nbroker=$1\nshift\ncount() { rpk topic list -X brokers=\"$broker\" | awk -v t=\"$1\" '$1 == t { print $2 }'; }\n\nuntil rpk cluster info -X brokers=\"$broker\" >/dev/null 2>&1; do\n  echo \"waiting for $broker\"\n  sleep 2\ndone\nfor spec in \"$@\"; do\n  topic=${spec%=*}\n  want=${spec#*=}\n  have=$(count \"$topic\")\n  if [ -z \"$have\" ]; then\n    rpk topic create \"$topic\" -p \"$want\" -X brokers=\"$broker\"\n  elif [ \"$have\" -lt \"$want\" ]; then\n    rpk topic add-partitions \"$topic\" --num $((want - have)) -X brokers=\"$broker\"\n  fi\n  got=$(count \"$topic\")\n  echo \"$topic: ${got:-0} partitions\"\n  [ \"${got:-0}\" -ge \"$want\" ] || { echo \"$topic has ${got:-0} partitions, wants $want\"; exit 1; }\ndone\n"
+            - ensure-topics
+            - redpanda:9093
+            - "payment.completed=8"
+          resources: { requests: { cpu: 10m, memory: 32Mi } }
       containers:
         - name: order-consumer
           image: ticketbottle/order-consumer:dev

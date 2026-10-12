@@ -153,6 +153,17 @@ for svc in user event payment; do
 done
 echo "OK  migrations run before an upgrade's rollout, and after a first install"
 
+# order-consumer starts only once payment.completed has its partitions (decision 0030).
+for overlay in k3s eks; do
+  r=$(helm template tb "$CHART" -f "$CHART/values-$overlay.yaml" -f "$SECRETS")
+  consumer=$(awk 'BEGIN { RS = "\n---\n" } /kind: Deployment/ && /\n  name: order-consumer\n/' <<<"$r")
+  grep -q 'name: ensure-topics' <<<"$consumer" || fail "$overlay: order-consumer has no ensure-topics init container"
+  grep -q '"payment.completed=8"' <<<"$consumer" || fail "$overlay: order-consumer does not ensure payment.completed has 8 partitions"
+  others=$(awk 'BEGIN { RS = "\n---\n" } /kind: Deployment/ && /ensure-topics/ && !/\n  name: order-consumer\n/' <<<"$r")
+  [ -z "$others" ] || fail "$overlay: a Deployment other than order-consumer runs ensure-topics"
+done
+echo "OK  order-consumer starts after payment.completed has 8 partitions"
+
 # A capacity session (decision 0029) lifts every limit, points payment at the
 # simulated provider, and lets Postgres take the pools a large node opens.
 cap=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" -f "$CHART/../../loadtest/capacity-values.yaml")
