@@ -2,6 +2,7 @@
 # Rollout drain measurement: docs/plans/2026-09-24-rollout-drain-measurement.md.
 #   rollout-drain.sh control  <deploy>      delete the only pod; the probe MUST fail
 #   rollout-drain.sh rollouts <deploy> [N]  N rollout restarts, GAP seconds apart
+# control: DURATION probes for longer than 90s; GRACE=1 deletes without the drain.
 # Prints every probe failure, how long each old pod took to exit, and the
 # gateway's UNAVAILABLE count over the run. Raw logs go to $OUT.
 set -euo pipefail
@@ -22,7 +23,7 @@ kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_user -c
    ON CONFLICT (id) DO NOTHING;" >/dev/null
 
 case $MODE in
-  control)  DURATION=90s ;;
+  control)  DURATION=${DURATION:-90s} ;;
   rollouts) DURATION=$(( N * (GAP + 45) + 30 ))s ;;   # 45: a stop that runs to SIGKILL
   *) echo "mode must be control or rollouts"; exit 1 ;;
 esac
@@ -43,7 +44,7 @@ stop_pod() {
   local old t0; old=$(kubectl -n $NS get pod -l app="$TARGET" -o jsonpath='{.items[0].metadata.name}')
   t0=$(date +%s)
   if [ "$MODE" = control ]; then
-    kubectl -n $NS delete pod "$old" --wait=false >/dev/null
+    kubectl -n $NS delete pod "$old" --wait=false ${GRACE:+--grace-period=$GRACE} >/dev/null
     # Why: right after a delete, rollout status can still read the old pod's Ready.
     until kubectl -n $NS get pod -l app="$TARGET" -o jsonpath='{range .items[*]}{.metadata.name} {.status.conditions[?(@.type=="Ready")].status}{"\n"}{end}' \
       | grep -v "^$old " | grep -q ' True$'; do sleep 0.5; done
