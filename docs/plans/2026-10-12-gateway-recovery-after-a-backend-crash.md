@@ -18,7 +18,8 @@ today's build. Choosing a fix comes after it.
 
 ## What is known
 
-**From k3s.** The same build, `sha-39e4300`, gave both results.
+**From k3s.** The rollouts on both days ran the same build, `sha-39e4300`. The
+2026-09-27 control ran on `sha-e3f0b51`, which added 0015's 5s `preStop` sleep.
 
 | Day | Gateway | Pod deleted (control) | Rollouts |
 |---|---|---|---|
@@ -82,7 +83,10 @@ and the traced runs show H1.
 
 ## Task 1: Run it on k3s
 
-The architect runs it and pastes the output. About 30 minutes.
+The architect runs it and pastes the output. About 50 minutes; 15 more with Step 4.
+
+Every probe runs 180s. At the script's default 90s, the 2026-09-25 control was still
+failing when it ended, so a run that short cannot show what ends the failure.
 
 - [ ] **Step 1: Start the box and wait for idle.**
 
@@ -92,6 +96,8 @@ make -C deploy start-ec2-k3s                    # run the printed tunnel in its 
 make -C deploy k3s-kubeconfig && export KUBECONFIG=/tmp/k3s.yaml
 kubectl -n ticketbottle exec deploy/temporal -- temporal workflow count --query "CloseTime < \"$(date -u +%Y-%m-%d)T00:00:00Z\""
 kubectl top pods -n ticketbottle --sort-by=cpu | head -4    # postgres-0 and temporal under ~200m
+kubectl -n ticketbottle get deploy app-gateway event-service \
+  -o jsonpath='{range .items[*]}{.metadata.name} {.spec.template.spec.containers[0].image}{"\n"}{end}'
 ```
 
 - [ ] **Step 2: Three untraced crashes.** For each, the failures and when the
@@ -99,28 +105,50 @@ kubectl top pods -n ticketbottle --sort-by=cpu | head -4    # postgres-0 and tem
 
 ```bash
 for i in 1 2 3; do
-  mkdir -p /tmp/crash-u$i && OUT=/tmp/crash-u$i deploy/scripts/rollout-drain.sh control event-service
+  mkdir -p /tmp/crash-u$i && DURATION=180s OUT=/tmp/crash-u$i deploy/scripts/rollout-drain.sh control event-service
   kubectl -n ticketbottle get pod -l app=event-service \
     -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].lastTransitionTime}{"\n"}'
   sleep 60
 done
+for i in 1 2 3; do grep ready /tmp/crash-u$i/timeline.log; tail -1 /tmp/crash-u$i/failures.jsonl; done
 ```
 
-- [ ] **Step 3: Three traced crashes.**
+The last loop prints, for each run, when the replacement was seen Ready and the last
+failure. A gap over 10s in any run reproduces the failure.
+
+- [ ] **Step 3: Three traced crashes.** A gateway just restarted times out at 50 req/s,
+  and the script voids a probe that fails before the delete, so it warms up first.
 
 ```bash
 kubectl -n ticketbottle set env deploy/app-gateway GRPC_TRACE=subchannel,transport,pick_first GRPC_VERBOSITY=DEBUG
 kubectl -n ticketbottle rollout status deploy/app-gateway
+sleep 60
 for i in 1 2 3; do
-  mkdir -p /tmp/crash-t$i && OUT=/tmp/crash-t$i deploy/scripts/rollout-drain.sh control event-service
+  T0=$(date -u +%FT%TZ)
+  mkdir -p /tmp/crash-t$i && DURATION=180s OUT=/tmp/crash-t$i deploy/scripts/rollout-drain.sh control event-service
   kubectl -n ticketbottle get pod -l app=event-service \
     -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].lastTransitionTime}{"\n"}'
-  kubectl -n ticketbottle logs deploy/app-gateway --since=3m > /tmp/crash-t$i-gateway.log
+  kubectl -n ticketbottle logs deploy/app-gateway --since-time=$T0 > /tmp/crash-t$i-gateway.log
   sleep 60
 done
 ```
 
-- [ ] **Step 4: Remove the trace, stop the box.**
+- [ ] **Step 4: Only if Step 2 did not reproduce it, three traced crashes without the
+  drain.** Today's build sleeps 5s before it stops a deleted pod (0015); the
+  2026-09-25 build stopped it at once. `GRACE=1` is the closest to that.
+
+```bash
+for i in 1 2 3; do
+  T0=$(date -u +%FT%TZ)
+  mkdir -p /tmp/crash-g$i && GRACE=1 DURATION=180s OUT=/tmp/crash-g$i deploy/scripts/rollout-drain.sh control event-service
+  kubectl -n ticketbottle get pod -l app=event-service \
+    -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].lastTransitionTime}{"\n"}'
+  kubectl -n ticketbottle logs deploy/app-gateway --since-time=$T0 > /tmp/crash-g$i-gateway.log
+  sleep 60
+done
+```
+
+- [ ] **Step 5: Remove the trace, stop the box.**
 
 ```bash
 kubectl -n ticketbottle set env deploy/app-gateway GRPC_TRACE- GRPC_VERBOSITY-
@@ -129,13 +157,14 @@ make -C deploy stop-ec2-k3s
 ```
 
 Each run's failures stay in `/tmp/crash-*/failures.jsonl`, and the traced gateway logs in
-`/tmp/crash-t*-gateway.log`, for the analysis.
+`/tmp/crash-[tg]*-gateway.log`, for the analysis.
 
 ## Task 2: Record
 
 - [ ] Fill *Results*: for each run, the seconds failing after the replacement turned
   Ready, and, for the traced ones, the attempts from the trace.
-- [ ] Name the hypothesis the trace shows, or that the failure was not reached.
+- [ ] Name the hypothesis the trace shows, or that the failure was not reached, for
+  each stop that ran.
 - [ ] Put the fix options to the architect, with what each costs. The candidates
   so far:
   - the gateway bounds an attempt itself and recreates the channel;
