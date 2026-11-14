@@ -13,9 +13,10 @@ func generatePaymentIdempotencyKey(orderCode string, provider string) string {
 	return fmt.Sprintf("%s:%s", orderCode, provider)
 }
 
-func (s *implService) releaseTickets(ctx context.Context, code string) error {
+func (s *implService) releaseTickets(ctx context.Context, code string, reason inventory.ReleaseReason) error {
 	_, err := s.invSvc.Release(ctx, &inventory.ReleaseRequest{
 		OrderCode: code,
+		Reason:    reason,
 	})
 	if err != nil {
 		s.l.Errorf(ctx, "Failed to release tickets for order %s: %v", code, err)

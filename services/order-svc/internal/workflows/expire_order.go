@@ -37,7 +37,11 @@ func ExpireOrder(ctx workflow.Context, in *ExpireOrderWorkflowInput) error {
 
 	// Best-effort from here: the order is TIMEOUT, and the hold and the chair
 	// each still have their own expiry behind them.
-	if err := workflow.ExecuteActivity(ctx, iActs.ReleaseInventory, o.Code).Get(ctx, nil); err != nil {
+	var release any = iActs.ReleaseEndedCheckout
+	if workflow.GetVersion(ctx, endedCheckoutReleaseChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		release = iActs.ReleaseInventory
+	}
+	if err := workflow.ExecuteActivity(ctx, release, o.Code).Get(ctx, nil); err != nil {
 		logger.Error("Failed to release a timed-out order's hold; inventory's expiry worker will", "error", err, "orderCode", o.Code)
 	}
 	freePurchaseSlot(ctx, o)

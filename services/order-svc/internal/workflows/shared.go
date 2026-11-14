@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	// PaymentTimeout is the duration to wait for payment completion
-	// 5 minutes for payment + 1 minute buffer for callback processing
+	// PaymentTimeout is the provider's payment window: the intent is created
+	// with this expiry, so no payment is accepted after it.
 	PaymentTimeout = 6 * time.Minute
 
 	// ReservationHoldGrace covers webhook -> outbox -> Kafka -> ConfirmOrder for

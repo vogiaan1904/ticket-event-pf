@@ -43,6 +43,18 @@ func freePurchaseSlot(ctx workflow.Context, o *models.Order) {
 	}
 }
 
+// confirmable reports whether a payment on an order in st may still take its ticket.
+func confirmable(ctx workflow.Context, st models.OrderStatus) bool {
+	switch st {
+	case models.OrderStatusPending, models.OrderStatusTimeout:
+		return true
+	case models.OrderStatusCancelled:
+		return workflow.GetVersion(ctx, cancelledOrderConfirmChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	default:
+		return false
+	}
+}
+
 type ConfirmOrderWorkflowInput struct {
 	OrderCode string
 	Status    models.OrderStatus
@@ -61,18 +73,18 @@ func ConfirmOrder(ctx workflow.Context, in *ConfirmOrderWorkflowInput) error {
 		return err
 	}
 
-	// TIMEOUT is confirmed like PENDING: the provider only takes money inside its
-	// window, and inventory re-acquires the ticket or it is refunded below.
-	if o.Status != models.OrderStatusPending && o.Status != models.OrderStatusTimeout {
+	// TIMEOUT and CANCELLED are confirmed like PENDING: the provider only takes
+	// money inside its window, and inventory re-acquires the ticket or it is
+	// refunded below. See docs/decisions/0032.
+	if !confirmable(ctx, o.Status) {
 		logger.Warn("Order already processed", "orderCode", in.OrderCode, "status", o.Status)
 
 		switch o.Status {
 		case models.OrderStatusCompleted:
 			return nil
 		case models.OrderStatusCancelled, models.OrderStatusPaymentFailed:
-			// The payment landed on an order that had already been
-			// cancelled or failed. The money is real; the order will not
-			// be fulfilled.
+			// Failed (or cancelled, before the version gate): the money is
+			// real; the order will not be fulfilled.
 			markForRefund(ctx, o, "payment settled on an order in status "+string(o.Status))
 		case models.OrderStatusRefundRequired, models.OrderStatusRefunded:
 			// A redelivered payment event. REFUND_REQUIRED already recorded

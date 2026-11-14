@@ -136,7 +136,7 @@ func TestReserve_AfterRelease_ReturnsConflict(t *testing.T) {
 		Items:     []ReserveItem{{TicketClassID: tc.ID, Qty: 4}},
 	}
 	must(t, svc.Reserve(context.Background(), in))
-	must(t, svc.Release(context.Background(), "o-rereserve"))
+	must(t, svc.Release(context.Background(), "o-rereserve", ReleaseUndone))
 
 	if err := svc.Reserve(context.Background(), in); !errors.Is(err, ErrStateConflict) {
 		t.Fatalf("Reserve after Release = %v, want ErrStateConflict", err)

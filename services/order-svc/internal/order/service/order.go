@@ -429,7 +429,7 @@ func isPaymentRecordMissing(err error) bool {
 }
 
 func (s *implService) handlePaymentFailure(ctx context.Context, code string) error {
-	err := s.releaseTickets(ctx, code)
+	err := s.releaseTickets(ctx, code, inventory.ReleaseReason_RELEASE_REASON_UNSPECIFIED)
 	if err != nil {
 		s.l.Errorf(ctx, "internal.order.service.handlePaymentFailure.releaseTickets: %v", err)
 	}
@@ -490,8 +490,9 @@ func (s *implService) Cancel(ctx context.Context, code, userID string) error {
 		return order.ErrOrderNotPending
 	}
 
-	// A failed release is not retried: the hold expires on its own.
-	if err := s.releaseTickets(ctx, o.Code); err != nil {
+	// A failed release is not retried: the hold expires on its own. Released as
+	// ended, not undone: the provider's link stays payable until its own expiry.
+	if err := s.releaseTickets(ctx, o.Code, inventory.ReleaseReason_RELEASE_REASON_CHECKOUT_ENDED); err != nil {
 		s.l.Errorf(ctx, "internal.order.service.Cancel.releaseTickets: %v", err)
 	}
 

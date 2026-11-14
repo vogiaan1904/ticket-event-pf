@@ -98,8 +98,18 @@ message ConfirmRequest {
     string order_code = 1;
 }
 
+// Why the hold is released, which decides whether a later payment may re-take it.
+enum ReleaseReason {
+    // Undone on purpose (saga compensation, failed payment); final.
+    RELEASE_REASON_UNSPECIFIED = 0;
+    // The checkout ended unpaid (timeout or buyer cancel) while its payment link
+    // may still be paid; a late payment re-acquires the seat if one is left.
+    RELEASE_REASON_CHECKOUT_ENDED = 1;
+}
+
 message ReleaseRequest {
     string order_code = 1;
+    ReleaseReason reason = 2;
 }
 
 message GetAvailabilityRequest {

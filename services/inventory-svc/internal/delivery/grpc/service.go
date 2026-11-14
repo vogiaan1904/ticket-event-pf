@@ -257,7 +257,7 @@ func (s *grpcService) Release(ctx context.Context, req *invpb.ReleaseRequest) (*
 		return nil, response.GrpcError(err)
 	}
 
-	err := s.rSvc.Release(ctx, req.GetOrderCode())
+	err := s.rSvc.Release(ctx, req.GetOrderCode(), releaseReason(req.GetReason()))
 	if err != nil {
 		err = s.mapError(err)
 		s.l.Errorf(ctx, "internal.delivery.grpc.Release.Release: %v", err)
@@ -265,4 +265,12 @@ func (s *grpcService) Release(ctx context.Context, req *invpb.ReleaseRequest) (*
 	}
 
 	return &emptypb.Empty{}, nil
+}
+
+// releaseReason maps the wire reason; an unknown value is treated as final.
+func releaseReason(r invpb.ReleaseReason) svc.ReleaseReason {
+	if r == invpb.ReleaseReason_RELEASE_REASON_CHECKOUT_ENDED {
+		return svc.ReleaseCheckoutEnded
+	}
+	return svc.ReleaseUndone
 }

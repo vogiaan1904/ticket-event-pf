@@ -17,7 +17,7 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
   ([0021](../../docs/decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md)).
   Over it: `INVALID_ARGUMENT`, `ORD020`. 0 means no limit is set, which is what an
   event-svc that predates the field sends.
-- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded.
+- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` or `CANCELLED` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded. `PAYMENT_FAILED` is always refunded ([0032](../../docs/decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md)).
 - `ExpireOrder` — started by `Create` once the order exists, on the confirm-order
   queue, delayed by `CheckoutLifetime` (the hold's own length, 9m). It flips `PENDING`
   to `TIMEOUT` with a conditional write; if it flipped, it releases the hold, frees the
@@ -43,6 +43,10 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 - **A cancel never overwrites a payment.** It flips `PENDING` to `CANCELLED` with the
   conditional write `ExpireIfPending` uses, and releases the hold only if the flip
   landed; otherwise `FAILED_PRECONDITION`.
+- **Which release a hold gets.** `ExpireOrder` and `Cancel` release as
+  `RELEASE_REASON_CHECKOUT_ENDED`, because the provider's link stays payable and a late
+  payment may re-acquire the seat. Saga compensation and a failed payment send no
+  reason, and inventory writes those holds `CANCELLED`, final (0032).
 
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.

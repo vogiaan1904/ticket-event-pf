@@ -8,6 +8,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/activities"
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 )
 
 func timedOut(code, session string) activities.ExpireOrderResult {
@@ -19,7 +20,7 @@ func timedOut(code, session string) activities.ExpireOrderResult {
 func TestExpireOrder_AnUnpaidOrderGivesBackEverythingItHeld(t *testing.T) {
 	env := newTestEnv(t)
 	env.OnActivity("ExpireOrder", mock.Anything, "TB-EXP-0001").Return(timedOut("TB-EXP-0001", "sess-1"), nil).Once()
-	env.OnActivity("ReleaseInventory", mock.Anything, "TB-EXP-0001").Return(nil).Once()
+	env.OnActivity("ReleaseEndedCheckout", mock.Anything, "TB-EXP-0001").Return(nil).Once()
 	env.OnActivity("ReleasePurchaseSlot", mock.Anything, "sess-1", "TB-EXP-0001").Return(nil).Once()
 	env.OnActivity("PublishCheckoutExpired", mock.Anything, activities.PublishCheckoutExpiredInput{
 		SessionID: "sess-1", UserID: "u1", EventID: "e1",
@@ -38,7 +39,7 @@ func TestExpireOrder_ASettledOrderIsLeftAlone(t *testing.T) {
 	env.OnActivity("ExpireOrder", mock.Anything, "TB-EXP-0002").Return(activities.ExpireOrderResult{
 		Order: &models.Order{Code: "TB-EXP-0002", Status: models.OrderStatusCompleted, SessionID: "sess-2"},
 	}, nil).Once()
-	env.OnActivity("ReleaseInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleaseEndedCheckout", mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity("PublishCheckoutExpired", mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -47,7 +48,7 @@ func TestExpireOrder_ASettledOrderIsLeftAlone(t *testing.T) {
 	if err := env.GetWorkflowError(); err != nil {
 		t.Fatalf("workflow failed: %v", err)
 	}
-	requireNotCalled(t, env, "ReleaseInventory", mock.Anything, mock.Anything)
+	requireNotCalled(t, env, "ReleaseEndedCheckout", mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything)
 	requireNotCalled(t, env, "PublishCheckoutExpired", mock.Anything, mock.Anything)
 }
@@ -56,7 +57,7 @@ func TestExpireOrder_ASettledOrderIsLeftAlone(t *testing.T) {
 func TestExpireOrder_AFailedReleaseStillFreesTheChair(t *testing.T) {
 	env := newTestEnv(t)
 	env.OnActivity("ExpireOrder", mock.Anything, "TB-EXP-0003").Return(timedOut("TB-EXP-0003", "sess-3"), nil).Once()
-	env.OnActivity("ReleaseInventory", mock.Anything, "TB-EXP-0003").
+	env.OnActivity("ReleaseEndedCheckout", mock.Anything, "TB-EXP-0003").
 		Return(temporal.NewNonRetryableApplicationError("inventory down", "Unavailable", errors.New("inventory down"))).Once()
 	env.OnActivity("ReleasePurchaseSlot", mock.Anything, "sess-3", "TB-EXP-0003").Return(nil).Once()
 	env.OnActivity("PublishCheckoutExpired", mock.Anything, mock.Anything).Return(nil).Once()
@@ -71,7 +72,7 @@ func TestExpireOrder_AFailedReleaseStillFreesTheChair(t *testing.T) {
 func TestExpireOrder_WithoutAWaitingRoomNothingIsPublished(t *testing.T) {
 	env := newTestEnv(t)
 	env.OnActivity("ExpireOrder", mock.Anything, "TB-EXP-0004").Return(timedOut("TB-EXP-0004", ""), nil).Once()
-	env.OnActivity("ReleaseInventory", mock.Anything, "TB-EXP-0004").Return(nil).Once()
+	env.OnActivity("ReleaseEndedCheckout", mock.Anything, "TB-EXP-0004").Return(nil).Once()
 	env.OnActivity("ReleasePurchaseSlot", mock.Anything, "user#u1:event#e1", "TB-EXP-0004").Return(nil).Once()
 	env.OnActivity("PublishCheckoutExpired", mock.Anything, mock.Anything).Return(nil).Maybe()
 
@@ -81,4 +82,22 @@ func TestExpireOrder_WithoutAWaitingRoomNothingIsPublished(t *testing.T) {
 		t.Fatalf("workflow failed: %v", err)
 	}
 	requireNotCalled(t, env, "PublishCheckoutExpired", mock.Anything, mock.Anything)
+}
+
+// An ExpireOrder already running at deploy replays on the old release.
+func TestExpireOrder_BeforeTheVersionGateReleasesAsBefore(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnGetVersion(endedCheckoutReleaseChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	env.OnActivity("ExpireOrder", mock.Anything, "TB-EXP-0005").Return(timedOut("TB-EXP-0005", "sess-5"), nil).Once()
+	env.OnActivity("ReleaseInventory", mock.Anything, "TB-EXP-0005").Return(nil).Once()
+	env.OnActivity("ReleaseEndedCheckout", mock.Anything, mock.Anything).Return(nil).Maybe()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("PublishCheckoutExpired", mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ExpireOrder, &ExpireOrderWorkflowInput{OrderCode: "TB-EXP-0005"})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("workflow failed: %v", err)
+	}
+	requireNotCalled(t, env, "ReleaseEndedCheckout", mock.Anything, mock.Anything)
 }

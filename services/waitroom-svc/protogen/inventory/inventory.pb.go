@@ -22,6 +22,56 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Why the hold is released, which decides whether a later payment may re-take it.
+type ReleaseReason int32
+
+const (
+	// Undone on purpose (saga compensation, failed payment); final.
+	ReleaseReason_RELEASE_REASON_UNSPECIFIED ReleaseReason = 0
+	// The checkout ended unpaid (timeout or buyer cancel) while its payment link
+	// may still be paid; a late payment re-acquires the seat if one is left.
+	ReleaseReason_RELEASE_REASON_CHECKOUT_ENDED ReleaseReason = 1
+)
+
+// Enum value maps for ReleaseReason.
+var (
+	ReleaseReason_name = map[int32]string{
+		0: "RELEASE_REASON_UNSPECIFIED",
+		1: "RELEASE_REASON_CHECKOUT_ENDED",
+	}
+	ReleaseReason_value = map[string]int32{
+		"RELEASE_REASON_UNSPECIFIED":    0,
+		"RELEASE_REASON_CHECKOUT_ENDED": 1,
+	}
+)
+
+func (x ReleaseReason) Enum() *ReleaseReason {
+	p := new(ReleaseReason)
+	*p = x
+	return p
+}
+
+func (x ReleaseReason) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReleaseReason) Descriptor() protoreflect.EnumDescriptor {
+	return file_inventory_proto_enumTypes[0].Descriptor()
+}
+
+func (ReleaseReason) Type() protoreflect.EnumType {
+	return &file_inventory_proto_enumTypes[0]
+}
+
+func (x ReleaseReason) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReleaseReason.Descriptor instead.
+func (ReleaseReason) EnumDescriptor() ([]byte, []int) {
+	return file_inventory_proto_rawDescGZIP(), []int{0}
+}
+
 type TicketClass struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -797,6 +847,7 @@ func (x *ConfirmRequest) GetOrderCode() string {
 type ReleaseRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderCode     string                 `protobuf:"bytes,1,opt,name=order_code,json=orderCode,proto3" json:"order_code,omitempty"`
+	Reason        ReleaseReason          `protobuf:"varint,2,opt,name=reason,proto3,enum=event.ReleaseReason" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -836,6 +887,13 @@ func (x *ReleaseRequest) GetOrderCode() string {
 		return x.OrderCode
 	}
 	return ""
+}
+
+func (x *ReleaseRequest) GetReason() ReleaseReason {
+	if x != nil {
+		return x.Reason
+	}
+	return ReleaseReason_RELEASE_REASON_UNSPECIFIED
 }
 
 type GetAvailabilityRequest struct {
@@ -1236,10 +1294,11 @@ const file_inventory_proto_rawDesc = "" +
 	"expires_at\x18\x04 \x01(\tR\texpiresAt\"/\n" +
 	"\x0eConfirmRequest\x12\x1d\n" +
 	"\n" +
-	"order_code\x18\x01 \x01(\tR\torderCode\"/\n" +
+	"order_code\x18\x01 \x01(\tR\torderCode\"]\n" +
 	"\x0eReleaseRequest\x12\x1d\n" +
 	"\n" +
-	"order_code\x18\x01 \x01(\tR\torderCode\"@\n" +
+	"order_code\x18\x01 \x01(\tR\torderCode\x12,\n" +
+	"\x06reason\x18\x02 \x01(\x0e2\x14.event.ReleaseReasonR\x06reason\"@\n" +
 	"\x16GetAvailabilityRequest\x12&\n" +
 	"\x0fticket_class_id\x18\x01 \x01(\tR\rticketClassId\"H\n" +
 	"\x17GetAvailabilityResponse\x12-\n" +
@@ -1256,7 +1315,10 @@ const file_inventory_proto_rawDesc = "" +
 	"\x18CheckAvailabilityRequest\x122\n" +
 	"\x05items\x18\x01 \x03(\v2\x1c.event.CheckAvailabilityItemR\x05items\"3\n" +
 	"\x19CheckAvailabilityResponse\x12\x16\n" +
-	"\x06accept\x18\x01 \x01(\bR\x06accept2\xed\x06\n" +
+	"\x06accept\x18\x01 \x01(\bR\x06accept*R\n" +
+	"\rReleaseReason\x12\x1e\n" +
+	"\x1aRELEASE_REASON_UNSPECIFIED\x10\x00\x12!\n" +
+	"\x1dRELEASE_REASON_CHECKOUT_ENDED\x10\x012\xed\x06\n" +
 	"\x10InventoryService\x12V\n" +
 	"\x11CreateTicketClass\x12\x1f.event.CreateTicketClassRequest\x1a .event.CreateTicketClassResponse\x12V\n" +
 	"\x11UpdateTicketClass\x12\x1f.event.UpdateTicketClassRequest\x1a .event.UpdateTicketClassResponse\x12Y\n" +
@@ -1282,65 +1344,68 @@ func file_inventory_proto_rawDescGZIP() []byte {
 	return file_inventory_proto_rawDescData
 }
 
+var file_inventory_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_inventory_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_inventory_proto_goTypes = []any{
-	(*TicketClass)(nil),                 // 0: event.TicketClass
-	(*CreateTicketClassRequest)(nil),    // 1: event.CreateTicketClassRequest
-	(*CreateTicketClassResponse)(nil),   // 2: event.CreateTicketClassResponse
-	(*UpdateTicketClassRequest)(nil),    // 3: event.UpdateTicketClassRequest
-	(*UpdateTicketClassResponse)(nil),   // 4: event.UpdateTicketClassResponse
-	(*FindOneTicketClassRequest)(nil),   // 5: event.FindOneTicketClassRequest
-	(*FindOneTicketClassResponse)(nil),  // 6: event.FindOneTicketClassResponse
-	(*FindManyTicketClassRequest)(nil),  // 7: event.FindManyTicketClassRequest
-	(*FindManyTicketClassResponse)(nil), // 8: event.FindManyTicketClassResponse
-	(*DeleteTicketClassRequest)(nil),    // 9: event.DeleteTicketClassRequest
-	(*ReserveItem)(nil),                 // 10: event.ReserveItem
-	(*ReserveRequest)(nil),              // 11: event.ReserveRequest
-	(*ConfirmRequest)(nil),              // 12: event.ConfirmRequest
-	(*ReleaseRequest)(nil),              // 13: event.ReleaseRequest
-	(*GetAvailabilityRequest)(nil),      // 14: event.GetAvailabilityRequest
-	(*GetAvailabilityResponse)(nil),     // 15: event.GetAvailabilityResponse
-	(*GetEventStockRequest)(nil),        // 16: event.GetEventStockRequest
-	(*GetEventStockResponse)(nil),       // 17: event.GetEventStockResponse
-	(*CheckAvailabilityItem)(nil),       // 18: event.CheckAvailabilityItem
-	(*CheckAvailabilityRequest)(nil),    // 19: event.CheckAvailabilityRequest
-	(*CheckAvailabilityResponse)(nil),   // 20: event.CheckAvailabilityResponse
-	(*emptypb.Empty)(nil),               // 21: google.protobuf.Empty
+	(ReleaseReason)(0),                  // 0: event.ReleaseReason
+	(*TicketClass)(nil),                 // 1: event.TicketClass
+	(*CreateTicketClassRequest)(nil),    // 2: event.CreateTicketClassRequest
+	(*CreateTicketClassResponse)(nil),   // 3: event.CreateTicketClassResponse
+	(*UpdateTicketClassRequest)(nil),    // 4: event.UpdateTicketClassRequest
+	(*UpdateTicketClassResponse)(nil),   // 5: event.UpdateTicketClassResponse
+	(*FindOneTicketClassRequest)(nil),   // 6: event.FindOneTicketClassRequest
+	(*FindOneTicketClassResponse)(nil),  // 7: event.FindOneTicketClassResponse
+	(*FindManyTicketClassRequest)(nil),  // 8: event.FindManyTicketClassRequest
+	(*FindManyTicketClassResponse)(nil), // 9: event.FindManyTicketClassResponse
+	(*DeleteTicketClassRequest)(nil),    // 10: event.DeleteTicketClassRequest
+	(*ReserveItem)(nil),                 // 11: event.ReserveItem
+	(*ReserveRequest)(nil),              // 12: event.ReserveRequest
+	(*ConfirmRequest)(nil),              // 13: event.ConfirmRequest
+	(*ReleaseRequest)(nil),              // 14: event.ReleaseRequest
+	(*GetAvailabilityRequest)(nil),      // 15: event.GetAvailabilityRequest
+	(*GetAvailabilityResponse)(nil),     // 16: event.GetAvailabilityResponse
+	(*GetEventStockRequest)(nil),        // 17: event.GetEventStockRequest
+	(*GetEventStockResponse)(nil),       // 18: event.GetEventStockResponse
+	(*CheckAvailabilityItem)(nil),       // 19: event.CheckAvailabilityItem
+	(*CheckAvailabilityRequest)(nil),    // 20: event.CheckAvailabilityRequest
+	(*CheckAvailabilityResponse)(nil),   // 21: event.CheckAvailabilityResponse
+	(*emptypb.Empty)(nil),               // 22: google.protobuf.Empty
 }
 var file_inventory_proto_depIdxs = []int32{
-	0,  // 0: event.CreateTicketClassResponse.ticket_class:type_name -> event.TicketClass
-	0,  // 1: event.UpdateTicketClassResponse.ticket_class:type_name -> event.TicketClass
-	0,  // 2: event.FindOneTicketClassResponse.ticket_class:type_name -> event.TicketClass
-	0,  // 3: event.FindManyTicketClassResponse.ticket_classes:type_name -> event.TicketClass
-	10, // 4: event.ReserveRequest.items:type_name -> event.ReserveItem
-	18, // 5: event.CheckAvailabilityRequest.items:type_name -> event.CheckAvailabilityItem
-	1,  // 6: event.InventoryService.CreateTicketClass:input_type -> event.CreateTicketClassRequest
-	3,  // 7: event.InventoryService.UpdateTicketClass:input_type -> event.UpdateTicketClassRequest
-	5,  // 8: event.InventoryService.FindOneTicketClass:input_type -> event.FindOneTicketClassRequest
-	7,  // 9: event.InventoryService.FindManyTicketClass:input_type -> event.FindManyTicketClassRequest
-	9,  // 10: event.InventoryService.DeleteTicketClass:input_type -> event.DeleteTicketClassRequest
-	19, // 11: event.InventoryService.CheckAvailability:input_type -> event.CheckAvailabilityRequest
-	14, // 12: event.InventoryService.GetAvailability:input_type -> event.GetAvailabilityRequest
-	16, // 13: event.InventoryService.GetEventStock:input_type -> event.GetEventStockRequest
-	11, // 14: event.InventoryService.Reserve:input_type -> event.ReserveRequest
-	12, // 15: event.InventoryService.Confirm:input_type -> event.ConfirmRequest
-	13, // 16: event.InventoryService.Release:input_type -> event.ReleaseRequest
-	2,  // 17: event.InventoryService.CreateTicketClass:output_type -> event.CreateTicketClassResponse
-	4,  // 18: event.InventoryService.UpdateTicketClass:output_type -> event.UpdateTicketClassResponse
-	6,  // 19: event.InventoryService.FindOneTicketClass:output_type -> event.FindOneTicketClassResponse
-	8,  // 20: event.InventoryService.FindManyTicketClass:output_type -> event.FindManyTicketClassResponse
-	21, // 21: event.InventoryService.DeleteTicketClass:output_type -> google.protobuf.Empty
-	20, // 22: event.InventoryService.CheckAvailability:output_type -> event.CheckAvailabilityResponse
-	15, // 23: event.InventoryService.GetAvailability:output_type -> event.GetAvailabilityResponse
-	17, // 24: event.InventoryService.GetEventStock:output_type -> event.GetEventStockResponse
-	21, // 25: event.InventoryService.Reserve:output_type -> google.protobuf.Empty
-	21, // 26: event.InventoryService.Confirm:output_type -> google.protobuf.Empty
-	21, // 27: event.InventoryService.Release:output_type -> google.protobuf.Empty
-	17, // [17:28] is the sub-list for method output_type
-	6,  // [6:17] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	1,  // 0: event.CreateTicketClassResponse.ticket_class:type_name -> event.TicketClass
+	1,  // 1: event.UpdateTicketClassResponse.ticket_class:type_name -> event.TicketClass
+	1,  // 2: event.FindOneTicketClassResponse.ticket_class:type_name -> event.TicketClass
+	1,  // 3: event.FindManyTicketClassResponse.ticket_classes:type_name -> event.TicketClass
+	11, // 4: event.ReserveRequest.items:type_name -> event.ReserveItem
+	0,  // 5: event.ReleaseRequest.reason:type_name -> event.ReleaseReason
+	19, // 6: event.CheckAvailabilityRequest.items:type_name -> event.CheckAvailabilityItem
+	2,  // 7: event.InventoryService.CreateTicketClass:input_type -> event.CreateTicketClassRequest
+	4,  // 8: event.InventoryService.UpdateTicketClass:input_type -> event.UpdateTicketClassRequest
+	6,  // 9: event.InventoryService.FindOneTicketClass:input_type -> event.FindOneTicketClassRequest
+	8,  // 10: event.InventoryService.FindManyTicketClass:input_type -> event.FindManyTicketClassRequest
+	10, // 11: event.InventoryService.DeleteTicketClass:input_type -> event.DeleteTicketClassRequest
+	20, // 12: event.InventoryService.CheckAvailability:input_type -> event.CheckAvailabilityRequest
+	15, // 13: event.InventoryService.GetAvailability:input_type -> event.GetAvailabilityRequest
+	17, // 14: event.InventoryService.GetEventStock:input_type -> event.GetEventStockRequest
+	12, // 15: event.InventoryService.Reserve:input_type -> event.ReserveRequest
+	13, // 16: event.InventoryService.Confirm:input_type -> event.ConfirmRequest
+	14, // 17: event.InventoryService.Release:input_type -> event.ReleaseRequest
+	3,  // 18: event.InventoryService.CreateTicketClass:output_type -> event.CreateTicketClassResponse
+	5,  // 19: event.InventoryService.UpdateTicketClass:output_type -> event.UpdateTicketClassResponse
+	7,  // 20: event.InventoryService.FindOneTicketClass:output_type -> event.FindOneTicketClassResponse
+	9,  // 21: event.InventoryService.FindManyTicketClass:output_type -> event.FindManyTicketClassResponse
+	22, // 22: event.InventoryService.DeleteTicketClass:output_type -> google.protobuf.Empty
+	21, // 23: event.InventoryService.CheckAvailability:output_type -> event.CheckAvailabilityResponse
+	16, // 24: event.InventoryService.GetAvailability:output_type -> event.GetAvailabilityResponse
+	18, // 25: event.InventoryService.GetEventStock:output_type -> event.GetEventStockResponse
+	22, // 26: event.InventoryService.Reserve:output_type -> google.protobuf.Empty
+	22, // 27: event.InventoryService.Confirm:output_type -> google.protobuf.Empty
+	22, // 28: event.InventoryService.Release:output_type -> google.protobuf.Empty
+	18, // [18:29] is the sub-list for method output_type
+	7,  // [7:18] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_inventory_proto_init() }
@@ -1353,13 +1418,14 @@ func file_inventory_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_inventory_proto_rawDesc), len(file_inventory_proto_rawDesc)),
-			NumEnums:      0,
+			NumEnums:      1,
 			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_inventory_proto_goTypes,
 		DependencyIndexes: file_inventory_proto_depIdxs,
+		EnumInfos:         file_inventory_proto_enumTypes,
 		MessageInfos:      file_inventory_proto_msgTypes,
 	}.Build()
 	File_inventory_proto = out.File

@@ -27,6 +27,9 @@ That tail is covered on the other side: inventory's `Confirm` re-acquires a hold
 the worker already swept, as long as the stock has not been resold. The grace
 removes the common race; the re-acquire is the backstop.
 
-The same backstop covers a payment that lands on an order `ExpireOrder` has already
-timed out. `ConfirmOrder` confirms a `TIMEOUT` order like a `PENDING` one, and marks
-it `REFUND_REQUIRED` only when inventory cannot re-acquire the ticket.
+The same backstop covers a payment that lands after `ExpireOrder` timed the order out,
+or after the buyer cancelled it. Both release the hold as `CHECKOUT_ENDED`, which
+inventory writes `EXPIRED`, so `Confirm` can re-acquire it. `ConfirmOrder` confirms a
+`TIMEOUT` or `CANCELLED` order like a `PENDING` one, and marks it `REFUND_REQUIRED`
+only when inventory cannot re-acquire the ticket
+([0032](../../../docs/decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md)).

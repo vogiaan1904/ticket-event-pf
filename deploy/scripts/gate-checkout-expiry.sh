@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # An abandoned checkout, run on k3s by `make -C deploy k3s-gate-checkout-expiry`.
-# Ten tickets, two buyers: A orders and never pays, B orders and pays -> A's order
+# Ten tickets, three buyers: A orders and never pays, B orders and pays -> A's order
 # expires with its hold (~9m), after A's chair ended with its 5m window (0027);
-# B's order is untouched.
+# B's order is untouched. Then A, and C who cancelled, pay late -> each still gets
+# its ticket, because stock is left (0032).
 # Rule: docs/design/admission-sizing.md#when-a-checkout-is-abandoned.
 set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
@@ -65,14 +66,43 @@ order() {
     \"checkoutToken\":\"$3\",\"redirectUrl\":\"https://example.com/done\"}" | getval data.order.code
 }
 
+# pay <code> -> fires the in-cluster webhook adapter's completion for one order
+pay() {
+  kubectl -n $NS run "ce-curl-$RANDOM" --rm -i --restart=Never --image=curlimages/curl:8.10.1 -- \
+    -s -X POST "http://payment-webhook:8080/complete/$1" >/dev/null 2>&1 || true
+}
+
+# await_completed <token> <code> <name> -> fails the gate unless the order reaches COMPLETED
+await_completed() {
+  local st=""
+  for i in $(seq 1 20); do
+    st=$(order_status "$1" "$2")
+    [ "$st" = COMPLETED ] && return 0
+    sleep 2
+  done
+  fail "$3's order did not reach COMPLETED: ${st:-?}"
+}
+
+# stored_status <code> -> the order's status in DynamoDB
+stored_status() {
+  aws dynamodb get-item --region "$REGION" --table-name "$TABLE" \
+    --key "{\"PK\":{\"S\":\"ORDER#$1\"},\"SK\":{\"S\":\"ORDER#$1\"}}" --query 'Item.status.S' --output text
+}
+
+# reservation <code> -> the order's reservation status(es) in inventory
+reservation() {
+  kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
+    "SELECT status FROM reservation WHERE order_code='$1'"
+}
+
 # order_status <token> <code> -> the status the gateway shows the buyer
 order_status() {
   curl -s -H "Authorization: Bearer $1" "$GW/orders/code/$2" | getval data.status
 }
 
-echo "== 1. two buyers =="
-TOK_A=$(signup A); TOK_B=$(signup B)
-[ -n "$TOK_A" ] && [ -n "$TOK_B" ] || fail "a signup returned no accessToken"
+echo "== 1. three buyers =="
+TOK_A=$(signup A); TOK_B=$(signup B); TOK_C=$(signup C)
+[ -n "$TOK_A" ] && [ -n "$TOK_B" ] && [ -n "$TOK_C" ] || fail "a signup returned no accessToken"
 
 echo "== 2. an event with ten tickets =="
 CATEGORY_ID=gate1-category
@@ -112,16 +142,21 @@ CODE_B=$(order "$TOK_B" B "$CHECKOUT_B")
 echo "  A: session=$SESSION_A order=$CODE_A (never pays); B: order=$CODE_B"
 
 echo "== 4. B pays =="
-kubectl -n $NS run ce-curl --rm -i --restart=Never --image=curlimages/curl:8.10.1 -- \
-  -s -X POST "http://payment-webhook:8080/complete/$CODE_B" >/dev/null 2>&1 || true
-STATUS=""
-for i in $(seq 1 20); do
-  STATUS=$(order_status "$TOK_B" "$CODE_B")
-  [ "$STATUS" = COMPLETED ] && break
-  sleep 2
-done
-[ "$STATUS" = COMPLETED ] || fail "B's order did not reach COMPLETED: ${STATUS:-?}"
+pay "$CODE_B"
+await_completed "$TOK_B" "$CODE_B" B
 echo "  B's order COMPLETED"
+
+echo "== 4b. C orders, cancels, then pays on the still-open link =="
+admit "$TOK_C" C; CHECKOUT_C=$CHECKOUT
+CODE_C=$(order "$TOK_C" C "$CHECKOUT_C")
+[ -n "$CODE_C" ] || fail "C's order returned no order.code"
+HTTP=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$GW/orders/code/$CODE_C" -H "Authorization: Bearer $TOK_C")
+[ "$HTTP" -lt 300 ] || fail "C's cancel returned HTTP $HTTP"
+[ "$(reservation "$CODE_C")" = EXPIRED ] || fail "C's cancelled hold is $(reservation "$CODE_C"), want EXPIRED (re-acquirable)"
+pay "$CODE_C"
+await_completed "$TOK_C" "$CODE_C" C
+[ "$(reservation "$CODE_C")" = CONFIRMED ] || fail "C's reservation is $(reservation "$CODE_C"), want CONFIRMED"
+echo "  C: cancelled, paid, COMPLETED with its seat re-acquired"
 
 echo "== 5. wait for A's order to expire (every 15s, up to 12m) =="
 EXPIRED_AT=""
@@ -141,15 +176,12 @@ echo "  A's order expired ${AFTER}s after it was placed"
 echo "== 6. A's checkout expired everywhere; B's is untouched =="
 [ "$AFTER" -ge 510 ] && [ "$AFTER" -le 660 ] || fail "A's order expired at ${AFTER}s, want 510-660s (the hold is 540s)"
 [ -z "$(redis ZSCORE "waitroom:$EVENT_ID:checkouts" "$SESSION_A")" ] || fail "A still holds a chair after its order expired"
-KEY="{\"PK\":{\"S\":\"ORDER#$CODE_A\"},\"SK\":{\"S\":\"ORDER#$CODE_A\"}}"
-STORED=$(aws dynamodb get-item --region "$REGION" --table-name "$TABLE" --key "$KEY" --query 'Item.status.S' --output text)
+STORED=$(stored_status "$CODE_A")
 [ "$STORED" = TIMEOUT ] || fail "A's order is $STORED in DynamoDB, want TIMEOUT"
 SS=$(redis GET "waitroom:session:$SESSION_A")
 echo "$SS" | grep -q '"status":"expired"' || fail "A's session is not expired: $SS"
-RSV=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
-  "SELECT status FROM reservation WHERE order_code='$CODE_A'")
-[ -n "$RSV" ] || fail "A has no reservation row"
-! echo "$RSV" | grep -q ACTIVE || fail "A's reservation is still ACTIVE: $RSV"
+RSV=$(reservation "$CODE_A")
+[ "$RSV" = EXPIRED ] || fail "A's reservation is ${RSV:-missing}, want EXPIRED (re-acquirable)"
 STATUS=$(order_status "$TOK_B" "$CODE_B")
 [ "$STATUS" = COMPLETED ] || fail "B's order reads ${STATUS:-?}, want COMPLETED"
 echo "  A: EXPIRED on the wire, TIMEOUT stored, session expired, reservation $(echo $RSV); B: COMPLETED"
@@ -165,4 +197,14 @@ done
 [ -n "$SEEN" ] || fail "order-consumer never logged B's order ($CODE_B) as nothing to expire"
 echo "  order-consumer: $CODE_B settled before its hold expired"
 
-echo "CHECKOUT-EXPIRY GATE PASSED: event $EVENT_ID, order expired at ${AFTER}s"
+echo "== 8. A pays after its order timed out =="
+pay "$CODE_A"
+await_completed "$TOK_A" "$CODE_A" A
+[ "$(stored_status "$CODE_A")" = COMPLETED ] || fail "A's order is $(stored_status "$CODE_A") in DynamoDB, want COMPLETED"
+[ "$(reservation "$CODE_A")" = CONFIRMED ] || fail "A's reservation is $(reservation "$CODE_A"), want CONFIRMED"
+SOLD=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
+  "SELECT reserved || '/' || sold FROM ticket_class WHERE id='$TCID'")
+[ "$SOLD" = "0/3" ] || fail "ticket class reserved/sold is $SOLD, want 0/3 (A, B, C)"
+echo "  A: late payment COMPLETED, seat re-acquired; reserved/sold $SOLD; nobody owed a refund"
+
+echo "CHECKOUT-EXPIRY GATE PASSED: event $EVENT_ID, order expired at ${AFTER}s, late payments kept their seats"
