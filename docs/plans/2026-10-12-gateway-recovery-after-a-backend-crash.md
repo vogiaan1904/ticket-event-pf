@@ -1,6 +1,7 @@
 # The gateway's recovery after a backend crash
 
-**Status: WRITTEN 2026-10-12, not executed.** Ranked first by
+**Status: Step 2 RUN 2026-11-14 on `sha-a5842c2` (see *Results*); Steps 3–4 deferred by
+the architect, to be re-planned around the idle channel.** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -173,7 +174,37 @@ Each run's failures stay in `/tmp/crash-*/failures.jsonl`, and the traced gatewa
 
 ## Results
 
-Not yet run.
+**2026-11-14, Step 2, build `sha-a5842c2`.** The box was idle (no expired Temporal
+workflows; top pod 37m CPU); the gateway had run for 162 minutes with no traffic and
+no trace env. Each run probed for 180s at 50 req/s; `Ready` is the timeline's
+`event-service ready`.
+
+| Run | Delete → Ready | 503s | First, last 503 after delete | Last 503 after Ready |
+|---|---|---|---|---|
+| u1 | 10.7s | 6850, no gap over 1s | +7.1s, +143.7s | **133.0s** |
+| u2 | 15.0s | 543 | +7.0s, +17.0s | 2.1s |
+| u3 | 9.4s | 141 | +7.1s, +9.7s | 0.3s |
+
+**Reproduced, once in three, on the first crash.** u1 failed every request for 136.6s,
+133s of them with the replacement Ready. Every failure was a gateway 503 (`UNAVAILABLE`).
+The first 503 comes 7s after the delete in every run: 0015's 5s `preStop` sleep, then
+the stop.
+
+**What sets u1 apart.** The gateway sets no channel options
+(`services/api-gateway/src`, grpc-js 1.13.4), so its channel goes idle after 30
+minutes without a call. Before u1 it had been idle for hours; the probe woke it 11ms
+before the delete. Before u2 and u3 it had been busy 60s earlier. The 2026-09-25 runs
+also began on a gateway already running; the 2026-09-27 traced runs began on one just
+restarted, and recovered.
+
+**Not shown, and why Step 3 waits.** No trace ran, so H1–H3 are not told apart. 133s
+is close to Linux's default give-up on an unanswered connect, about 127s
+(`tcp_syn_retries=6`), plus one backoff step, which fits H1; that is a lead, not a
+finding. Step 3 as written restarts the gateway and crashes 60s later, so its channel
+is never idle and it would likely recover, as on 2026-09-27. The re-planned run traces
+a crash on a channel left idle for 31 minutes or more.
+
+Raw logs: `/tmp/crash-u{1,2,3}` on the machine that ran it (not kept).
 
 ## Appendix: the local repro
 
