@@ -39,7 +39,8 @@ describing it for a week — because the fact had been copied rather than linked
 | Where is a decision's why recorded, and how is it reviewed? | `docs/decisions/README.md` | One record per decision, drafted when made; reviewed from the generated index |
 | Where does an agent start to learn a part of the system, and which document wins? | `.claude/skills/system-map` | A map of documents, not a copy of them; CI fails on a gone path or an uncited document; 2026-09-23 |
 | Does the gateway rate-limit and set security headers? | `docs/decisions/0013` | Helmet everywhere; sign-in and sign-up throttled per client IP, purchase never; 2026-09-24 |
-| Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet |
+| Which TS layout is the target for new structure? | `docs/design/ts-layout.md` | The 2026-06-16 rule, re-adopted 2026-09-24; no service converged yet; event-svc goes first, as a change of its own ([0034](docs/decisions/0034-event-svc-converges-first-on-its-own.md)), planned 2026-11-14 |
+| Where is a revoked checkout token refused? | `docs/decisions/0033` | order-svc asks a waitroom `ValidateCheckoutToken` RPC before the purchase slot, failing closed; planned 2026-11-14, unbuilt |
 | How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; built; measured on k3s 2026-09-27 |
 | How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; built; verified on k3s 2026-09-27 |
 | Should the short saga steps run as local activities? | `docs/decisions/0018` | Yes: six steps local behind a workflow version; Temporal's CPU per purchase halved; measured on k3s 2026-09-29 |

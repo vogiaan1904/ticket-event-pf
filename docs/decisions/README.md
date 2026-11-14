@@ -131,6 +131,7 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0014](0014-ts-structure-follows-the-june-layout-rule.md) | Which TS layout is the target for new structure? | The 2026-06-16 rule, restored as a design: flat controller, one transport `dto/`, domain shapes in `<feature>.types.ts`, additions by archetype | Making `event-svc`'s current shape the rule | A rule no service follows yet, applied only as each service is converged | accepted |
+| [0034](0034-event-svc-converges-first-on-its-own.md) | Which TS service converges first, and becomes the worked example? | event-svc, in a change that does nothing else | user-svc, the smallest; waiting until a service is changed anyway | A 71-file move with no capability, against the design's own "only when being worked on anyway" | proposed |
 
 ### rollout-drain
 
@@ -199,4 +200,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0032](0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md) | What does a payment get when it lands after its checkout ended, by timeout or by the buyer's cancel? | Its ticket if one is left, else a refund: `Release` carries a reason, an ended checkout is written `EXPIRED`, which `Confirm` re-acquires, and `ConfirmOrder` treats a `CANCELLED` order like a `TIMEOUT` one | `Confirm` re-acquiring `CANCELLED` holds, guarded only by order-svc; a refund for every payment after a cancel | A proto field regenerated in every consumer; `EXPIRED` now also means "released while its link may still be paid"; a buyer's cancel no longer refuses a later payment | accepted |
+
+### token-revocation
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md) | Where is a revoked checkout token refused? | A waitroom `ValidateCheckoutToken` RPC, called by order-svc before the purchase slot; fails closed | order-svc keeping the session-keyed slot so a token buys once; the same RPC failing open | A synchronous hop on every waitroom checkout, and no checkout on a waitroom event while the waitroom is down | proposed |
 <!-- decisions:index:end -->
