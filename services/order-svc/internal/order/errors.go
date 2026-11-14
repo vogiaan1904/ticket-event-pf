@@ -22,6 +22,7 @@ var (
 	ErrTooManyTicketsInOrder = errors.New("too many tickets in one order")
 
 	ErrInvalidCheckoutToken = errors.New("invalid checkout token")
+	ErrWaitroomUnavailable  = errors.New("waitroom unavailable")
 
 	// Another order already holds this buyer's purchase slot. The caller
 	// should return that order rather than creating a second one.

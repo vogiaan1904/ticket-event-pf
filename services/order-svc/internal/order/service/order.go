@@ -136,13 +136,13 @@ func (s *implService) Create(ctx context.Context, in order.CreateOrderInput) (or
 
 	var ssID string
 	if eCfg.AllowWaitRoom {
-		claim, err := s.validateCheckoutToken(ctx, in)
+		id, err := s.validateCheckoutToken(ctx, in)
 		if err != nil {
 			s.l.Errorf(ctx, "internal.order.service.Create: %v", err)
 			return order.CreateOrderOutput{}, err
 		}
 
-		ssID = claim.SessionID
+		ssID = id
 	}
 
 	// One in-flight order per buyer; the workflow gives it back. See

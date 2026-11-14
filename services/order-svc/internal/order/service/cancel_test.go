@@ -7,8 +7,8 @@ import (
 
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
-	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka"
+	"github.com/vogiaan1904/ticketbottle-order/internal/order/delivery/kafka/producer"
 	repo "github.com/vogiaan1904/ticketbottle-order/internal/order/repository"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	"google.golang.org/grpc"

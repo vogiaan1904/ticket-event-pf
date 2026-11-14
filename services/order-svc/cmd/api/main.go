@@ -26,7 +26,7 @@ import (
 	iSvc "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
 	opb "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/order"
 	pSvc "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/payment"
-	pkgJwt "github.com/vogiaan1904/ticketbottle-order/pkg/jwt"
+	wSvc "github.com/vogiaan1904/ticketbottle-order/pkg/grpc/waitroom"
 	pkgLog "github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 	pkgTemporal "github.com/vogiaan1904/ticketbottle-order/pkg/temporal"
 	"google.golang.org/grpc"
@@ -86,7 +86,12 @@ func main() {
 
 	oRepo := oRepo.New(l, ddbClient.DB(), ddbClient.TableName())
 
-	jwtMgr := pkgJwt.NewManager(cfg.JWT.Secret, l)
+	wSvc, wClose, err := wSvc.NewWaitroomClient(cfg.Microservice.Waitroom)
+	if err != nil {
+		l.Fatalf(ctx, "Failed to create waitroom service client: %v", err)
+		os.Exit(1)
+	}
+	defer wClose()
 
 	tCli, err := pkgTemporal.NewClient(cfg.Temporal)
 	if err != nil {
@@ -113,7 +118,7 @@ func main() {
 		}
 	}()
 
-	oSvc := oSvc.New(l, oRepo, jwtMgr, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
+	oSvc := oSvc.New(l, oRepo, wSvc, iSvc, eSvc, pSvc, oProd, tCli, cfg.Server.CreateOrderTimeout)
 
 	oGrpc := oGrpc.NewGrpcService(oSvc, l)
 

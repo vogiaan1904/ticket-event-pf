@@ -15,7 +15,6 @@ type Config struct {
 	Server       ServerConfig
 	Redis        RedisConfig
 	DynamoDB     DynamoDBConfig
-	JWT          JWTConfig
 	Log          LogConfig
 	Kafka        KafkaConfig
 	Microservice MicroserviceConfig
@@ -62,11 +61,7 @@ type MicroserviceConfig struct {
 	Event     string
 	Inventory string
 	Payment   string
-}
-
-type JWTConfig struct {
-	Secret string
-	Expiry time.Duration
+	Waitroom  string
 }
 
 type LogConfig struct {
@@ -101,10 +96,6 @@ func Load() (*Config, error) {
 			Region:    getEnv("AWS_REGION", "us-east-1"),
 			Endpoint:  getEnv("DYNAMODB_ENDPOINT", ""),
 		},
-		JWT: JWTConfig{
-			Secret: getEnv("JWT_SECRET", "your-super-secret-key-change-in-production"),
-			Expiry: getEnvAsDuration("JWT_EXPIRY", 15*time.Minute),
-		},
 		Log: LogConfig{
 			Level:    getEnv("LOG_LEVEL", "info"),
 			Mode:     getEnv("LOG_MODE", "development"),
@@ -121,6 +112,7 @@ func Load() (*Config, error) {
 			Event:     getEnv("EVENT_SERVICE_ADDR", "localhost:50053"),
 			Inventory: getEnv("INVENTORY_SERVICE_ADDR", "localhost:50057"),
 			Payment:   getEnv("PAYMENT_SERVICE_ADDR", "localhost:50055"),
+			Waitroom:  getEnv("WAITROOM_SERVICE_ADDR", "localhost:50056"),
 		},
 		Temporal: TemporalConfig{
 			HostPort:  getEnv("TEMPORAL_HOST_PORT", "localhost:7233"),
@@ -138,12 +130,6 @@ func Load() (*Config, error) {
 func (c *Config) Validate() error {
 	if c.Server.GRpcPort <= 0 || c.Server.GRpcPort > 65535 {
 		return fmt.Errorf("invalid server port: %d", c.Server.GRpcPort)
-	}
-
-	if c.JWT.Secret == "" || c.JWT.Secret == "your-super-secret-key-change-in-production" {
-		if c.Env == "production" {
-			return fmt.Errorf("JWT secret must be set in production")
-		}
 	}
 
 	return nil

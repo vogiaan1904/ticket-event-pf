@@ -12,6 +12,10 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
+- **A waitroom event's checkout token is the waitroom's to judge.** `Create` asks its
+  `ValidateCheckoutToken` before the purchase slot, and holds no signing key: refused is
+  `UNAUTHENTICATED` `ORD016`, an unreachable waitroom `UNAVAILABLE` `ORD021`
+  ([0033](../../docs/decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md)).
 - **An order takes at most its event's `max_tickets_per_order` tickets**, counted across
   its items and checked in `Create` before the purchase slot or any hold
   ([0021](../../docs/decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md)).
@@ -84,7 +88,7 @@ go build ./...
 ## Layout
 
 - `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
-- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`.
+- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `redis`, `response`, `util`.
 
 ## Design docs
 

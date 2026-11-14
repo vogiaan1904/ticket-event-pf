@@ -31,14 +31,6 @@ stringData:
 # Source: ticketbottle/templates/apps/secrets.yaml
 apiVersion: v1
 kind: Secret
-metadata: { name: order-secrets, namespace: ticketbottle }
-type: Opaque
-stringData:
-  JWT_SECRET: "fixture-not-a-real-jwt-secret"
----
-# Source: ticketbottle/templates/apps/secrets.yaml
-apiVersion: v1
-kind: Secret
 metadata: { name: waitroom-secrets, namespace: ticketbottle }
 type: Opaque
 stringData:
@@ -200,7 +192,6 @@ data:
   DYNAMODB_ENDPOINT: ""
   TEMPORAL_HOST_PORT: temporal:7233
   TEMPORAL_NAMESPACE: default
-  JWT_EXPIRY: 15m
   LOG_LEVEL: debug
   LOG_MODE: development
   LOG_ENCODING: console
@@ -212,6 +203,7 @@ data:
   EVENT_SERVICE_ADDR: event-service:50053
   INVENTORY_SERVICE_ADDR: inventory-service:50057
   PAYMENT_SERVICE_ADDR: payment-service:50055
+  WAITROOM_SERVICE_ADDR: waitroom-service:50056
 ---
 # Source: ticketbottle/templates/apps/config.yaml
 apiVersion: v1
@@ -559,7 +551,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: cfa882c97d95d109e880a80a948ec536a7fd8695f3686e0f733a9c2d8e75995c
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: event-service }
     spec:
       containers:
@@ -606,7 +598,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: c10cc4f239311bc6e60498ec591f4b000eecb747ec5df988c7ccf72e5508037e
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: app-gateway }
     spec:
       terminationGracePeriodSeconds: 75
@@ -654,7 +646,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: 42d5a58536ea220ae0000472ebdd6c83abbf194374fa0bd3e25c5a0c16ceede5
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: inventory-service }
     spec:
       containers:
@@ -700,8 +692,7 @@ spec:
       annotations:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
-        checksum/config: e75b40ce12b071f72af3aae7da84d6a5ce7d0197bfbe1d9dd0cbb83a54f1a708
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/config: 0d9d777c77d0246569e5374761aea0760ca5c1073ae7d1b454ae05674aed52bb
       labels: { app: order-service }
     spec:
       containers:
@@ -718,7 +709,6 @@ spec:
               memory: 32Mi
           envFrom:
             - configMapRef: { name: order-config }
-            - secretRef: { name: order-secrets }
           ports: [{ containerPort: 50054 }]
           lifecycle:
             preStop:
@@ -747,8 +737,7 @@ spec:
       annotations:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
-        checksum/config: e75b40ce12b071f72af3aae7da84d6a5ce7d0197bfbe1d9dd0cbb83a54f1a708
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/config: 0d9d777c77d0246569e5374761aea0760ca5c1073ae7d1b454ae05674aed52bb
       labels: { app: order-consumer }
     spec:
       initContainers:
@@ -776,7 +765,6 @@ spec:
               memory: 32Mi
           envFrom:
             - configMapRef: { name: order-config }
-            - secretRef: { name: order-secrets }
 ---
 # Source: ticketbottle/templates/apps/outbox-relay.yaml
 apiVersion: apps/v1
@@ -796,7 +784,7 @@ spec:
       annotations:
         # Env is resolved at container creation, so a Secret change alone leaves
         # pods running the old values. The digest rolls them.
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: outbox-relay }
     spec:
       containers:
@@ -834,7 +822,7 @@ spec:
       annotations:
         # Env is resolved at container creation, so a Secret change alone leaves
         # pods running the old values. The digest rolls them.
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: payment-webhook }
     spec:
       containers:
@@ -881,7 +869,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: 6faddf57faea5844750be0cbbdb7c2ca44b6cdc8c8d69e8eeadd426d2ab21ad9
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: payment-service }
     spec:
       containers:
@@ -928,7 +916,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: fd7b7f9bed313d8e74d7881c51cc8f9ab1c95e4b73077e09e38f5a31dfe3cc93
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: user-service }
     spec:
       containers:
@@ -975,7 +963,7 @@ spec:
         # Env is resolved at container creation, so a ConfigMap or Secret change
         # alone leaves pods running the old values. The digests roll them.
         checksum/config: c39add852448667f00803dcbb6d2d283ec740964cf193bcd01274be7dc2560c9
-        checksum/secret: 720fb42bf60fc8e719f24a7d29d850b09379483d9a7bd4882c19b17c03c3d60d
+        checksum/secret: 8e356d0d89f7d2d7a0b9fbb6b14702246f6b3364696834b3f49b1ca1a070a65d
       labels: { app: waitroom-service }
     spec:
       containers:

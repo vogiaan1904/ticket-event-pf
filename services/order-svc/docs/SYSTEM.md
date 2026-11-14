@@ -6,7 +6,7 @@
 
 **Core Responsibility:** Coordinate order creation, payment processing, and inventory management across Event, Inventory, and Payment microservices with automatic compensation on failures.
 
-**Key Technologies:** Go, Temporal Workflows, gRPC, Kafka, DynamoDB (AWS), JWT
+**Key Technologies:** Go, Temporal Workflows, gRPC, Kafka, DynamoDB (AWS)
 
 ---
 
@@ -350,17 +350,16 @@ type Service interface {
 
 **Dependencies:**
 - Repository (DynamoDB data access)
-- JWT Manager (checkout token validation)
 - Temporal Client (workflow execution)
 - Kafka Producer (event publishing)
-- gRPC Clients (Event, Inventory, Payment services)
+- gRPC Clients (Event, Inventory, Payment, Waitroom services)
 
 ### Key Methods
 
 **Create Order:**
 1. Validate request parameters
 2. Get event details and config from Event Service
-3. Validate checkout token if waitroom enabled (JWT verification)
+3. Ask the waitroom whether the checkout token still holds, if the event has one
 4. Fetch ticket class details from Inventory Service
 5. Calculate total amount
 6. Generate unique order code
@@ -374,9 +373,9 @@ type Service interface {
 4. Publish `checkout.failed` event if session ID exists
 
 **Token Validation:**
-- JWT verification with HMAC signing
-- Claims validation: UserID, EventID must match request
-- Token expiry check
+- The waitroom's `ValidateCheckoutToken` decides: signature, user and event, and a
+  session still admitted and not revoked ([0033](../../../docs/decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md))
+- Refused: `UNAUTHENTICATED` (`ORD016`); waitroom unreachable: `UNAVAILABLE` (`ORD021`)
 
 ---
 
@@ -473,12 +472,6 @@ AWS_REGION=us-east-1
 DYNAMODB_ENDPOINT=  # Empty for AWS; http://localhost:8000 for docker-compose.dev.yml
 ```
 
-### JWT
-```env
-JWT_SECRET=your-super-secret-key-change-in-production
-JWT_EXPIRY=15m
-```
-
 ### Kafka
 ```env
 KAFKA_BROKERS=localhost:9092
@@ -493,6 +486,7 @@ KAFKA_CONSUMER_GROUP_ID=order-service
 EVENT_SERVICE_ADDR=localhost:50053
 INVENTORY_SERVICE_ADDR=localhost:50057
 PAYMENT_SERVICE_ADDR=localhost:50055
+WAITROOM_SERVICE_ADDR=localhost:50056
 ```
 
 ### Temporal

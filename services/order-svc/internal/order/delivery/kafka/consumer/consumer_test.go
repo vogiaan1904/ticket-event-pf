@@ -76,11 +76,11 @@ func newClaim(t *testing.T, offset int64) fakeClaim {
 
 func newConsumer(svcErr error) (*Consumer, *fakeSession) {
 	return &Consumer{
-			svc: stubService{err: svcErr},
-			l:   logger.InitializeTestZapLogger(),
-		}, &fakeSession{
-			ctx: context.Background(),
-		}
+		svc: stubService{err: svcErr},
+		l:   logger.InitializeTestZapLogger(),
+	}, &fakeSession{
+		ctx: context.Background(),
+	}
 }
 
 // The payment is already captured. Sarama commits the highest marked offset, so

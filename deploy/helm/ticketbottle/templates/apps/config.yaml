@@ -117,7 +117,6 @@ data:
   DYNAMODB_ENDPOINT: {{ .Values.order.dynamodbEndpoint | quote }}
   TEMPORAL_HOST_PORT: temporal:7233
   TEMPORAL_NAMESPACE: default
-  JWT_EXPIRY: 15m
   LOG_LEVEL: debug
   LOG_MODE: development
   LOG_ENCODING: console
@@ -129,6 +128,7 @@ data:
   EVENT_SERVICE_ADDR: event-service:50053
   INVENTORY_SERVICE_ADDR: inventory-service:50057
   PAYMENT_SERVICE_ADDR: payment-service:50055
+  WAITROOM_SERVICE_ADDR: waitroom-service:50056
 ---
 apiVersion: v1
 kind: ConfigMap

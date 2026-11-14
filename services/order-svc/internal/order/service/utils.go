@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
+	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/waitroom"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func generatePaymentIdempotencyKey(orderCode string, provider string) string {
@@ -27,21 +29,28 @@ func (s *implService) releaseTickets(ctx context.Context, code string, reason in
 	return nil
 }
 
-func (s *implService) validateCheckoutToken(ctx context.Context, in order.CreateOrderInput) (models.CheckoutTokenClaim, error) {
+// validateCheckoutToken asks the waitroom whether the token still admits this
+// buyer to this event, and returns the session it admits (0033).
+func (s *implService) validateCheckoutToken(ctx context.Context, in order.CreateOrderInput) (string, error) {
 	if in.CheckoutToken == "" {
-		return models.CheckoutTokenClaim{}, order.ErrInvalidCheckoutToken
+		return "", order.ErrInvalidCheckoutToken
 	}
 
-	p, err := s.jwt.Verify(ctx, in.CheckoutToken)
-	if err != nil {
-		return models.CheckoutTokenClaim{}, order.ErrInvalidCheckoutToken
+	out, err := s.wrSvc.ValidateCheckoutToken(ctx, &waitroom.ValidateCheckoutTokenRequest{
+		Token:   in.CheckoutToken,
+		UserId:  in.UserID,
+		EventId: in.EventID,
+	})
+	switch status.Code(err) {
+	case codes.OK:
+		return out.GetSessionId(), nil
+	case codes.Unauthenticated:
+		return "", order.ErrInvalidCheckoutToken
+	case codes.Unavailable, codes.DeadlineExceeded:
+		return "", order.ErrWaitroomUnavailable
+	default:
+		return "", err
 	}
-
-	if p.UserID != in.UserID || p.EventID != in.EventID {
-		return models.CheckoutTokenClaim{}, order.ErrInvalidCheckoutToken
-	}
-
-	return p.CheckoutTokenClaim, nil
 }
 
 // ticketsInOrder is how many tickets an order takes, across all its items.

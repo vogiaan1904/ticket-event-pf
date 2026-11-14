@@ -11,7 +11,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression v1.7.54
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.38.0
 	github.com/gin-gonic/gin v1.11.0
-	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/joho/godotenv v1.5.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
