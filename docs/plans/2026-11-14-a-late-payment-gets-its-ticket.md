@@ -1,6 +1,6 @@
 # A late payment gets its ticket when one is left
 
-**Status: tickets 1–3 BUILT 2026-11-14 (unit-tested, uncommitted); ticket 4's gate written, not run; ticket 5 open.** Not in
+**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 open.** Not in
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s ranking;
 where it slots is the architect's call.
 

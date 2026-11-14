@@ -1,7 +1,7 @@
 # 0032 — A payment after a released hold gets its ticket if one is left
 
 **Date:** 2026-11-14
-**Status:** proposed
+**Status:** accepted
 **Arc:** late-payment — [plan](../plans/2026-11-14-a-late-payment-gets-its-ticket.md)
 **Where it lives:** `proto/inventory.proto` (`ReleaseReason`), `services/inventory-svc/internal/services/reservation.go` (`cancelReservationTx`), `services/order-svc/internal/workflows/confirm_order.go` (`confirmable`), `services/order-svc/internal/workflows/expire_order.go`
 
@@ -66,3 +66,24 @@ a status. That came inside the approved plan.
   running at deploy finishes on the old path.
 - Holds to keep: a failed payment and saga compensation must never send
   `CHECKOUT_ENDED`, or a refused payment could take a seat.
+
+## Outcome
+
+Built test-first in `a5842c2`. On the API before the change, `Confirm` after `Release`
+failed with `reservation state conflict`, then passed with a `CHECKOUT_ENDED` release.
+Reverting each fix turned its tests red: the `EXPIRED` write in `cancelReservationTx`,
+the reason `ExpireOrder` and `Cancel` send, and the `CANCELLED` case in `confirmable`.
+Inventory's suite passes against Postgres, and order-svc's passes with its recorded
+histories replayed.
+
+Run on k3s 2026-11-14, from the `:dev` images of `a5842c2`:
+- `gate-checkout-expiry`: C ordered, cancelled, then paid, and read `COMPLETED` with its
+  seat re-acquired. A expired 554s after it was placed: `EXPIRED` on the wire, `TIMEOUT`
+  stored, reservation `EXPIRED`. A then paid: `COMPLETED`, `reserved/sold 0/3`, no
+  order owed a refund. Before the change, both payments would have been refunded, so a
+  pass needs the new images.
+- `gate2` (`TB-GATE1-20261114-YJ8RTSTW` `COMPLETED`) and `gate-sold-out` passed
+  unchanged.
+
+Not recorded: the waitroom's error log for the window (run step 6), and the pod images
+(step 2).
