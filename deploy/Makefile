@@ -35,7 +35,7 @@ K3S_ID := $$(cd $(K3S_ENV) && terraform output -raw instance_id)
 K3S_IP := $$(aws ec2 describe-instances --instance-ids $(K3S_ID) --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
 K3S_TUNNEL := ssh $(SSH_OPTS) -L 6443:127.0.0.1:6443 -L 3000:127.0.0.1:30000 ec2-user@
 
-.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2 k3s-gate-sold-out k3s-gate-checkout-expiry k3s-gate-room k3s-gate-orders k3s-gate-sell-out-tail k3s-gate-read-back k3s-load
+.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2 k3s-gate-sold-out k3s-gate-checkout-expiry k3s-gate-room k3s-gate-orders k3s-gate-token-revoked k3s-gate-sell-out-tail k3s-gate-read-back k3s-load
 
 k3s-ip:            ## Print the current public IP of the k3s box (live from EC2)
 	@echo "$(K3S_IP)"
@@ -84,6 +84,9 @@ k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel m
 
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
+
+k3s-gate-token-revoked: ## A completed or cancelled checkout's token is refused with 401 (tunnel must be open)
+	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-token-revoked.sh
 
 k3s-gate-sold-out: ## The door pauses while the last ticket is held, then refuses with 409 (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-sold-out.sh

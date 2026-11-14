@@ -1,6 +1,6 @@
 # Checkout-token revocation
 
-**Status: WRITTEN 2026-11-14, not executed.** Item 2 of
+**Status: tickets 1–3 DONE 2026-11-14 (`8c5ba2e`, `bbb7270`, `5db408a`); ticket 4 (k3s) open.** Item 2 of
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md). The
 check's place is decided in
 [0033](../decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md).
@@ -94,10 +94,11 @@ before Ticket 2.
 The architect runs it and pastes the output.
 
 - [ ] `make -C deploy k3s-deploy` at the ticket's `sha-` tag.
-- [ ] A new `deploy/scripts/gate-token-revoked.sh`, with a `k3s-gate-token-revoked`
-  target: buy through to `COMPLETED`, then `POST /api/orders` with the same token →
-  401. Then admit a second buyer, let its chair expire (`gate-checkout-expiry.sh`'s
-  path), reuse the token → 401.
+- [x] A new `deploy/scripts/gate-token-revoked.sh`, with a `k3s-gate-token-revoked`
+  target: buy through to `COMPLETED`; once the waitroom answers the session ended,
+  `POST /api/orders` with the same token → 401 `ORD016`. Then a second buyer orders
+  and cancels, and the same. A cancel, not a chair expiry: the token expires with
+  the chair (0027), so an expiry case would pass on the JWT's `exp` alone.
 - [ ] Mutation check: revert Ticket 2's call; the gate goes red.
 - [ ] `make -C deploy k3s-gate2` and `k3s-gate-orders` still green.
 - [ ] The RPC's cost, from Prometheus after the gates:
