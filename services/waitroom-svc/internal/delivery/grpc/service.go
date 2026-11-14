@@ -86,6 +86,14 @@ func (s *grpcService) GetQueueStatus(ctx context.Context, req *waitroompb.GetQue
 	return res, nil
 }
 
+func (s *grpcService) ValidateCheckoutToken(ctx context.Context, req *waitroompb.ValidateCheckoutTokenRequest) (*waitroompb.ValidateCheckoutTokenResponse, error) {
+	ssID, err := s.svc.ValidateCheckoutToken(ctx, req.Token, req.UserId, req.EventId)
+	if err != nil {
+		return nil, s.failed(ctx, "ValidateCheckoutToken", err)
+	}
+	return &waitroompb.ValidateCheckoutTokenResponse{SessionId: ssID}, nil
+}
+
 func (s *grpcService) LeaveQueue(ctx context.Context, req *waitroompb.LeaveQueueRequest) (*waitroompb.LeaveQueueResponse, error) {
 	if err := s.svc.LeaveQueue(ctx, req.SessionId, req.UserId); err != nil {
 		return nil, s.failed(ctx, "LeaveQueue", err)

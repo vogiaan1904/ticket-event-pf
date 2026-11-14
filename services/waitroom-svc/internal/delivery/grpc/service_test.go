@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -88,5 +89,36 @@ func TestOnlyAFaultCodeIsLoggedAsAnError(t *testing.T) {
 		if got := isFault(code); got != want {
 			t.Errorf("isFault(%s) = %v, want %v", code, got, want)
 		}
+	}
+}
+
+// tokenSvc answers ValidateCheckoutToken with a fixed result; any other call panics.
+type tokenSvc struct {
+	service.WaitroomService
+	ssID string
+	err  error
+}
+
+func (f *tokenSvc) ValidateCheckoutToken(context.Context, string, string, string) (string, error) {
+	return f.ssID, f.err
+}
+
+// A token that does not buy is UNAUTHENTICATED, a 401: the buyer rejoins the queue.
+func TestARefusedCheckoutTokenIsUnauthenticated(t *testing.T) {
+	refused := fmt.Errorf("%w: %w", service.ErrCheckoutTokenRefused, service.ErrSessionNotFound)
+	s := &grpcService{svc: &tokenSvc{err: refused}, l: logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"})}
+
+	_, err := s.ValidateCheckoutToken(context.Background(), &waitroompb.ValidateCheckoutTokenRequest{Token: "t", UserId: "u-1", EventId: "e-1"})
+	if got := status.Code(err); got != codes.Unauthenticated {
+		t.Fatalf("code = %s, want Unauthenticated", got)
+	}
+}
+
+func TestAnAcceptedCheckoutTokenNamesItsSession(t *testing.T) {
+	s := &grpcService{svc: &tokenSvc{ssID: "ss-1"}, l: logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"})}
+
+	out, err := s.ValidateCheckoutToken(context.Background(), &waitroompb.ValidateCheckoutTokenRequest{Token: "t", UserId: "u-1", EventId: "e-1"})
+	if err != nil || out.GetSessionId() != "ss-1" {
+		t.Fatalf("got (%v, %v), want session ss-1", out, err)
 	}
 }

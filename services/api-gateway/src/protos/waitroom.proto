@@ -9,6 +9,8 @@ service WaitroomService {
   rpc GetQueueStatus(GetQueueStatusRequest) returns (QueueStatusResponse);
   rpc LeaveQueue(LeaveQueueRequest) returns (LeaveQueueResponse);
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+  // Whether a checkout token still admits its holder; order-svc asks before a checkout.
+  rpc ValidateCheckoutToken(ValidateCheckoutTokenRequest) returns (ValidateCheckoutTokenResponse);
 }
 
 message JoinQueueRequest {
@@ -46,6 +48,16 @@ message QueueStatusResponse {
   string admitted_at = 10;
   // The door is shut until a ticket is available again; the place is kept.
   bool paused = 11;
+}
+
+message ValidateCheckoutTokenRequest {
+  string token = 1;
+  string user_id = 2;
+  string event_id = 3;
+}
+
+message ValidateCheckoutTokenResponse {
+  string session_id = 1;
 }
 
 message LeaveQueueRequest {

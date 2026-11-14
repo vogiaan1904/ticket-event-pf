@@ -24,7 +24,7 @@ type SessionService interface {
 	ActiveSession(ctx context.Context, ssID, userID string) (*models.Session, error)
 	UpdateCheckoutToken(ctx context.Context, sessionID string, token string, expAt time.Time) error
 	InvalidateCheckoutToken(ctx context.Context, sessionID string, reason string) error
-	ValidateCheckoutToken(ctx context.Context, token string) error
+	ValidateCheckoutToken(ctx context.Context, token, userID, eventID string) (string, error)
 }
 
 type sessionService struct {
@@ -173,71 +173,56 @@ func (s *sessionService) InvalidateCheckoutToken(ctx context.Context, sessionID 
 	return nil
 }
 
-func (s *sessionService) ValidateCheckoutToken(ctx context.Context, token string) error {
+// ValidateCheckoutToken returns the session a checkout token admits.
+// Every refusal wraps ErrCheckoutTokenRefused; any other error is Redis failing.
+func (s *sessionService) ValidateCheckoutToken(ctx context.Context, token, userID, eventID string) (string, error) {
+	refuse := func(cause error) (string, error) {
+		return "", fmt.Errorf("%w: %w", ErrCheckoutTokenRefused, cause)
+	}
 	if token == "" {
-		return ErrTokenEmpty
+		return refuse(ErrTokenEmpty)
 	}
 
 	claims := jwt.MapClaims{}
-	parsedToken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
+	_, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrTokenUnexpectedSignature
 		}
 		return []byte(s.conf.Secret), nil
 	})
-
 	if err != nil {
-		s.l.Warnf(ctx, "Invalid JWT token: %v", err)
-		return fmt.Errorf("%w: %v", ErrTokenInvalid, err)
+		return refuse(fmt.Errorf("%w: %v", ErrTokenInvalid, err))
 	}
 
-	if !parsedToken.Valid {
-		return ErrTokenNotValid
+	sessionID, _ := claims["session_id"].(string)
+	if sessionID == "" || claims["user_id"] != userID || claims["event_id"] != eventID {
+		return refuse(ErrTokenInvalidClaims)
 	}
 
-	isBlacklisted, err := s.repo.IsTokenInvalidated(ctx, token)
+	blacklisted, err := s.repo.IsTokenInvalidated(ctx, token)
 	if err != nil {
-		s.l.Errorf(ctx, "Failed to check token blacklist: %v", err)
-		return fmt.Errorf("failed to validate token: %w", err)
+		return "", fmt.Errorf("failed to check token blacklist: %w", err)
 	}
-
-	if isBlacklisted {
-		s.l.Warnf(ctx, "Token is blacklisted")
-		return ErrTokenInvalidated
-	}
-
-	sessionID, ok := claims["session_id"].(string)
-	if !ok {
-		return ErrTokenInvalidClaims
+	if blacklisted {
+		return refuse(ErrTokenInvalidated)
 	}
 
 	ss, err := s.repo.Get(ctx, sessionID)
+	if err == redis.Nil {
+		return refuse(ErrSessionNotFound)
+	}
 	if err != nil {
-		if err == redis.Nil {
-			return ErrSessionNotFound
-		}
-		return fmt.Errorf("failed to get session: %w", err)
+		return "", fmt.Errorf("failed to get session: %w", err)
 	}
 
-	if ss.Status != models.SessionStatusAdmitted {
-		s.l.Warnf(ctx, "Session status not admitted - session_id: %s, status: %s", sessionID, ss.Status)
-		return ErrSessionNotAdmitted
+	// Invariant: only an admitted session's token buys; every ended status refuses.
+	switch {
+	case ss.Status != models.SessionStatusAdmitted:
+		return refuse(ErrSessionNotAdmitted)
+	case ss.TokenInvalidated:
+		return refuse(ErrTokenInvalidated)
+	case ss.CheckoutExpiresAt != nil && time.Now().After(*ss.CheckoutExpiresAt):
+		return refuse(ErrTokenExpired)
 	}
-
-	if ss.TokenInvalidated {
-		s.l.Warnf(ctx, "Token marked as invalidated in session - session_id: %s, reason: %s",
-			sessionID, ss.TokenInvalidationReason)
-		return ErrTokenInvalidated
-	}
-
-	if ss.CheckoutExpiresAt != nil && time.Now().After(*ss.CheckoutExpiresAt) {
-		s.l.Warnf(ctx, "Checkout token expired - session_id: %s, expired_at: %v",
-			sessionID, ss.CheckoutExpiresAt)
-		return ErrTokenExpired
-	}
-
-	s.l.Debugf(ctx, "Checkout token validated successfully - session_id: %s, user_id: %s, event_id: %s",
-		sessionID, ss.UserID, ss.EventID)
-
-	return nil
+	return sessionID, nil
 }

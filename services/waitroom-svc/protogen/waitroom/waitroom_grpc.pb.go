@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	WaitroomService_JoinQueue_FullMethodName      = "/waitroom.v1.WaitroomService/JoinQueue"
-	WaitroomService_GetQueueStatus_FullMethodName = "/waitroom.v1.WaitroomService/GetQueueStatus"
-	WaitroomService_LeaveQueue_FullMethodName     = "/waitroom.v1.WaitroomService/LeaveQueue"
-	WaitroomService_HealthCheck_FullMethodName    = "/waitroom.v1.WaitroomService/HealthCheck"
+	WaitroomService_JoinQueue_FullMethodName             = "/waitroom.v1.WaitroomService/JoinQueue"
+	WaitroomService_GetQueueStatus_FullMethodName        = "/waitroom.v1.WaitroomService/GetQueueStatus"
+	WaitroomService_LeaveQueue_FullMethodName            = "/waitroom.v1.WaitroomService/LeaveQueue"
+	WaitroomService_HealthCheck_FullMethodName           = "/waitroom.v1.WaitroomService/HealthCheck"
+	WaitroomService_ValidateCheckoutToken_FullMethodName = "/waitroom.v1.WaitroomService/ValidateCheckoutToken"
 )
 
 // WaitroomServiceClient is the client API for WaitroomService service.
@@ -33,6 +34,8 @@ type WaitroomServiceClient interface {
 	GetQueueStatus(ctx context.Context, in *GetQueueStatusRequest, opts ...grpc.CallOption) (*QueueStatusResponse, error)
 	LeaveQueue(ctx context.Context, in *LeaveQueueRequest, opts ...grpc.CallOption) (*LeaveQueueResponse, error)
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+	// Whether a checkout token still admits its holder; order-svc asks before a checkout.
+	ValidateCheckoutToken(ctx context.Context, in *ValidateCheckoutTokenRequest, opts ...grpc.CallOption) (*ValidateCheckoutTokenResponse, error)
 }
 
 type waitroomServiceClient struct {
@@ -83,6 +86,16 @@ func (c *waitroomServiceClient) HealthCheck(ctx context.Context, in *HealthCheck
 	return out, nil
 }
 
+func (c *waitroomServiceClient) ValidateCheckoutToken(ctx context.Context, in *ValidateCheckoutTokenRequest, opts ...grpc.CallOption) (*ValidateCheckoutTokenResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ValidateCheckoutTokenResponse)
+	err := c.cc.Invoke(ctx, WaitroomService_ValidateCheckoutToken_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // WaitroomServiceServer is the server API for WaitroomService service.
 // All implementations must embed UnimplementedWaitroomServiceServer
 // for forward compatibility.
@@ -91,6 +104,8 @@ type WaitroomServiceServer interface {
 	GetQueueStatus(context.Context, *GetQueueStatusRequest) (*QueueStatusResponse, error)
 	LeaveQueue(context.Context, *LeaveQueueRequest) (*LeaveQueueResponse, error)
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
+	// Whether a checkout token still admits its holder; order-svc asks before a checkout.
+	ValidateCheckoutToken(context.Context, *ValidateCheckoutTokenRequest) (*ValidateCheckoutTokenResponse, error)
 	mustEmbedUnimplementedWaitroomServiceServer()
 }
 
@@ -112,6 +127,9 @@ func (UnimplementedWaitroomServiceServer) LeaveQueue(context.Context, *LeaveQueu
 }
 func (UnimplementedWaitroomServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedWaitroomServiceServer) ValidateCheckoutToken(context.Context, *ValidateCheckoutTokenRequest) (*ValidateCheckoutTokenResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ValidateCheckoutToken not implemented")
 }
 func (UnimplementedWaitroomServiceServer) mustEmbedUnimplementedWaitroomServiceServer() {}
 func (UnimplementedWaitroomServiceServer) testEmbeddedByValue()                         {}
@@ -206,6 +224,24 @@ func _WaitroomService_HealthCheck_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _WaitroomService_ValidateCheckoutToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ValidateCheckoutTokenRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WaitroomServiceServer).ValidateCheckoutToken(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: WaitroomService_ValidateCheckoutToken_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WaitroomServiceServer).ValidateCheckoutToken(ctx, req.(*ValidateCheckoutTokenRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // WaitroomService_ServiceDesc is the grpc.ServiceDesc for WaitroomService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +264,10 @@ var WaitroomService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HealthCheck",
 			Handler:    _WaitroomService_HealthCheck_Handler,
+		},
+		{
+			MethodName: "ValidateCheckoutToken",
+			Handler:    _WaitroomService_ValidateCheckoutToken_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

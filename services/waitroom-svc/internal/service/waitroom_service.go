@@ -31,6 +31,7 @@ type WaitroomService interface {
 	JoinQueue(ctx context.Context, req *JoinQueueInput) (*JoinQueueOutput, error)
 	GetQueueStatus(ctx context.Context, ssID, userID string) (*QueueStatusOutput, error)
 	LeaveQueue(ctx context.Context, ssID, userID string) error
+	ValidateCheckoutToken(ctx context.Context, token, userID, eventID string) (string, error)
 	HandleCheckoutCompleted(ctx context.Context, in CheckoutCompletedInput) error
 	HandleCheckoutFailed(ctx context.Context, in CheckoutFailedInput) error
 	HandleCheckoutExpired(ctx context.Context, in CheckoutExpiredInput) error
@@ -149,6 +150,10 @@ func (s *waitroomService) GetQueueStatus(ctx context.Context, ssID, userID strin
 
 	stt.Paused = door == DoorPaused
 	return stt, nil
+}
+
+func (s *waitroomService) ValidateCheckoutToken(ctx context.Context, token, userID, eventID string) (string, error) {
+	return s.ssSvc.ValidateCheckoutToken(ctx, token, userID, eventID)
 }
 
 func (s *waitroomService) LeaveQueue(ctx context.Context, ssID, userID string) error {
