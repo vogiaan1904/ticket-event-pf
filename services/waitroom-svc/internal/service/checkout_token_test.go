@@ -119,3 +119,39 @@ func TestValidateCheckoutTokenRefusesAnExpiredOrForeignToken(t *testing.T) {
 		}
 	}
 }
+
+// An ended checkout leaves its session revoked, whichever way it ended.
+func TestAnEndedCheckoutLeavesTheSessionRevoked(t *testing.T) {
+	ctx := context.Background()
+	ends := map[string]func(WaitroomService, *models.Session) error{
+		"completed": func(w WaitroomService, s *models.Session) error {
+			return w.HandleCheckoutCompleted(ctx, CheckoutCompletedInput{SessionID: s.ID, UserID: s.UserID, EventID: s.EventID, Timestamp: time.Now()})
+		},
+		"failed": func(w WaitroomService, s *models.Session) error {
+			return w.HandleCheckoutFailed(ctx, CheckoutFailedInput{SessionID: s.ID, UserID: s.UserID, EventID: s.EventID, Timestamp: time.Now()})
+		},
+		"expired": func(w WaitroomService, s *models.Session) error {
+			return w.HandleCheckoutExpired(ctx, CheckoutExpiredInput{SessionID: s.ID, UserID: s.UserID, EventID: s.EventID, Timestamp: time.Now()})
+		},
+	}
+	for name, end := range ends {
+		t.Run(name, func(t *testing.T) {
+			ss := newTokenRig(t, 5*time.Minute)
+			l := logger.InitializeZapLogger(logger.ZapConfig{Level: "error", Mode: "development", Encoding: "console"})
+			cli := redis.NewClient(config.RedisConfig{Addr: os.Getenv("WAITROOM_TEST_REDIS_ADDR"), PoolSize: 5, MinIdleConns: 1})
+			w := &waitroomService{ssSvc: ss, qSvc: NewQueueService(repo.NewRedisQueueRepository(cli, l), l), l: l}
+			s, _ := admitWithToken(t, ss, "u-1", "e-"+name)
+
+			if err := end(w, s); err != nil {
+				t.Fatalf("end checkout: %v", err)
+			}
+			got, err := ss.GetSession(ctx, s.ID)
+			if err != nil {
+				t.Fatalf("GetSession: %v", err)
+			}
+			if !got.TokenInvalidated || got.TokenInvalidationReason != name {
+				t.Fatalf("stored session: invalidated=%v reason=%q, want true %q", got.TokenInvalidated, got.TokenInvalidationReason, name)
+			}
+		})
+	}
+}

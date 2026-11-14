@@ -201,11 +201,6 @@ func (s *waitroomService) HandleCheckoutCompleted(ctx context.Context, in Checko
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
-	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "completed"); err != nil {
-		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
-			in.SessionID, err)
-	}
-
 	if err := s.qSvc.RemoveFromProcessing(ctx, in.EventID, in.SessionID); err != nil {
 		s.l.Errorf(ctx, "Failed to remove from processing - session_id: %s, error: %v",
 			in.SessionID, err)
@@ -221,6 +216,12 @@ func (s *waitroomService) HandleCheckoutCompleted(ctx context.Context, in Checko
 		return err
 	}
 
+	// Last: it re-reads the session, so the status write above cannot clear it.
+	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "completed"); err != nil {
+		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
+			in.SessionID, err)
+	}
+
 	return nil
 }
 
@@ -234,11 +235,6 @@ func (s *waitroomService) HandleCheckoutFailed(ctx context.Context, in CheckoutF
 		return fmt.Errorf("failed to get session: %w", err)
 	}
 
-	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "failed"); err != nil {
-		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
-			in.SessionID, err)
-	}
-
 	if err := s.qSvc.RemoveFromProcessing(ctx, in.EventID, in.SessionID); err != nil {
 		s.l.Errorf(ctx, "Failed to remove from processing - session_id: %s, error: %v",
 			in.SessionID, err)
@@ -249,6 +245,11 @@ func (s *waitroomService) HandleCheckoutFailed(ctx context.Context, in CheckoutF
 		s.l.Errorf(ctx, "Failed to update session - session_id: %s, error: %v",
 			in.SessionID, err)
 		return err
+	}
+
+	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "failed"); err != nil {
+		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
+			in.SessionID, err)
 	}
 
 	return nil
@@ -266,11 +267,6 @@ func (s *waitroomService) HandleCheckoutExpired(ctx context.Context, in Checkout
 		return err
 	}
 
-	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "expired"); err != nil {
-		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
-			in.SessionID, err)
-	}
-
 	if err := s.qSvc.RemoveFromProcessing(ctx, in.EventID, in.SessionID); err != nil {
 		s.l.Errorf(ctx, "Failed to remove from processing - session_id: %s, error: %v",
 			in.SessionID, err)
@@ -281,6 +277,11 @@ func (s *waitroomService) HandleCheckoutExpired(ctx context.Context, in Checkout
 		s.l.Errorf(ctx, "Failed to update session - session_id: %s, error: %v",
 			in.SessionID, err)
 		return err
+	}
+
+	if err := s.ssSvc.InvalidateCheckoutToken(ctx, in.SessionID, "expired"); err != nil {
+		s.l.Errorf(ctx, "Failed to invalidate checkout token - session_id: %s, error: %v",
+			in.SessionID, err)
 	}
 
 	return nil

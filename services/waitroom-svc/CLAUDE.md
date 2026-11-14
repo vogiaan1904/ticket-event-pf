@@ -11,6 +11,12 @@ gRPC service (port **50056**, Redis-backed) that fairly throttles access to chec
 Key behaviors (`internal/service/queue_processor.go`):
 - Room size per event — a tick admits only while the event has more tickets available than buyers inside (`admitCount`); there is no fixed cap ([0025](../../docs/decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md)).
 - Checkout tokens are JWTs that last `JWT_EXPIRY`, 5 minutes in the chart: the time to start a checkout, and the chair's lifetime ([0027](../../docs/decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)). Clients poll `GetQueueStatus` for position and, once admitted, for the token.
+- **It alone judges a checkout token.** `ValidateCheckoutToken` answers order-svc: the
+  signature, the caller's user and event, and a session still `admitted` and not
+  revoked; every refusal is `UNAUTHENTICATED` `WTR013`. An ended checkout writes its
+  status, then revokes, so the revocation is the last write
+  ([0033](../../docs/decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md)).
+  `JWT_SECRET` has no default; the service refuses to start without it.
 - Calls the **Event** service over gRPC (config `EVENT_SERVICE_ADDR`, default `localhost:50053`) to validate events before admitting, through the cache below.
 - Asks the **Inventory** service (`INVENTORY_SERVICE_ADDR`, default `localhost:50057`) what each event has left, through `StockGate`, and pauses or closes the door on the answer.
 
