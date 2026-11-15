@@ -6,6 +6,7 @@ import { USER_PACKAGE_NAME, USER_SERVICE_NAME } from '@/protogen/user.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
+import { boundedChannelFactory } from '@/shared/grpc/bounded-channel';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
             package: USER_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'user.proto'),
             loader: GRPC_LOADER_OPTIONS,
+            channelOptions: { channelFactoryOverride: boundedChannelFactory() },
           },
         }),
         inject: [AppConfigService],

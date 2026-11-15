@@ -1,8 +1,9 @@
 # The gateway's recovery after a backend crash
 
 **Status: Step 2 RUN 2026-11-14 on `sha-a5842c2`; Step 3 RUN 2026-11-15 on `sha-83537aa`,
-re-planned around the idle channel (see *Results*). The 133s did not recur; the fix is the
-architect's call.** Ranked first by
+re-planned around the idle channel (see *Results*). The 133s did not recur. The fix, a
+bound on the reconnect, is chosen → [0035](../decisions/0035-the-gateway-bounds-a-backend-reconnect.md);
+built, its k3s check (Task 3) open.** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -172,6 +173,19 @@ Each run's failures stay in `/tmp/crash-*/failures.jsonl`, and the traced gatewa
   - the gateway bounds an attempt itself and recreates the channel;
   - a headless Service with `round_robin`, so a stalled pod address is one of several;
   - kernel SYN retries shortened in the gateway's pod, if H1.
+
+## Task 3: The bound, on k3s
+
+Built 2026-11-15: `BoundedChannel` in `services/api-gateway/src/shared/grpc/`, on every
+gateway client. Its test is the local repro: a plain channel still fails at 10s; the
+bounded one recovers 0.3s after the backend returns. A channel that serves then idles is
+never replaced; mutating the timer's reset turns that test red.
+
+- [ ] Deploy the build's `sha-` tag; three untraced crashes as in Step 2. Each recovers
+  within a backoff step of Ready; a `replacing the channel` warning in the gateway log
+  marks a bound that fired.
+- [ ] `make -C deploy k3s-gate2` still green.
+- [ ] Accept 0035 with the run.
 
 ## Results
 

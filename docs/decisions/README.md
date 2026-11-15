@@ -206,4 +206,10 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md) | Where is a revoked checkout token refused? | A waitroom `ValidateCheckoutToken` RPC, called by order-svc before the purchase slot; fails closed | order-svc keeping the session-keyed slot so a token buys once; the same RPC failing open | A synchronous hop on every waitroom checkout, and no checkout on a waitroom event while the waitroom is down | accepted |
+
+### gateway-recovery
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0035](0035-the-gateway-bounds-a-backend-reconnect.md) | What bounds the gateway's failure after a backend crash, while its trigger is unknown? | Each gRPC client's channel is replaced when it stays `CONNECTING` or `TRANSIENT_FAILURE` for 5s | Shorter kernel SYN retries in the gateway pod; more traced crashes to find the trigger first | Our own wrapper around grpc-js's channel, and a fix shipped before the cause is known | proposed |
 <!-- decisions:index:end -->

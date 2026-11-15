@@ -17,6 +17,9 @@ not reshape one module on the side.
   ships into `dist`. `loader: GRPC_LOADER_OPTIONS`, always: without it a zero value
   (`false`, `0`, `''`) a Go server leaves off the wire arrives `undefined`, and the
   field drops out of the HTTP body.
+  `channelOptions: { channelFactoryOverride: boundedChannelFactory() }`, always: a
+  channel stuck reconnecting is replaced after 5s, since grpc-js never times out a
+  connect ([0035](../../../docs/decisions/0035-the-gateway-bounds-a-backend-reconnect.md)).
 - **Service.** Resolves the client in `onModuleInit` with
   `getService<…ServiceClient>(…_SERVICE_NAME)`, wraps every call in
   `firstValueFrom`, and returns proto types.
