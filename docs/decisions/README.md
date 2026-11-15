@@ -205,5 +205,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md) | Where is a revoked checkout token refused? | A waitroom `ValidateCheckoutToken` RPC, called by order-svc before the purchase slot; fails closed | order-svc keeping the session-keyed slot so a token buys once; the same RPC failing open | A synchronous hop on every waitroom checkout, and no checkout on a waitroom event while the waitroom is down | proposed |
+| [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md) | Where is a revoked checkout token refused? | A waitroom `ValidateCheckoutToken` RPC, called by order-svc before the purchase slot; fails closed | order-svc keeping the session-keyed slot so a token buys once; the same RPC failing open | A synchronous hop on every waitroom checkout, and no checkout on a waitroom event while the waitroom is down | accepted |
 <!-- decisions:index:end -->

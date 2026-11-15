@@ -1,7 +1,7 @@
 # 0033 — order-svc asks the waitroom whether a checkout token still holds
 
 **Date:** 2026-11-14
-**Status:** proposed
+**Status:** accepted
 **Arc:** token-revocation — [plan](../plans/2026-11-14-checkout-token-revocation.md)
 **Where it lives:** `proto/waitroom.proto`, `services/order-svc/internal/order/service/utils.go` (`validateCheckoutToken`)
 
@@ -47,3 +47,21 @@ completed checkout gets 401, not the existing order. The plan names each with it
   are unaffected.
 - One fewer workload holds the key that mints a checkout.
 - A token revoked by an event still in Kafka buys until the waitroom consumes it.
+
+## Outcome
+
+Built test-first in `8c5ba2e` (the RPC, every refusal `UNAUTHENTICATED` `WTR013`),
+`bbb7270` (order-svc asks before the purchase slot; `ORD016` on a refusal, `ORD021`
+`UNAVAILABLE` on an unreachable waitroom; its JWT verifier and `JWT_SECRET` deleted)
+and `5db408a` (the handlers revoke last; `JWT_SECRET` has no default).
+
+Run on k3s, `gate-token-revoked` (`f78287c`):
+- 2026-11-14, on `a5842c2`, before the change: red, "A's spent token answered 201".
+  That build has no caller of the RPC, so it is Ticket 2's call reverted.
+- 2026-11-15, on `sha-83537aa`: green. A completed and B cancelled; each session read
+  ended 1s later, and each token's reuse answered 401 `ORD016`. `gate2` and
+  `gate-orders` still pass.
+
+The hop's cost, from Prometheus after the gates: 6 calls (4 `OK`, the 2 refusals
+`UNAUTHENTICATED`), a mean of 0.49 ms, all under the smallest bucket of 5 ms. The
+Kafka window of the third consequence was the 1s before each session read ended.

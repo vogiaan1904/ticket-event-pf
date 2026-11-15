@@ -1,6 +1,6 @@
 # Checkout-token revocation
 
-**Status: tickets 1–3 DONE 2026-11-14 (`8c5ba2e`, `bbb7270`, `5db408a`); ticket 4 (k3s) open.** Item 2 of
+**Status: COMPLETE 2026-11-15.** Tickets 1–3 in `8c5ba2e`, `bbb7270`, `5db408a`; verified on k3s; results below. Item 2 of
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md). The
 check's place is decided in
 [0033](../decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md).
@@ -93,20 +93,20 @@ before Ticket 2.
 
 The architect runs it and pastes the output.
 
-- [ ] `make -C deploy k3s-deploy` at the ticket's `sha-` tag.
+- [x] `make -C deploy k3s-deploy` at the ticket's `sha-` tag.
 - [x] A new `deploy/scripts/gate-token-revoked.sh`, with a `k3s-gate-token-revoked`
   target: buy through to `COMPLETED`; once the waitroom answers the session ended,
   `POST /api/orders` with the same token → 401 `ORD016`. Then a second buyer orders
   and cancels, and the same. A cancel, not a chair expiry: the token expires with
   the chair (0027), so an expiry case would pass on the JWT's `exp` alone.
-- [ ] Mutation check: revert Ticket 2's call; the gate goes red.
-- [ ] `make -C deploy k3s-gate2` and `k3s-gate-orders` still green.
-- [ ] The RPC's cost, from Prometheus after the gates:
-  `histogram_quantile(0.99, sum by (le) (rate(tb_grpc_request_duration_seconds_bucket{service="waitroom",method=~".*ValidateCheckoutToken"}[10m])))`.
+- [x] Mutation check: revert Ticket 2's call; the gate goes red.
+- [x] `make -C deploy k3s-gate2` and `k3s-gate-orders` still green.
+- [x] The RPC's cost, from Prometheus after the gates:
+  `histogram_quantile(0.99, sum by (le) (rate(tb_grpc_request_duration_seconds_bucket{service="waitroom-service",method=~".*ValidateCheckoutToken"}[10m])))`.
 
 ## Ticket 5: record
 
-- [ ] 0033 gains its Outcome; the register row and `services/waitroom-svc/CLAUDE.md`
+- [x] 0033 gains its Outcome; the register row and `services/waitroom-svc/CLAUDE.md`
   name the RPC; the `secrets.yaml` header no longer says order-service verifies by
   signature alone.
 
@@ -117,4 +117,15 @@ window is Kafka's lag from `checkout.completed`, measured in Ticket 4 if it show
 
 ## Results
 
-Not yet run.
+Run 2026-11-15 on k3s, `sha-83537aa`.
+
+| Check | Result |
+|---|---|
+| `k3s-gate-token-revoked` | Green: A `COMPLETED`, B cancelled; each session ended 1s later (409); each reuse 401 `ORD016` |
+| Mutation | Red on 2026-11-14 on `a5842c2`, the build with no caller of the RPC: "A's spent token answered 201" |
+| `k3s-gate2`, `k3s-gate-orders` | Green |
+| RPC cost | 6 calls, 4 `OK` and 2 `UNAUTHENTICATED`; mean 0.49 ms; all under the 5 ms bucket, so a p99 is interpolation, not a measurement |
+| Kafka window (*Not covered*) | 1s, the poll before each session read ended |
+
+The mutation is the pre-change build rather than a reverted image: it lacks Tickets
+1 and 3 too, but neither makes a reuse answer 401 without Ticket 2's call.
