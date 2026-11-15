@@ -1,7 +1,8 @@
 # The gateway's recovery after a backend crash
 
-**Status: Step 2 RUN 2026-11-14 on `sha-a5842c2` (see *Results*); Steps 3–4 deferred by
-the architect, to be re-planned around the idle channel.** Ranked first by
+**Status: Step 2 RUN 2026-11-14 on `sha-a5842c2`; Step 3 RUN 2026-11-15 on `sha-83537aa`,
+re-planned around the idle channel (see *Results*). The 133s did not recur; the fix is the
+architect's call.** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -192,8 +193,8 @@ the stop.
 
 **What sets u1 apart.** The gateway sets no channel options
 (`services/api-gateway/src`, grpc-js 1.13.4), so its channel goes idle after 30
-minutes without a call. Before u1 it had been idle for hours; the probe woke it 11ms
-before the delete. Before u2 and u3 it had been busy 60s earlier. The 2026-09-25 runs
+minutes without a call. Before u1 it had been idle for hours; the probe woke it 15s or
+more before the delete, the script's check that the probe passes before anything stops. Before u2 and u3 it had been busy 60s earlier. The 2026-09-25 runs
 also began on a gateway already running; the 2026-09-27 traced runs began on one just
 restarted, and recovered.
 
@@ -258,3 +259,35 @@ server.bindAsync('127.0.0.1:50999', grpc.ServerCredentials.createInsecure(), () 
   }, 32000);
 });
 ```
+
+**2026-11-15, Step 3 re-planned, build `sha-83537aa`.** Each crash followed 32 minutes
+with no gateway call to event-service, with a grpc-js trace (`subchannel,transport,
+pick_first,channel`) and, on the node, every SYN and RST to `:50053` and the gateway
+socket's TCP state each second. t1 ran on a gateway restarted for the trace, its channel
+never connected before the probe; t2 on the same gateway, its channel connected in t1 and
+since gone idle.
+
+| Run | Delete → Ready | Failures | Channel `READY` after Ready | Last failure after Ready |
+|---|---|---|---|---|
+| t1 | 11.2s | 313, all 503 | — (trace rotated away) | 2.4s |
+| t2 | 21.4s | 603 503s; 1827 probe timeouts at 5s | 3.4s | 91s, all timeouts |
+
+**Not reached in either run.** In t1 the first SYN after the stop went to the ClusterIP
+and was refused, with no endpoint Ready; the next, 3s later, was rewritten to the new pod
+and connected. No SYN went to the gone pod's IP. In t2 the trace shows the old pod's
+`GOAWAY`, `ECONNREFUSED` at each backoff step, then `READY` 3.4s after the replacement:
+H3's shape, which is routing, and ends when the endpoint does.
+
+**t2's timeouts are the instruments.** They began 7s before the delete, on the old pod.
+event-service's own p99 was 2–5s with every call `OK`, CPU-throttled 36–56% of periods
+against its 500m limit; the node ran 1.9 of 2 cores, about 0.9 outside pods, carrying the
+per-call trace through the log pipeline and a live log stream. t1, without the stream, ran
+1.7 cores and event-service's p99 stayed under 1s. A trace that logs every call cannot
+watch a crash at 50 req/s on this box.
+
+**Where that leaves it.** One crash in five since 2026-11-14 failed past a backoff step,
+and the condition that separates it is not known: an idle channel, woken 15s before the
+crash, recovered twice. The mechanism the local repro proved stands without a trigger: an
+attempt grpc-js never bounds holds every call failing for as long as it hangs.
+
+Raw logs: `crash-t{1,2}` in the session's scratch directory (not kept).
