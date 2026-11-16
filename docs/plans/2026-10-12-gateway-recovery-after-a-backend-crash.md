@@ -189,7 +189,7 @@ The architect runs it and pastes the output. About 75 minutes, 31 of them idle.
   commands, then:
 
 ```bash
-REF=sha-<pushed HEAD, 7 chars> make -C deploy k3s-deploy
+REF=sha-<full 40-char commit sha> make -C deploy k3s-deploy
 kubectl -n ticketbottle get deploy app-gateway -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
 cat > /tmp/stall.yaml <<'EOF'
 apiVersion: networking.k8s.io/v1
