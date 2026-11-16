@@ -3,7 +3,7 @@
 **Status: Step 2 RUN 2026-11-14 on `sha-a5842c2`; Step 3 RUN 2026-11-15 on `sha-83537aa`,
 re-planned around the idle channel (see *Results*). The 133s did not recur. The fix, a
 bound on the reconnect, is chosen → [0035](../decisions/0035-the-gateway-bounds-a-backend-reconnect.md);
-built, its k3s check (Task 3) open.** Ranked first by
+built, its k3s check (Task 3, with a forced stall added 2026-11-16) open.** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -181,11 +181,69 @@ gateway client. Its test is the local repro: a plain channel still fails at 10s;
 bounded one recovers 0.3s after the backend returns. A channel that serves then idles is
 never replaced; mutating the timer's reset turns that test red.
 
-- [ ] Deploy the build's `sha-` tag; three untraced crashes as in Step 2. Each recovers
-  within a backoff step of Ready; a `replacing the channel` warning in the gateway log
-  marks a bound that fired.
-- [ ] `make -C deploy k3s-gate2` still green.
-- [ ] Accept 0035 with the run.
+The stall reproduced once in five crashes, so three crashes alone likely end with the
+bound never firing: they show no regression, not the bound. Step 3 forces the stall.
+The architect runs it and pastes the output. About 75 minutes, 31 of them idle.
+
+- [ ] **Step 1: Start, deploy, check the box enforces NetworkPolicy.** Task 1 Step 1's
+  commands, then:
+
+```bash
+REF=sha-<pushed HEAD, 7 chars> make -C deploy k3s-deploy
+kubectl -n ticketbottle get deploy app-gateway -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
+cat > /tmp/stall.yaml <<'EOF'
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: stall-gateway-to-event, namespace: ticketbottle }
+spec:
+  podSelector: { matchLabels: { app: event-service } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector: {}
+          podSelector: { matchExpressions: [{ key: app, operator: NotIn, values: [app-gateway] }] }
+EOF
+probe() { kubectl -n ticketbottle exec deploy/app-gateway -- node -e \
+  "require('net').connect(50053,'event-service').on('connect',()=>{console.log('open');process.exit(0)}).setTimeout(3000,()=>{console.log('dropped');process.exit(1)})"; }
+probe                                            # open
+kubectl apply -f /tmp/stall.yaml && sleep 3 && probe   # dropped
+kubectl -n ticketbottle delete netpol stall-gateway-to-event && sleep 3 && probe   # open
+```
+
+`dropped` must print in the middle; if it prints `open`, the box does not enforce
+NetworkPolicy and Step 3 cannot run.
+
+- [ ] **Step 2: Wait 31 minutes with no traffic, then three untraced crashes.** Task 1
+  Step 2's two loops, unchanged. Pass: in each run the last 503 lands within about 6s
+  of `event-service ready` (5s bound plus one connect), against u1's 133s.
+
+```bash
+kubectl -n ticketbottle logs deploy/app-gateway --since=15m | grep -c 'replacing the channel'
+```
+
+- [ ] **Step 3: Forced stall, right after Step 2** (the channel must be busy, or the
+  script's warm-up probe wakes it into the policy and voids the run). The policy keeps
+  the live connection and drops new ones, so deleting the pod leaves the gateway's
+  reconnect hanging, the shape of H1. It is lifted 30s after the replacement is Ready.
+
+```bash
+kubectl apply -f /tmp/stall.yaml
+mkdir -p /tmp/crash-s && (DURATION=120s OUT=/tmp/crash-s deploy/scripts/rollout-drain.sh control event-service > /tmp/crash-s/run.log 2>&1 &)
+until grep -q 'event-service ready' /tmp/crash-s/timeline.log 2>/dev/null; do sleep 1; done
+sleep 30; kubectl -n ticketbottle delete netpol stall-gateway-to-event; date -u +%FT%TZ   # lifted at (BSD date: whole seconds)
+until grep -q 'gone' /tmp/crash-s/timeline.log; do sleep 5; done; sleep 90
+cat /tmp/crash-s/run.log; tail -1 /tmp/crash-s/failures.jsonl
+kubectl -n ticketbottle logs deploy/app-gateway --since=5m | grep 'replacing the channel'
+kubectl get netpol -A                            # No resources found
+```
+
+Pass: `replacing the channel` warnings about every 5s while the policy held, and the
+last 503 within about 6s of *lifted at*. Red: 503s running on to the probe's end,
+which is what an unbounded connect does until the kernel gives up, about 127s.
+
+- [ ] **Step 4:** `make -C deploy k3s-gate2` still green. Leave the box up for the
+  late-payment plan's ticket 5 run, then `make -C deploy stop-ec2-k3s`.
+- [ ] Record the three crashes and the stall under *Results*; accept 0035 with them.
 
 ## Results
 
