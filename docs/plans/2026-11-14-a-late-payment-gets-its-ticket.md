@@ -1,6 +1,6 @@
 # A late payment gets its ticket when one is left
 
-**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 measured 2026-11-16; the grace is the architect's call.** Not in
+**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 measured 2026-11-16; the grace is chosen, 30s → [0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md); ticket 6 to do.** Not in
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s ranking;
 where it slots is the architect's call.
 
@@ -190,6 +190,35 @@ six relay safety polls (`RELAY_SAFETY_POLL_MS`, 5s) for a missed NOTIFY. An aban
 hold then frees its stock 2.5 minutes sooner. The cost runs the other way: a confirm held
 up past 30s by a relay or consumer stall becomes `REFUND_REQUIRED` and pages, where 3
 minutes would have absorbed it.
+
+## Ticket 6: the grace to 30s → [0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md)
+
+One constant, `ReservationHoldGrace` in `services/order-svc/internal/workflows/shared.go`,
+sets the hold, `ExpireOrder`'s delay and so the chair: 9m becomes 6m30s.
+
+- [ ] **Replace the test that forbids it.** `TestReservationHoldGrace_CoversWorkerInterval`
+  requires the grace to exceed inventory's 60s sweep. The sweep frees only holds already
+  past `expires_at` (`selectAndExpireBatch`, `expires_at <= now`), so it can never take a
+  hold inside its grace; the test guards nothing. Its replacement states 0036's rule: the
+  grace is at least 30s, ten times the measured confirm-lag p99, citing the plan's
+  *Ticket 5 results*. Set the constant to 29s and see it red.
+- [ ] **Set `ReservationHoldGrace = 30 * time.Second`.** `CheckoutLifetime` and
+  `reservationExpiry` follow. The comment above it loses the sweep sentence.
+- [ ] **Replay.** `go test ./internal/workflows/...`: the recorded histories still replay.
+  `CreateOrder` passes the expiry as activity input and `ExpireOrder`'s delay is set
+  outside the workflow, so neither is a command replay checks; the run confirms it.
+- [ ] **The facts that say 9 minutes**, each in its one home:
+  `services/order-svc/docs/RESERVATION_HOLD.md` (the formula),
+  `services/order-svc/CLAUDE.md` (`CheckoutLifetime`, 9m), `services/inventory-svc/CLAUDE.md`
+  (hold for ~9 min), `docs/RUNBOOK.md` (a hold expires 9 minutes after),
+  `docs/design/admission-sizing.md` (released at about 9m). Decision records keep their
+  9 minutes: they record what was true when made.
+- [ ] **The k3s gate's window.** `deploy/scripts/gate-checkout-expiry.sh` step 6 wants
+  510–660s for a 540s hold; the hold is now 390s, so 360–510s, and the wait in step 5
+  shortens to 9m. Its header says ~9m.
+- [ ] **On k3s**, after CI builds the commit: `REF=sha-<full sha> make -C deploy k3s-deploy`,
+  then `k3s-gate-checkout-expiry` (A expires at about 390s; A and C still get their
+  tickets) and `k3s-gate2`. Accept 0036 with the run.
 
 ## Out of scope (audited, not worth building now)
 
