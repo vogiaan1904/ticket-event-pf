@@ -7,7 +7,7 @@
 import http from 'k6/http';
 import crypto from 'k6/crypto';
 import encoding from 'k6/encoding';
-import { Counter } from 'k6/metrics';
+import { Counter, Trend } from 'k6/metrics';
 import { sleep } from 'k6';
 
 const GW              = __ENV.GW;                 // http://app-gateway:3000/api
@@ -22,6 +22,8 @@ const CONFIRM_POLLS   = Number(__ENV.CONFIRM_POLLS || 90);   // x2s = 3min
 const completed  = new Counter('tb_orders_completed');
 const rejected   = new Counter('tb_orders_rejected_409');
 const unexpected = new Counter('tb_unexpected_errors');
+// Webhook answered -> COMPLETED seen; resolution is the 2s poll.
+const confirmLag = new Trend('tb_confirm_lag_s');
 
 // Two load shapes, one script.
 // 4a: burst     -- every buyer arrives at once, contends, leaves.
@@ -51,6 +53,7 @@ export const options = {
   thresholds: DURATION ? {} : {
     tb_unexpected_errors: ['count==0'],
   },
+  summaryTrendStats: ['avg', 'med', 'p(95)', 'p(99)', 'max'],
 };
 
 const b64url = (s) => encoding.b64encode(s, 'rawurl');
@@ -145,12 +148,17 @@ export default function () {
   // 4. complete the payment
   const wh = http.post(`${WEBHOOK}/complete/${code}`);
   if (wh.status >= 400) { unexpected.add(1, { step: 'webhook', status: wh.status }); return; }
+  const paidAt = Date.now();
 
   // 5. poll to COMPLETED. The confirm leg (webhook -> outbox -> Kafka ->
   //    ConfirmOrder) lags under load; too small a budget fails a working saga.
   for (let i = 0; i < CONFIRM_POLLS; i++) {
     const o = http.get(`${GW}/orders/code/${code}`, auth);
-    if (field(o, 'data.status') === 'COMPLETED') { completed.add(1); return; }
+    if (field(o, 'data.status') === 'COMPLETED') {
+      completed.add(1);
+      confirmLag.add((Date.now() - paidAt) / 1000);
+      return;
+    }
     sleep(2);
   }
   unexpected.add(1, { step: 'never-completed', code });

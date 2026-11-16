@@ -1,6 +1,6 @@
 # A late payment gets its ticket when one is left
 
-**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 open.** Not in
+**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 open, its k3s run written 2026-11-16.** Not in
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s ranking;
 where it slots is the architect's call.
 
@@ -161,6 +161,23 @@ The provider closes at 6 min and the hold lives to 9 min, so every abandoned hol
 stock for 3 dead minutes. Measure the webhook → outbox → Kafka → ConfirmOrder lag p99 on
 k3s, propose a `ReservationHoldGrace`, and leave the change itself to the architect.
 (The `PaymentTimeout` comment was corrected with tickets 1–3.)
+
+**Instrument:** `purchase.js` records `tb_confirm_lag_s`, from the webhook's answer to
+the buyer seeing `COMPLETED`, at the 2s poll's resolution; against a 3-minute grace
+that error does not matter. It covers the leg at the k3s door, not a stopped relay or
+consumer: a backlog no grace covers is 0017's page.
+
+Run in the same box session as the gateway plan's Task 3, after its gate2:
+
+```bash
+make -C deploy k3s-load                     # 3m, 20 buyers, door at 2 a second
+kubectl -n ticketbottle logs job/k6-load | grep -A8 '"tb_confirm_lag_s"'
+kubectl -n ticketbottle logs job/k6-load | grep -A3 '"tb_orders_completed"'
+```
+
+- [ ] Record p99, max and the completed count under a *Results* section.
+- [ ] Propose a grace of p99 times a margin, with the cost each way: shorter frees stock
+  sooner; too short turns a late confirm into `REFUND_REQUIRED` and a page.
 
 ## Out of scope (audited, not worth building now)
 
