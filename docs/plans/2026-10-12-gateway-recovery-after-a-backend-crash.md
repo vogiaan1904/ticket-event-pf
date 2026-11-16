@@ -3,7 +3,8 @@
 **Status: Step 2 RUN 2026-11-14 on `sha-a5842c2`; Step 3 RUN 2026-11-15 on `sha-83537aa`,
 re-planned around the idle channel (see *Results*). The 133s did not recur. The fix, a
 bound on the reconnect, is chosen → [0035](../decisions/0035-the-gateway-bounds-a-backend-reconnect.md);
-built, its k3s check (Task 3, with a forced stall added 2026-11-16) open.** Ranked first by
+built; Task 3 RUN 2026-11-16 on `sha-4355dd3`: the bound fires and reconnects, but a
+loaded recovery still takes 16s, from the backlog rather than the channel (see *Results*).** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -185,59 +186,51 @@ The stall reproduced once in five crashes, so three crashes alone likely end wit
 bound never firing: they show no regression, not the bound. Step 3 forces the stall.
 The architect runs it and pastes the output. About 75 minutes, 31 of them idle.
 
-- [ ] **Step 1: Start, deploy, check the box enforces NetworkPolicy.** Task 1 Step 1's
-  commands, then:
+- [ ] **Step 1: Start, deploy, check the stall drops.** Task 1 Step 1's commands. The
+  stall is a node `DROP` on new connections from the gateway to port 50053; a
+  NetworkPolicy will not do, since k3s's kube-router rejects (`ECONNREFUSED`) rather
+  than drops, and a refused connect never hangs.
 
 ```bash
 REF=sha-<full 40-char commit sha> make -C deploy k3s-deploy
 kubectl -n ticketbottle get deploy app-gateway -o jsonpath='{.spec.template.spec.containers[0].image}{"\n"}'
-cat > /tmp/stall.yaml <<'EOF'
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: { name: stall-gateway-to-event, namespace: ticketbottle }
-spec:
-  podSelector: { matchLabels: { app: event-service } }
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - namespaceSelector: {}
-          podSelector: { matchExpressions: [{ key: app, operator: NotIn, values: [app-gateway] }] }
-EOF
+box() { ssh ec2-user@$(make -s -C deploy k3s-ip) "$@"; }
+IPT=/var/lib/rancher/k3s/data/current/bin/aux/iptables     # not on the host's PATH
+GW=$(kubectl -n ticketbottle get pod -l app=app-gateway -o jsonpath='{.items[0].status.podIP}')
+R="FORWARD -s $GW -p tcp --dport 50053 -m conntrack --ctstate NEW -j DROP"
 probe() { kubectl -n ticketbottle exec deploy/app-gateway -- node -e \
-  "require('net').connect(50053,'event-service').on('connect',()=>{console.log('open');process.exit(0)}).setTimeout(3000,()=>{console.log('dropped');process.exit(1)})"; }
-probe                                            # open
-kubectl apply -f /tmp/stall.yaml && sleep 3 && probe   # dropped
-kubectl -n ticketbottle delete netpol stall-gateway-to-event && sleep 3 && probe   # open
+  "const s=require('net').connect(50053,'event-service');s.on('connect',()=>{console.log('open');process.exit(0)});s.on('error',e=>{console.log(e.code);process.exit(1)});s.setTimeout(3000,()=>{console.log('dropped');process.exit(1)})"; }
+probe                                        # open
+box "sudo $IPT -I $R" && probe               # dropped
+box "sudo $IPT -D $R" && probe               # open
 ```
 
-`dropped` must print in the middle; if it prints `open`, the box does not enforce
-NetworkPolicy and Step 3 cannot run.
-
-- [ ] **Step 2: Wait 31 minutes with no traffic, then three untraced crashes.** Task 1
-  Step 2's two loops, unchanged. Pass: in each run the last 503 lands within about 6s
-  of `event-service ready` (5s bound plus one connect), against u1's 133s.
+- [ ] **Step 2: Make one call through the gateway to event-service, wait 31 minutes with
+  no traffic, then three untraced crashes.** Task 1 Step 2's two loops, unchanged. Pass:
+  in each run the last 503 lands within about 6s of `event-service ready` (5s bound
+  plus one connect), against u1's 133s.
 
 ```bash
 kubectl -n ticketbottle logs deploy/app-gateway --since=15m | grep -c 'replacing the channel'
 ```
 
 - [ ] **Step 3: Forced stall, right after Step 2** (the channel must be busy, or the
-  script's warm-up probe wakes it into the policy and voids the run). The policy keeps
-  the live connection and drops new ones, so deleting the pod leaves the gateway's
+  script's warm-up probe wakes it into the drop and voids the run). The rule keeps the
+  live connection and drops new ones, so deleting the pod leaves the gateway's
   reconnect hanging, the shape of H1. It is lifted 30s after the replacement is Ready.
 
 ```bash
-kubectl apply -f /tmp/stall.yaml
+box "sudo $IPT -I $R"
 mkdir -p /tmp/crash-s && (DURATION=120s OUT=/tmp/crash-s deploy/scripts/rollout-drain.sh control event-service > /tmp/crash-s/run.log 2>&1 &)
 until grep -q 'event-service ready' /tmp/crash-s/timeline.log 2>/dev/null; do sleep 1; done
-sleep 30; kubectl -n ticketbottle delete netpol stall-gateway-to-event; date -u +%FT%TZ   # lifted at (BSD date: whole seconds)
+sleep 30; box "sudo $IPT -D $R"; date -u +%FT%TZ   # lifted at
 until grep -q 'gone' /tmp/crash-s/timeline.log; do sleep 5; done; sleep 90
 cat /tmp/crash-s/run.log; tail -1 /tmp/crash-s/failures.jsonl
 kubectl -n ticketbottle logs deploy/app-gateway --since=5m | grep 'replacing the channel'
-kubectl get netpol -A                            # No resources found
+box "sudo $IPT -S FORWARD | grep -c 50053"   # 0
 ```
 
-Pass: `replacing the channel` warnings about every 5s while the policy held, and the
+Pass: `replacing the channel` warnings about every 5s while the drop held, and the
 last 503 within about 6s of *lifted at*. Red: 503s running on to the probe's end,
 which is what an unbounded connect does until the kernel gives up, about 127s.
 
@@ -246,6 +239,33 @@ which is what an unbounded connect does until the kernel gives up, about 127s.
 - [ ] Record the three crashes and the stall under *Results*; accept 0035 with them.
 
 ## Results
+
+**2026-11-16, Task 3, build `sha-4355dd3`.** Gateway idle 31 minutes before u1; probe 50
+req/s for 180s; the node lost 0.5 to 0.9 of its 2 vCPUs to steal, 0.7 even before load,
+and had no idle CPU during u1 and u2.
+
+| Run | Delete → Ready | Failures | Bound fired | Last failure after Ready |
+|---|---|---|---|---|
+| u1 | 31.8s | 6856, all 5s client timeouts | at Ready | to the probe's end |
+| u2 | 20.2s | 6935, all 5s client timeouts | twice, by Ready | to the probe's end |
+| u3 | ~17s | 754 | twice, by Ready | 0s |
+| stall | 10.1s | 1966: 1125 503s, 841 timeouts | every ~5s, 14:28:08 to :36 | 16s after the lift |
+
+**The bound works.** Under a node `DROP` on the gateway's new connections to 50053, it
+replaced the channel every 5 to 6s; each replacement failed the calls queued on it at
+once (the 503 bursts). In isolation, two bounded clients in the gateway pod, one on the
+global subchannel pool and one on a local pool, both reached `READY` 1.5s after the
+drop was lifted. A shared subchannel does not defeat it.
+
+**What it does not bound: the backlog after an outage.** In u1 and u2 the gateway kept
+answering `OK` at 17 to 40 a second against an open-loop 50, so every request waited past
+the probe's 5s; event-service held up to 476 calls in flight while the gateway had 200.
+The gateway sets no deadline on any gRPC call, so a call its client abandoned still runs
+on the backend. In the stall, nothing completed from the lift to 14:28:57, then 200 at
+once. That tail is CPU and queueing on this box, not a stuck channel. Whether it would
+recur on a box without steal is not shown.
+
+Raw logs: `crash-u{1,2,3}`, `crash-s` in the session scratchpad (not kept).
 
 **2026-11-14, Step 2, build `sha-a5842c2`.** The box was idle (no expired Temporal
 workflows; top pod 37m CPU); the gateway had run for 162 minutes with no traffic and

@@ -1,6 +1,6 @@
 # A late payment gets its ticket when one is left
 
-**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 open, its k3s run written 2026-11-16.** Not in
+**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 measured 2026-11-16; the grace is the architect's call.** Not in
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s ranking;
 where it slots is the architect's call.
 
@@ -178,6 +178,18 @@ kubectl -n ticketbottle logs job/k6-load | grep -A3 '"tb_orders_completed"'
 - [ ] Record p99, max and the completed count under a *Results* section.
 - [ ] Propose a grace of p99 times a margin, with the cost each way: shorter frees stock
   sooner; too short turns a late confirm into `REFUND_REQUIRED` and a page.
+
+### Ticket 5 results
+
+**2026-11-16, `sha-4355dd3`, `k3s-load` (3m, 20 buyers, door at 2 a second).** 372
+purchases completed (1.96 a second). Webhook → `COMPLETED` seen: median 2.10s, p95 2.30s,
+p99 2.47s, max 2.52s. A buyer polls every 2s, so the true lag is under about 2.1s.
+
+**Proposal:** a grace of 30s instead of 3 minutes: over ten times the measured p99, and
+six relay safety polls (`RELAY_SAFETY_POLL_MS`, 5s) for a missed NOTIFY. An abandoned
+hold then frees its stock 2.5 minutes sooner. The cost runs the other way: a confirm held
+up past 30s by a relay or consumer stall becomes `REFUND_REQUIRED` and pages, where 3
+minutes would have absorbed it.
 
 ## Out of scope (audited, not worth building now)
 
