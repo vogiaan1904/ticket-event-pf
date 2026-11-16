@@ -193,13 +193,14 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0031](0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md) | What is the next work, in order, now that 0030 removed the first throughput wall? | 1 the gateway's ~40s loss after a backend crash; 2 checkout tokens the waitroom revokes but nobody checks; 3 one TS service converged to the layout; 4 EKS's door measured. Capacity past both doors waits | The next wall, about 24 a second in Temporal and its Postgres, and the stateful-tier phases (b)–(f) | The ceiling past 24 a second, and which part of Temporal's path sets it, stay unmeasured until a door is planned above about 20 a second | proposed |
+| [0031](0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md) | What is the next work, in order, now that 0030 removed the first throughput wall? | 1 the gateway's ~40s loss after a backend crash; 2 checkout tokens the waitroom revokes but nobody checks; 3 one TS service converged to the layout; 4 EKS's door measured. Capacity past both doors waits | The next wall, about 24 a second in Temporal and its Postgres, and the stateful-tier phases (b)–(f) | The ceiling past 24 a second, and which part of Temporal's path sets it, stay unmeasured until a door is planned above about 20 a second | accepted |
 
 ### late-payment
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0032](0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md) | What does a payment get when it lands after its checkout ended, by timeout or by the buyer's cancel? | Its ticket if one is left, else a refund: `Release` carries a reason, an ended checkout is written `EXPIRED`, which `Confirm` re-acquires, and `ConfirmOrder` treats a `CANCELLED` order like a `TIMEOUT` one | `Confirm` re-acquiring `CANCELLED` holds, guarded only by order-svc; a refund for every payment after a cancel | A proto field regenerated in every consumer; `EXPIRED` now also means "released while its link may still be paid"; a buyer's cancel no longer refuses a later payment | accepted |
+| [0036](0036-a-hold-outlives-the-payment-window-by-30s.md) | How long does a checkout's hold outlive its 6-minute payment window? | 30s, over ten times the measured webhook → `COMPLETED` p99 of 2.47s | 3 minutes, sized before anything was measured | A confirm stalled past 30s, while its ticket is resold, becomes `REFUND_REQUIRED` and pages | proposed |
 
 ### token-revocation
 
@@ -211,5 +212,5 @@ the records, never the block.
 
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
-| [0035](0035-the-gateway-bounds-a-backend-reconnect.md) | What bounds the gateway's failure after a backend crash, while its trigger is unknown? | Each gRPC client's channel is replaced when it stays `CONNECTING` or `TRANSIENT_FAILURE` for 5s | Shorter kernel SYN retries in the gateway pod; more traced crashes to find the trigger first | Our own wrapper around grpc-js's channel, and a fix shipped before the cause is known | proposed |
+| [0035](0035-the-gateway-bounds-a-backend-reconnect.md) | What bounds the gateway's failure after a backend crash, while its trigger is unknown? | Each gRPC client's channel is replaced when it stays `CONNECTING` or `TRANSIENT_FAILURE` for 5s | Shorter kernel SYN retries in the gateway pod; more traced crashes to find the trigger first | Our own wrapper around grpc-js's channel, and a fix shipped before the cause is known | accepted |
 <!-- decisions:index:end -->

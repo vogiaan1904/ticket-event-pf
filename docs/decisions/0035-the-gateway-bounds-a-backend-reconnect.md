@@ -1,7 +1,7 @@
 # 0035 — The gateway bounds a backend reconnect by replacing the channel
 
 **Date:** 2026-11-15
-**Status:** proposed
+**Status:** accepted
 **Arc:** gateway-recovery — [plan](../plans/2026-10-12-gateway-recovery-after-a-backend-crash.md)
 **Where it lives:** `services/api-gateway/src/shared/grpc/bounded-channel.ts`
 
@@ -53,3 +53,25 @@ no feature service changes; every gateway client gets it, not only event-service
   about 127s: one per replacement.
 - What stalls the attempt on k3s stays unknown. The open register row keeps its
   first half.
+
+## Outcome
+
+Built test-first in `8f32853`: the local repro failed for its whole 10s on a plain
+channel, and recovered 0.3s after the backend returned on a bounded one. Mutating the
+timer's reset turns the idle-channel test red.
+
+Run on k3s 2026-11-16, `sha-4355dd3`
+([plan, *Results*](../plans/2026-10-12-gateway-recovery-after-a-backend-crash.md#results)):
+- Under a node `DROP` on the gateway's new connections to event-service, the channel was
+  replaced every 5 to 6s, each replacement failing its queued calls at once.
+- Two bounded clients in the gateway pod, on the global and on a local subchannel pool,
+  both reached `READY` 1.5s after the drop was lifted.
+- The plan's end-to-end pass, the last failure within about 6s of the lift, failed: 16s.
+  The gap was queueing, not the channel. The box lost 0.5 to 0.9 of its 2 vCPUs to steal,
+  and the gateway sets no deadline on a gRPC call, so event-service ran up to 476
+  abandoned calls. That is a question of its own, open in the root `CLAUDE.md` register.
+- `k3s-gate2` passed.
+
+The architect accepted on this evidence: "yes do what you propose", 2026-11-16, to
+accepting on the isolated proof rather than rerunning the loaded test on a box without
+steal. What stalls the attempt on k3s is still unknown; the failure is bounded instead.

@@ -4,7 +4,7 @@
 re-planned around the idle channel (see *Results*). The 133s did not recur. The fix, a
 bound on the reconnect, is chosen → [0035](../decisions/0035-the-gateway-bounds-a-backend-reconnect.md);
 built; Task 3 RUN 2026-11-16 on `sha-4355dd3`: the bound fires and reconnects, but a
-loaded recovery still takes 16s, from the backlog rather than the channel (see *Results*).** Ranked first by
+loaded recovery still takes 16s, from the backlog rather than the channel (see *Results*). DONE 2026-11-16: 0035 accepted; the backlog is planned in [`2026-11-16-gateway-calls-carry-a-deadline.md`](2026-11-16-gateway-calls-carry-a-deadline.md).** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
@@ -186,7 +186,7 @@ The stall reproduced once in five crashes, so three crashes alone likely end wit
 bound never firing: they show no regression, not the bound. Step 3 forces the stall.
 The architect runs it and pastes the output. About 75 minutes, 31 of them idle.
 
-- [ ] **Step 1: Start, deploy, check the stall drops.** Task 1 Step 1's commands. The
+- [x] **Step 1: Start, deploy, check the stall drops.** Task 1 Step 1's commands. The
   stall is a node `DROP` on new connections from the gateway to port 50053; a
   NetworkPolicy will not do, since k3s's kube-router rejects (`ECONNREFUSED`) rather
   than drops, and a refused connect never hangs.
@@ -205,7 +205,7 @@ box "sudo $IPT -I $R" && probe               # dropped
 box "sudo $IPT -D $R" && probe               # open
 ```
 
-- [ ] **Step 2: Make one call through the gateway to event-service, wait 31 minutes with
+- [x] **Step 2: Make one call through the gateway to event-service, wait 31 minutes with
   no traffic, then three untraced crashes.** Task 1 Step 2's two loops, unchanged. Pass:
   in each run the last 503 lands within about 6s of `event-service ready` (5s bound
   plus one connect), against u1's 133s.
@@ -214,7 +214,7 @@ box "sudo $IPT -D $R" && probe               # open
 kubectl -n ticketbottle logs deploy/app-gateway --since=15m | grep -c 'replacing the channel'
 ```
 
-- [ ] **Step 3: Forced stall, right after Step 2** (the channel must be busy, or the
+- [x] **Step 3: Forced stall, right after Step 2** (the channel must be busy, or the
   script's warm-up probe wakes it into the drop and voids the run). The rule keeps the
   live connection and drops new ones, so deleting the pod leaves the gateway's
   reconnect hanging, the shape of H1. It is lifted 30s after the replacement is Ready.
@@ -234,9 +234,9 @@ Pass: `replacing the channel` warnings about every 5s while the drop held, and t
 last 503 within about 6s of *lifted at*. Red: 503s running on to the probe's end,
 which is what an unbounded connect does until the kernel gives up, about 127s.
 
-- [ ] **Step 4:** `make -C deploy k3s-gate2` still green. Leave the box up for the
+- [x] **Step 4:** `make -C deploy k3s-gate2` still green. Leave the box up for the
   late-payment plan's ticket 5 run, then `make -C deploy stop-ec2-k3s`.
-- [ ] Record the three crashes and the stall under *Results*; accept 0035 with them.
+- [x] Record the three crashes and the stall under *Results*; accept 0035 with them.
 
 ## Results
 

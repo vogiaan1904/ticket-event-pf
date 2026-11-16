@@ -1,7 +1,7 @@
 # 0031 — The next work is ranked by what a buyer can hit
 
 **Date:** 2026-10-12
-**Status:** proposed
+**Status:** accepted
 **Arc:** next-work — the open row in the root `CLAUDE.md` register, *Are the deferred stateful-tier phases (b)–(f) the next work?*
 
 | Question | Chose | Instead of | Cost |
@@ -59,3 +59,20 @@ A's table, 2026-10-12.
 - Each ranked item gets its own plan when the one before it lands.
 - The JWT fallback and the stale session write ride with item 2, in the same
   service.
+
+## Outcome
+
+Items 1 and 2 ran in the ranked order:
+- 2, token revocation: [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md),
+  verified on k3s 2026-11-15, with the JWT fallback and the stale session write fixed in
+  `5db408a`.
+- 1, the gateway's recovery: [0035](0035-the-gateway-bounds-a-backend-reconnect.md),
+  accepted 2026-11-16. Its run found the gateway's calls carry no deadline, now planned in
+  [`2026-11-16-gateway-calls-carry-a-deadline.md`](../plans/2026-11-16-gateway-calls-carry-a-deadline.md),
+  unranked.
+- 3, event-svc on the layout: planned 2026-11-14 ([0034](0034-event-svc-converges-first-on-its-own.md)), not started.
+- 4, EKS's door: no plan yet.
+
+Off the ranking, the late-payment work ([0032](0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md))
+ran between 2 and 1. The architect accepted the ranking as having held: "yes do what you
+propose", 2026-11-16.
