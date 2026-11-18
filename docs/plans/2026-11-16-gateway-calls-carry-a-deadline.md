@@ -136,3 +136,32 @@ almost no steal (0.5% after the run; 0.5 to 0.9 vCPU on 2026-11-16).
 
 Raw logs: `crash-s` in the session scratchpad (not kept).
 
+### Follow-up: a stall with the pod left running
+
+**2026-11-18, same build, k3s.** To tell a cold pod from the burst, the event-service pod
+(running since 04:16) was left alone. Instead, every packet from the gateway to 50053 was
+dropped for 44s (06:17:36 to 06:18:20), under the same probe at 50 a second.
+
+| | Cold pod (above) | Warm pod |
+|---|---|---|
+| Last failure after the lift | 12.6s | 30s |
+| event-service in flight, peak after the lift | 53 (gateway 86) | 490 (gateway 200) |
+| Gateway `INTERNAL` | 0 | 200 |
+| Bound fired | every 5–6s | never |
+
+- **A burst alone saturates a warm pod.** The gateway's requests, and the cancels it sent
+  at each 5s deadline, sat in the stalled TCP connection. When it resumed, event-service
+  received them together and ran each to the end, as a TS handler does
+  (*Task 1 results*). It logged 1861 `findOne` calls from 06:18:30 to 06:18:59, and its
+  in-flight count fell from 490 to 23 over 10s. Here C', skipping a query whose call has
+  ended, would have shed most of that work.
+- **A silent connection is not detected.** The channel stayed `READY` for the whole stall,
+  so the bound never fired and no reconnect was tried. No gRPC keepalive is configured,
+  so the gateway waited on TCP's retransmission backoff: traffic resumed about 20s after
+  the lift.
+- **A dropped session reads as our bug.** At 06:18:41 the HTTP/2 session closed with code
+  2, and grpc-js failed its 200 in-flight calls with `13 INTERNAL: Received RST_STREAM
+  with code 2`. Under the alerting policy, a network fault would page as a bug. event-service
+  logged no error, so the session was not closed by a handler; which side closed it is not
+  shown.
+
