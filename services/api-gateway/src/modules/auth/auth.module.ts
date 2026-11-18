@@ -9,7 +9,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
-import { boundedChannelFactory } from '@/shared/grpc/bounded-channel';
+import { clientChannelOptions } from '@/shared/grpc/client-options';
 
 @Module({
   imports: [
@@ -40,7 +40,7 @@ import { boundedChannelFactory } from '@/shared/grpc/bounded-channel';
             package: USER_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'user.proto'),
             loader: GRPC_LOADER_OPTIONS,
-            channelOptions: { channelFactoryOverride: boundedChannelFactory() },
+            channelOptions: clientChannelOptions(),
           },
         }),
         inject: [AppConfigService],

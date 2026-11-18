@@ -1,7 +1,7 @@
 # The gateway's gRPC calls carry a deadline
 
-**Status: planned 2026-11-16; not started. The deadline values are the architect's call
-(Task 1).** Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
+**Status: Tasks 1–2 DONE 2026-11-18; A chosen, 5s and 65s for `CreateOrder` →
+[0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md); Task 3 (k3s) to run.** Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
 ranking; where it slots is the architect's call.
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *What bounds the
@@ -55,7 +55,7 @@ helps if the queue is ahead of the handler, which Task 1 has to show.
 - [ ] Read the gateway's `tb_grpc_request_duration_seconds` p99 per method from the last
   `k3s-load` run if its Prometheus data is still there, else the next one; a read's
   deadline sits well above its p99 under load.
-- [ ] Put the values and A/B/C to the architect; record the call as 0037.
+- [x] Put the values and A/B/C to the architect; record the call as 0037. → [0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md)
 
 ### Task 1 results
 
@@ -89,13 +89,13 @@ STALL stall-3 query-done took=8025ms
 
 ## Task 2: Build the interceptor (TDD)
 
-- [ ] Test first, in the style of `bounded-channel.spec.ts`: a slow handler, a client
+- [x] Test first, in the style of `bounded-channel.spec.ts`: a slow handler, a client
   through `ClientGrpcProxy` with the interceptor; the call fails `DEADLINE_EXCEEDED` at
   the bound, and the gateway answers 504 through `GRPC_TO_HTTP`. A `CreateOrder` call is
   not cut before its own deadline.
-- [ ] `services/api-gateway/src/shared/grpc/`, wired in every `*.module.ts` that has
+- [x] `services/api-gateway/src/shared/grpc/`, wired in every `*.module.ts` that has
   `boundedChannelFactory()`; `src/CLAUDE.md`'s client rule gains it.
-- [ ] Whatever Task 1 chose for B or C, test-first in the service that owns it.
+- [x] Whatever Task 1 chose for B or C, test-first in the service that owns it. Neither was chosen.
 
 ## Task 3: On k3s
 

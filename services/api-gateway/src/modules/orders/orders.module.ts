@@ -6,7 +6,7 @@ import { ORDER_PACKAGE_NAME, ORDER_SERVICE_NAME } from '@/protogen/order.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
-import { boundedChannelFactory } from '@/shared/grpc/bounded-channel';
+import { clientChannelOptions } from '@/shared/grpc/client-options';
 
 @Module({
   imports: [
@@ -20,7 +20,7 @@ import { boundedChannelFactory } from '@/shared/grpc/bounded-channel';
             package: ORDER_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'order.proto'),
             loader: GRPC_LOADER_OPTIONS,
-            channelOptions: { channelFactoryOverride: boundedChannelFactory() },
+            channelOptions: clientChannelOptions(),
           },
         }),
         inject: [AppConfigService],

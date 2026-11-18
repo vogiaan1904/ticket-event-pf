@@ -59,6 +59,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How long does a checkout's hold outlive its payment window? | `docs/decisions/0036` | 30s, ten times the measured confirm lag p99 of 2.47s; an abandoned checkout ends at 6m30s; built and verified on k3s 2026-11-18 |
 | What does a payment get when it lands after its hold was released by a timeout or a cancel? | `docs/decisions/0032` | Its ticket if one is left, else a refund; `Release` carries a reason; built and verified on k3s 2026-11-14 |
 | What bounds the gateway's failure after a backend crash? | `docs/decisions/0035` | A gRPC channel not `READY` within 5s is replaced, since grpc-js never times out a connect; verified on k3s 2026-11-16: replaced every ~5s under a stalled connect, `READY` 1.5s after it lifted. What stalls the connect is still unknown |
+| What bounds the gateway's calls to a backend that answers slowly? | `docs/decisions/0037` | A deadline on every call from one interceptor: 5s, `CreateOrder` 65s; a TS backend still runs a call past its deadline (measured locally 2026-11-18); built, the k3s stall rerun to run |
 | What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16 with 1 and 2 done |
 
 ### Open
@@ -66,7 +67,6 @@ describing it for a week — because the fact had been copied rather than linked
 | Question | Why it is open |
 |---|---|
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. On 2026-10-11, confirms on one ticket class at up to 25 a second, several at once over 8 partitions, showed no Lock wait in Postgres samples taken every 2s. Since 2026-10-12, up to 8 run at once ([0030](docs/decisions/0030-payment-confirmations-run-across-partitions.md)); past 25 a second it is unmeasured: `docs/plans/2026-10-09-capacity-on-a-bigger-box.md#results`. |
-| What bounds the gateway's calls to a backend that answers slowly? | The gateway sets no gRPC deadline, so a call its client abandoned still runs. On 2026-11-16, after a forced stall on a box losing CPU to steal, event-service held up to 476 calls in flight against the gateway's 200, and the gateway recovered 16s after the stall lifted where the channel bound alone allows about 6s. Whether a deadline would shorten that depends on how the TS backends treat an expired call, which is unmeasured: `docs/plans/2026-11-16-gateway-calls-carry-a-deadline.md`. |
 
 ## Services & ports
 
