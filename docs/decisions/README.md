@@ -200,7 +200,7 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0032](0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md) | What does a payment get when it lands after its checkout ended, by timeout or by the buyer's cancel? | Its ticket if one is left, else a refund: `Release` carries a reason, an ended checkout is written `EXPIRED`, which `Confirm` re-acquires, and `ConfirmOrder` treats a `CANCELLED` order like a `TIMEOUT` one | `Confirm` re-acquiring `CANCELLED` holds, guarded only by order-svc; a refund for every payment after a cancel | A proto field regenerated in every consumer; `EXPIRED` now also means "released while its link may still be paid"; a buyer's cancel no longer refuses a later payment | accepted |
-| [0036](0036-a-hold-outlives-the-payment-window-by-30s.md) | How long does a checkout's hold outlive its 6-minute payment window? | 30s, over ten times the measured webhook → `COMPLETED` p99 of 2.47s | 3 minutes, sized before anything was measured | A confirm stalled past 30s, while its ticket is resold, becomes `REFUND_REQUIRED` and pages | proposed |
+| [0036](0036-a-hold-outlives-the-payment-window-by-30s.md) | How long does a checkout's hold outlive its 6-minute payment window? | 30s, over ten times the measured webhook → `COMPLETED` p99 of 2.47s | 3 minutes, sized before anything was measured | A confirm stalled past 30s, while its ticket is resold, becomes `REFUND_REQUIRED` and pages | accepted |
 
 ### token-revocation
 

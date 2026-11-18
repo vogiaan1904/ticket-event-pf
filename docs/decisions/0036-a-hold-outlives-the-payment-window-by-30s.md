@@ -1,7 +1,7 @@
 # 0036 — A hold outlives the payment window by 30s
 
 **Date:** 2026-11-16
-**Status:** proposed
+**Status:** accepted
 **Arc:** late-payment — [plan](../plans/2026-11-14-a-late-payment-gets-its-ticket.md)
 **Where it lives:** `services/order-svc/internal/workflows/shared.go` (`ReservationHoldGrace`)
 
@@ -53,3 +53,11 @@ A stall longer than 30s is 0017's page, not something any grace is sized for.
   between 6m30s and 7m30s; `ExpireOrder`'s release at 6m30s usually comes first.
 - Holds while the confirm leg stays near its measured lag. A door well above 2 a
   second needs it measured again.
+
+## Outcome
+
+Built test-first in `e8f1956`: the grace's test fails at 29s and passes at 30s, and
+order-svc's recorded histories still replay. On k3s 2026-11-18, `sha-e8f1956`:
+`k3s-gate-checkout-expiry` passed with A's unpaid order expiring 396s after it was
+placed, against a 390s hold and the 15s poll; A, after its timeout, and C, after its
+cancel, each paid late and kept a ticket, nobody owed a refund. `k3s-gate2` passed.

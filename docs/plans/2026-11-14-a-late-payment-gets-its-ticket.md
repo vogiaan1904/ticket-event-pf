@@ -1,6 +1,6 @@
 # A late payment gets its ticket when one is left
 
-**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 measured 2026-11-16; the grace is chosen, 30s → [0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md); ticket 6 to do.** Not in
+**Status: tickets 1–4 DONE 2026-11-14 (`a5842c2`; gates passed on k3s, see [0032](../decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md#outcome)); ticket 5 measured 2026-11-16; ticket 6 DONE 2026-11-18 (`e8f1956`; gates passed on k3s, see [0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md#outcome)). COMPLETE.** Not in
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s ranking;
 where it slots is the architect's call.
 
@@ -216,7 +216,7 @@ sets the hold, `ExpireOrder`'s delay and so the chair: 9m becomes 6m30s.
 - [x] **The k3s gate's window.** `deploy/scripts/gate-checkout-expiry.sh` step 6 wants
   510–660s for a 540s hold; the hold is now 390s, so 360–510s, and the wait in step 5
   shortens to 9m. Its header says ~9m.
-- [ ] **On k3s**, after CI builds the commit: `REF=sha-<full sha> make -C deploy k3s-deploy`,
+- [x] **On k3s**, after CI builds the commit: `REF=sha-<full sha> make -C deploy k3s-deploy`,
   then `k3s-gate-checkout-expiry` (A expires at about 390s; A and C still get their
   tickets) and `k3s-gate2`. Accept 0036 with the run.
 
