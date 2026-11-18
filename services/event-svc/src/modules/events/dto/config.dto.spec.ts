@@ -1,7 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { EventResponseMapper } from '../mappers/event.mapper';
-import { EventConfigEntity } from '../../../entities';
+import { EventConfigEntity } from '../entities';
 import { CreateConfigDto } from './create-config.dto';
 import { UpdateConfigDto } from './update-config.dto';
 

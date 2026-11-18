@@ -1,8 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { LoggerService } from '@/shared/services/logger.service';
-import { EventsService } from '../../events.service';
+import { EventsService } from './events.service';
 import { GrpcEventsController } from './events.controller';
-import { ApproveEventDto, PublishEventDto } from './dtos';
+import { ApproveEventDto, PublishEventDto } from './dto';
 
 const loggerStub = {
   setContext: jest.fn(),

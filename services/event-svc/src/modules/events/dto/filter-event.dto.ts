@@ -1,5 +1,5 @@
 import { EventFilter, EventStatus } from '@/protogen/event.pb';
-import { FilterEventDto as ServiceFilterEventDto } from '../../../dtos';
+import { FilterEventDto as ServiceFilterEventDto } from '../dtos';
 import { EventStatusMapper } from '../mappers';
 import { IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { Transform } from 'class-transformer';

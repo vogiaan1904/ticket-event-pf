@@ -12,7 +12,7 @@ import {
 import { LoggerService } from '@/shared/services/logger.service';
 import { Controller } from '@nestjs/common';
 import { GrpcMethod } from '@nestjs/microservices';
-import { EventsService } from '../../events.service';
+import { EventsService } from './events.service';
 import {
   ApproveEventDto,
   CreateEventDto,
@@ -23,8 +23,8 @@ import {
   PublishEventDto,
   UpdateConfigDto,
   UpdateEventDto,
-} from './dtos';
-import { CreateConfigDto } from './dtos/create-config.dto';
+} from './dto';
+import { CreateConfigDto } from './dto/create-config.dto';
 import { EventResponseMapper } from './mappers';
 
 @Controller()
