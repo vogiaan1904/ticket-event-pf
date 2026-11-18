@@ -1,5 +1,5 @@
 import { UpdateEventRequest } from '@/protogen/event.pb';
-import { UpdateEventDto as ServiceUpdateEventDto } from '../dtos';
+import { UpdateEventDto as ServiceUpdateEventDto } from '../events.types';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
 import { IsISODateString } from '@/common/decorators/is-date-string.decorator';
 

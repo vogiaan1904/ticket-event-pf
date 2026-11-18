@@ -2,7 +2,7 @@ import { PrismaService } from '@/infra/database/prisma/prisma.service';
 import { PrismaClient } from '@prisma/client';
 import { execSync } from 'child_process';
 import { randomUUID } from 'crypto';
-import { CreateEventDto } from '../dtos';
+import { CreateEventDto } from '../events.types';
 import { EventsRepository } from './events.repository';
 
 // Against a real Postgres: EVENT_TEST_DATABASE_URL, migrated here. Without it the suite

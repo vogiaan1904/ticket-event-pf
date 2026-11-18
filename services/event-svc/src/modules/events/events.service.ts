@@ -2,13 +2,17 @@ import { IPaginationOptions } from '@/shared/interfaces/pagination-input.interfa
 import { GetPaginationResponse } from '@/shared/interfaces/pagination-resp.interface';
 import { Injectable } from '@nestjs/common';
 import { EventRoleType, EventStatus } from '@prisma/client';
-import { CreateEventDto, FilterEventDto, UpdateConfigDto } from './dtos';
+import {
+  CreateConfigDto,
+  CreateEventDto,
+  FilterEventDto,
+  UpdateConfigDto,
+  UpdateEventDto,
+} from './events.types';
 import { EventConfigEntity, EventEntity, EventRoleEntity } from './entities';
 import { EventsRepository } from './repository/events.repository';
-import { UpdateEventDto } from './dtos/update-event.dto';
 import { RpcBusinessException } from '@/common/exceptions/rpc-business.exception';
 import { ErrorCodeEnum } from '@/shared/constants/error-code.constant';
-import { CreateConfigDto } from './dtos/create-config.dto';
 
 // Editing an event and configuring it are the same privilege; approving is not.
 const CAN_EDIT = [EventRoleType.ADMIN, EventRoleType.EDITOR];

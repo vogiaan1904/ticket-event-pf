@@ -1,7 +1,7 @@
 import { IsISODateString } from '@/common/decorators/is-date-string.decorator';
 import { CreateEventRequest } from '@/protogen/event.pb';
 import { IsArray, IsNotEmpty, IsOptional, IsString, IsUrl } from 'class-validator';
-import { CreateEventDto as ServiceCreateEventDto } from '../dtos';
+import { CreateEventDto as ServiceCreateEventDto } from '../events.types';
 
 export class CreateEventDto implements CreateEventRequest {
   toServiceDto(): ServiceCreateEventDto {

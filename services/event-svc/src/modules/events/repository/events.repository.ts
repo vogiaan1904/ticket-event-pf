@@ -4,10 +4,15 @@ import { GetPaginationResponse } from '@/shared/interfaces/pagination-resp.inter
 import { createPaginator } from '@/shared/utils/pagination.util';
 import { Injectable } from '@nestjs/common';
 import { EventRoleType, Prisma } from '@prisma/client';
-import { CreateCategoryDto, CreateEventDto, FilterEventDto, UpdateConfigDto } from '../dtos';
-import { CreateConfigDto } from '../dtos/create-config.dto';
-import { CreateEventRoleDto } from '../dtos/create-role.dto';
-import { UpdateEventDto } from '../dtos/update-event.dto';
+import {
+  CreateCategoryDto,
+  CreateConfigDto,
+  CreateEventDto,
+  CreateEventRoleDto,
+  FilterEventDto,
+  UpdateConfigDto,
+  UpdateEventDto,
+} from '../events.types';
 import { EventCategoryEntity, EventConfigEntity, EventEntity, EventRoleEntity } from '../entities';
 import { mapToEventEntities, mapToEventEntity, PrismaEventWithRelations } from './events.mapper';
 
