@@ -11,16 +11,15 @@ rules the waitroom and the saga read from an event.
    proto enum and why it must go through the mapper, layout, and the absence of CQRS.
 2. `docs/plans/2026-09-21-event-svc-domain-tests.md` — what the domain tests pin, and
    the defects they found. A record of that day.
-3. `docs/design/ts-layout.md` — the target layout. `event-svc` is not converged
-   (its `controllers/grpc/dtos` + `dtos/` split is listed there), so don't copy its
-   shape into another service.
+3. `docs/design/ts-layout.md` — the target layout. `event-svc` is converged and is
+   its worked example: a new TS module copies this shape.
 
 ## By question
 
 | Question | Owner | Verify in |
 |---|---|---|
 | Which status transitions are legal, and who may make them | service `CLAUDE.md`, *Event lifecycle* | `services/event-svc/src/modules/events/events.service.ts` |
-| Mapping status between proto and Prisma | service `CLAUDE.md` | `services/event-svc/src/modules/events/controllers/grpc/mappers/event-status.mapper.ts` |
+| Mapping status between proto and Prisma | service `CLAUDE.md` | `services/event-svc/src/modules/events/mappers/event-status.mapper.ts` |
 | What an event and its config hold | `services/event-svc/prisma/schema/schema.prisma` | same |
 | What the waitroom asks, and how often | [waitroom.md](waitroom.md), the event cache | `services/waitroom-svc/internal/service/event_gate.go` |
 | What the saga asks | [order.md](order.md) | `services/order-svc/internal/activities/event_activity.go` |
@@ -30,9 +29,9 @@ rules the waitroom and the saga read from an event.
 
 | To see | Open |
 |---|---|
-| The gRPC surface and its request DTOs | `services/event-svc/src/modules/events/controllers/grpc/events.controller.ts` |
+| The gRPC surface and its request DTOs | `services/event-svc/src/modules/events/events.controller.ts`, `services/event-svc/src/modules/events/dto/` |
 | Data access | `services/event-svc/src/modules/events/repository/events.repository.ts` |
-| Domain DTOs and entities | `services/event-svc/src/modules/events/dtos/`, `services/event-svc/src/modules/events/entities/` |
+| Domain DTOs and entities | `services/event-svc/src/modules/events/events.types.ts`, `services/event-svc/src/modules/events/entities/` |
 
 ## Edges
 

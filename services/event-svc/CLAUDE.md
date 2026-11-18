@@ -16,7 +16,7 @@ Status transitions are driven in `src/modules/events/events.service.ts` via repo
 DRAFT → CONFIGURED → APPROVED → PUBLISHED
 ```
 
-(Proto enum values are non-contiguous — `DRAFT=1, PUBLISHED=2, CONFIGURED=4, APPROVED=5` — so always map through `src/modules/events/controllers/grpc/mappers/event-status.mapper.ts`, never compare proto and Prisma enums directly.)
+(Proto enum values are non-contiguous — `DRAFT=1, PUBLISHED=2, CONFIGURED=4, APPROVED=5` — so always map through `src/modules/events/mappers/event-status.mapper.ts`, never compare proto and Prisma enums directly.)
 
 ## Commands
 
@@ -34,7 +34,7 @@ npm run proto:all          # regenerate gRPC stubs into src/protogen
 
 ## Layout
 
-- `src/modules/events/` — `events.service.ts` (business logic + lifecycle), `repository/` (Prisma data access), `controllers/grpc/` (+ `mappers/`), `dtos/`, `entities/`.
+- `src/modules/events/` — the domain-service archetype of `docs/design/ts-layout.md`, and its worked example: `events.controller.ts` (gRPC), `dto/` (transport: validated, wire types, `toServiceDto()`), `mappers/` (proto ↔ domain), `events.types.ts` (domain shapes), `events.service.ts` (business logic + lifecycle), `repository/` (Prisma data access), `entities/`.
 - `src/infra/database/` — Prisma infrastructure; `src/common/*` — gRPC exception filter + validation; `src/shared/*` — config/logger/swagger.
 - `prisma/` — schema, migrations, `seed.ts`. `src/protogen/` is generated from `../../proto/event.proto` — don't hand-edit.
 
