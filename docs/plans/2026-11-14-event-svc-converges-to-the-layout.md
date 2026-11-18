@@ -105,4 +105,7 @@ suite against the compose Postgres. Each ticket ended at the same 6 and 37.
 - Found, out of scope: `FindMany` with no `filter` answers `INTERNAL`, because the
   controller calls `dto.filter.toServiceDto()` on `undefined`. It predates this change
   (same line at `3eaa1aa`); the gateway always sends a filter. A business-free input that
-  yields `INTERNAL` breaks the error taxonomy, so it needs a ticket of its own.
+  yields `INTERNAL` breaks the error taxonomy, so it needs a ticket of its own. Fixed the same day,
+  after the convergence: the controller passes no filter through, and the repository
+  reads a missing filter as an empty one. Each half has a test that failed first; the
+  built service then answered a filterless `FindMany` `OK`.

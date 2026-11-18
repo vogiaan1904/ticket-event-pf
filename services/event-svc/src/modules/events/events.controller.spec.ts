@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { LoggerService } from '@/shared/services/logger.service';
 import { EventsService } from './events.service';
 import { GrpcEventsController } from './events.controller';
-import { ApproveEventDto, PublishEventDto } from './dto';
+import { ApproveEventDto, FindManyEventDto, PublishEventDto } from './dto';
 
 const loggerStub = {
   setContext: jest.fn(),
@@ -63,5 +63,19 @@ describe('GrpcEventsController lifecycle methods', () => {
     await controller.approveEvent(approveDto);
 
     expect(approveEvent).toHaveBeenCalledWith('evt-1', 'admin-1');
+  });
+});
+
+describe('GrpcEventsController.findMany', () => {
+  it('lists every event when the request names no filter', async () => {
+    const findMany = jest.fn().mockResolvedValue({ data: [], meta: { total: 0 } });
+    const controller = await buildController({ findMany });
+
+    await controller.findMany({ page: 1, pageSize: 20 } as FindManyEventDto);
+
+    expect(findMany).toHaveBeenCalledWith({
+      filter: undefined,
+      pagination: { page: 1, limit: 20 },
+    });
   });
 });

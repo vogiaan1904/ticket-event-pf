@@ -53,6 +53,14 @@ suite('EventsRepository against Postgres', () => {
 
   afterAll(async () => prisma?.$disconnect());
 
+  it('a list that names no filter reads as one with an empty filter', async () => {
+    await repo.create(event());
+    const pagination = { page: 1, limit: 100 };
+    const none = await repo.findMany({ pagination });
+    const empty = await repo.findMany({ filter: { categoryIds: [] }, pagination });
+    expect(none.meta.total).toBe(empty.meta.total);
+  });
+
   it('an update replaces the categories with those it names', async () => {
     const created = await repo.create(event());
     await repo.update(created.id, { categoryIds: [CAT1, CAT2] });

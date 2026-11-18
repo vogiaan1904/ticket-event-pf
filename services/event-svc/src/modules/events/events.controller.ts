@@ -67,7 +67,7 @@ export class GrpcEventsController {
   async findMany(dto: FindManyEventDto): Promise<FindManyEventResponse> {
     this.logger.info(`EventsController.findMany called.`);
     const out = await this.eventsService.findMany({
-      filter: dto.filter.toServiceDto(),
+      filter: dto.filter?.toServiceDto(),
       pagination: { page: dto.page, limit: dto.pageSize },
     });
     this.logger.info(`EventsController.findMany completed.`);

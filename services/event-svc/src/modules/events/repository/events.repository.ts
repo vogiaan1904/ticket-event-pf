@@ -39,7 +39,7 @@ export class EventsRepository {
     },
   };
 
-  private buildWhereFilter(dto: FilterEventDto): Prisma.EventWhereInput {
+  private buildWhereFilter(dto: FilterEventDto = { categoryIds: [] }): Prisma.EventWhereInput {
     const where: Prisma.EventWhereInput = {};
     const conditions: Prisma.EventWhereInput[] = [];
     const configFilters: Prisma.EventConfigWhereInput = {
