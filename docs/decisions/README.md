@@ -131,7 +131,7 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0014](0014-ts-structure-follows-the-june-layout-rule.md) | Which TS layout is the target for new structure? | The 2026-06-16 rule, restored as a design: flat controller, one transport `dto/`, domain shapes in `<feature>.types.ts`, additions by archetype | Making `event-svc`'s current shape the rule | A rule no service follows yet, applied only as each service is converged | accepted |
-| [0034](0034-event-svc-converges-first-on-its-own.md) | Which TS service converges first, and becomes the worked example? | event-svc, in a change that does nothing else | user-svc, the smallest; waiting until a service is changed anyway | A 71-file move with no capability, against the design's own "only when being worked on anyway" | proposed |
+| [0034](0034-event-svc-converges-first-on-its-own.md) | Which TS service converges first, and becomes the worked example? | event-svc, in a change that does nothing else | user-svc, the smallest; waiting until a service is changed anyway | A 71-file move with no capability, against the design's own "only when being worked on anyway" | accepted |
 
 ### rollout-drain
 

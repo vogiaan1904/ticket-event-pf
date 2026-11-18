@@ -1,6 +1,6 @@
 # event-svc converges to the TS layout
 
-**Status: tickets 0–5 DONE 2026-11-18 (`93d4ffc`, `a6aa617`, `9f119dd`, docs in the push after); k3s gate2 at the new tag to run.** Item 3 of
+**Status: COMPLETE 2026-11-18.** `93d4ffc`, `a6aa617`, `9f119dd`, docs in `c440c7d`; CI green; `k3s-gate2` passed at `sha-6ff19a0` → [0034](../decisions/0034-event-svc-converges-first-on-its-own.md#outcome). Item 3 of
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md); the
 service and the standalone change are
 [0034](../decisions/0034-event-svc-converges-first-on-its-own.md).
@@ -74,7 +74,7 @@ not this change.
   ../../proto -proto event.proto localhost:50053 list` names the service, and a
   `FindManyEvents` and a `GetEventConfig` with a bad id answer (`NOT_FOUND`), not
   `UNIMPLEMENTED`.
-- [ ] After the push, CI's `ts-tests.yml` and `proto-copies.yml` green, and one
+- [x] After the push, CI's `ts-tests.yml` and `proto-copies.yml` green, and one
   `make -C deploy k3s-gate2` at the new `sha-` tag the next time the box is up.
 
 ## Ticket 5: docs in the same change

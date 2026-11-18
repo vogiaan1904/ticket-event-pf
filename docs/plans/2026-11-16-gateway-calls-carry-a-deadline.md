@@ -1,7 +1,9 @@
 # The gateway's gRPC calls carry a deadline
 
-**Status: Tasks 1–2 DONE 2026-11-18; A chosen, 5s and 65s for `CreateOrder` →
-[0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md); Task 3 (k3s) to run.** Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
+**Status: Tasks 1–3 RUN 2026-11-18; A chosen, 5s and 65s for `CreateOrder` →
+[0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md). Task 3 met half its
+pass: the backend's backlog shrank, but recovery took 12.6s after the lift, not ~6s (see
+*Task 3 results*). What comes next is the architect's call.** Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
 ranking; where it slots is the architect's call.
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *What bounds the
@@ -99,7 +101,41 @@ STALL stall-3 query-done took=8025ms
 
 ## Task 3: On k3s
 
-- [ ] Rerun the gateway plan's Task 3 Step 3, the forced stall, on the new build. Pass:
+- [x] Rerun the gateway plan's Task 3 Step 3, the forced stall, on the new build. Pass:
   event-service's `tb_grpc_in_flight` stays near the gateway's, and the last failure lands
   within about 6s of the lift. A box with steal is named as such in the result.
-- [ ] `k3s-gate2` green. Accept 0037 with the run; move the register row to *Decided*.
+- [x] `k3s-gate2` green. Accept 0037 with the run; move the register row to *Decided*.
+
+### Task 3 results
+
+**2026-11-18, build `sha-6ff19a0`, k3s.** `k3s-gate2` passed first (`GATE 1 PASSED`), which
+also warmed the gateway's channel. Then the plan's forced stall, unchanged: a node `DROP`
+on new connections from the gateway to 50053, the event-service pod deleted under the
+probe at 50 a second, and the drop lifted 30s after the replacement was Ready. A sampler
+in the gateway pod read both workloads' `tb_grpc_in_flight` each second. The box had
+almost no steal (0.5% after the run; 0.5 to 0.9 vCPU on 2026-11-16).
+
+| | 2026-11-16, no deadline | 2026-11-18, 5s deadline |
+|---|---|---|
+| Delete → Ready | 10.1s | 16.1s |
+| Failures | 1966: 1125 503s, 841 timeouts | 1983: 1325 503s, 658 timeouts |
+| Bound fired | every ~5s | every 5–6s, 04:16:58 to 04:17:31 |
+| Last failure after the lift | 16s | 12.6s |
+| event-service in flight, first reading after the lift | 476 (gateway 200) | 53 (gateway 86) |
+
+- **The backlog multiplier is gone.** event-service now holds fewer calls than the gateway,
+  where it held 2.4 times as many.
+- **Recovery is still not ~6s.** From the lift (04:17:35) to 04:17:47, every probe request
+  timed out at the probe's own 5s; the gateway sat at the probe's 200-VU cap
+  (`rollout-probe.js` `maxVUs`), and event-service's `/metrics` did not answer within
+  900ms, so its event loop was saturated. Its counter shows every `FindOne` it received
+  answered `OK`: it did all the work it was given.
+- **The harness hides the deadline.** The probe times out at 5s, the same as the gateway's
+  deadline, so it gives up first: the gateway recorded 31 `DEADLINE_EXCEEDED`, but the
+  probe saw them as timeouts (status 0), never as 504s.
+- **Not shown:** what kept a fresh event-service pod saturated for 12s after the lift.
+  Candidates are the burst of calls released at once when the channel reached `READY`,
+  and a cold pod (new Prisma pool, unwarmed JIT). The run cannot tell them apart.
+
+Raw logs: `crash-s` in the session scratchpad (not kept).
+
