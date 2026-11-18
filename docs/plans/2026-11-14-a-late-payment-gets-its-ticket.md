@@ -175,8 +175,8 @@ kubectl -n ticketbottle logs job/k6-load | grep -A8 '"tb_confirm_lag_s"'
 kubectl -n ticketbottle logs job/k6-load | grep -A3 '"tb_orders_completed"'
 ```
 
-- [ ] Record p99, max and the completed count under a *Results* section.
-- [ ] Propose a grace of p99 times a margin, with the cost each way: shorter frees stock
+- [x] Record p99, max and the completed count under a *Results* section.
+- [x] Propose a grace of p99 times a margin, with the cost each way: shorter frees stock
   sooner; too short turns a late confirm into `REFUND_REQUIRED` and a page.
 
 ### Ticket 5 results

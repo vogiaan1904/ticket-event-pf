@@ -59,34 +59,34 @@ before Ticket 2.
 
 ## Ticket 1: the RPC in the waitroom (TDD)
 
-- [ ] `proto/waitroom.proto`: `rpc ValidateCheckoutToken(ValidateCheckoutTokenRequest)
+- [x] `proto/waitroom.proto`: `rpc ValidateCheckoutToken(ValidateCheckoutTokenRequest)
   returns (ValidateCheckoutTokenResponse)`; request `token`, `user_id`, `event_id`;
   response `session_id`. Regenerate everywhere.
-- [ ] Red first, in `session_service` tests: a token whose session is `COMPLETED`,
+- [x] Red first, in `session_service` tests: a token whose session is `COMPLETED`,
   `FAILED` or `EXPIRED`; a blacklisted token; a token for another user or event;
   an expired one. Each is refused. An `ADMITTED` session's token returns its id.
-- [ ] `ValidateCheckoutToken` checks the claims' `user_id` and `event_id` against the
+- [x] `ValidateCheckoutToken` checks the claims' `user_id` and `event_id` against the
   request, and returns the session id.
-- [ ] `internal/delivery/grpc`: the handler, and `UNAUTHENTICATED` (`WTR013`) for every
+- [x] `internal/delivery/grpc`: the handler, and `UNAUTHENTICATED` (`WTR013`) for every
   token refusal; `UNAVAILABLE` (`WTR014`) when Redis cannot be read, since a
   dependency is down, not a bug.
 
 ## Ticket 2: order-svc asks (TDD)
 
-- [ ] A waitroom client in `pkg/grpc/waitroom` like `NewInventoryClient`; dialled in
+- [x] A waitroom client in `pkg/grpc/waitroom` like `NewInventoryClient`; dialled in
   `cmd/api/main.go`; `WAITROOM_SERVICE_ADDR: waitroom-service:50056` in `order-config`.
-- [ ] Red first, with a fake client: `UNAUTHENTICATED` → `ErrInvalidCheckoutToken`;
+- [x] Red first, with a fake client: `UNAUTHENTICATED` → `ErrInvalidCheckoutToken`;
   `UNAVAILABLE` or `DEADLINE_EXCEEDED` → `ErrWaitroomUnavailable` (`UNAVAILABLE`);
   any other code is returned as is; no purchase slot is claimed in any refusal.
-- [ ] `validateCheckoutToken` calls the client; delete the local JWT verifier, its
+- [x] `validateCheckoutToken` calls the client; delete the local JWT verifier, its
   config and order-svc's `JWT_SECRET` from `secrets.yaml`.
 
 ## Ticket 3: the waitroom's own loose ends
 
-- [ ] The three `HandleCheckout*` write the status first, then invalidate, so the
+- [x] The three `HandleCheckout*` write the status first, then invalidate, so the
   invalidation is the last write. Red first: after `HandleCheckoutCompleted`, the
   stored session reads `TokenInvalidated: true`.
-- [ ] No default for `JWT_SECRET`: `Validate` refuses an empty secret in every
+- [x] No default for `JWT_SECRET`: `Validate` refuses an empty secret in every
   environment. The chart already requires it; a native run sets it.
 
 ## Ticket 4: prove it on k3s

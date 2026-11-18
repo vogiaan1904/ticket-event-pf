@@ -1,7 +1,7 @@
 # 0037 — The gateway bounds every call it makes
 
 **Date:** 2026-11-18
-**Status:** proposed
+**Status:** accepted
 **Arc:** gateway-recovery — [plan](../plans/2026-11-16-gateway-calls-carry-a-deadline.md)
 **Where it lives:** `services/api-gateway/src/shared/grpc/client-options.ts`
 
@@ -54,3 +54,15 @@ was unreachable).
 - A TS backend keeps running a call the gateway gave up on. Whether A alone shortens a
   backlog like the 2026-11-16 one is for the k3s rerun to show; if it does not, C' is the
   next step.
+
+## Outcome
+
+Built test-first in `6ff19a0`: the interceptor's tests failed on a no-op and pass with it,
+and dropping the per-method bound or the caller's own deadline each turned a test red. On
+k3s 2026-11-18, `sha-6ff19a0`, `k3s-gate2` passed, and the forced stall of 2026-11-16 was
+rerun ([plan, *Task 3 results*](../plans/2026-11-16-gateway-calls-carry-a-deadline.md#task-3-results)).
+event-service's calls in flight after the lift fell from 476, against the gateway's 200,
+to 53 against 86. The last failure still came 12.6s after the lift, not the ~6s hoped for:
+a fresh event-service pod stayed saturated with a small queue, so skipping late queries
+(C') would not have helped. What held it is an open question in the root register. The
+architect accepted the record on that evidence, 2026-11-18: "so accept it".

@@ -59,14 +59,15 @@ describing it for a week — because the fact had been copied rather than linked
 | How long does a checkout's hold outlive its payment window? | `docs/decisions/0036` | 30s, ten times the measured confirm lag p99 of 2.47s; an abandoned checkout ends at 6m30s; built and verified on k3s 2026-11-18 |
 | What does a payment get when it lands after its hold was released by a timeout or a cancel? | `docs/decisions/0032` | Its ticket if one is left, else a refund; `Release` carries a reason; built and verified on k3s 2026-11-14 |
 | What bounds the gateway's failure after a backend crash? | `docs/decisions/0035` | A gRPC channel not `READY` within 5s is replaced, since grpc-js never times out a connect; verified on k3s 2026-11-16: replaced every ~5s under a stalled connect, `READY` 1.5s after it lifted. What stalls the connect is still unknown |
-| What bounds the gateway's calls to a backend that answers slowly? | `docs/decisions/0037` | A deadline on every call from one interceptor: 5s, `CreateOrder` 65s; a TS backend still runs a call past its deadline (measured locally 2026-11-18); on k3s 2026-11-18 the backend's backlog fell from 2.4 times the gateway's to below it, but recovery took 12.6s after a stall, not ~6s; next step open |
-| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16 with 1 and 2 done |
+| What bounds the gateway's calls to a backend that answers slowly? | `docs/decisions/0037` | A deadline on every call from one interceptor: 5s, `CreateOrder` 65s; built and verified on k3s 2026-11-18: event-service's backlog after a stall fell from 2.4 times the gateway's to below it |
+| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16; 1–3 done 2026-11-18, 4 next and unplanned |
 
 ### Open
 
 | Question | Why it is open |
 |---|---|
 | Does `Confirm` contend on the hot row enough to matter? | `confirmReservationTx` holds the same `ticket_class` row to `COMMIT`, and every completed purchase pays it. On 2026-10-11, confirms on one ticket class at up to 25 a second, several at once over 8 partitions, showed no Lock wait in Postgres samples taken every 2s. Since 2026-10-12, up to 8 run at once ([0030](docs/decisions/0030-payment-confirmations-run-across-partitions.md)); past 25 a second it is unmeasured: `docs/plans/2026-10-09-capacity-on-a-bigger-box.md#results`. |
+| What holds the gateway failing for 12s after a stalled backend comes back? | On k3s 2026-11-18, with 0037's deadlines, the last failure came 12.6s after a forced stall was lifted, against ~6s for the channel bound alone. A fresh event-service pod's `/metrics` did not answer for those 12s while it held only 53 calls, all of which it answered `OK`. The run cannot tell the burst released on reconnect from a cold pod; a stall with the pod left running would: `docs/plans/2026-11-16-gateway-calls-carry-a-deadline.md#task-3-results`. |
 
 ## Services & ports
 

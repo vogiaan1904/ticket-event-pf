@@ -1,9 +1,6 @@
 # The gateway's gRPC calls carry a deadline
 
-**Status: Tasks 1–3 RUN 2026-11-18; A chosen, 5s and 65s for `CreateOrder` →
-[0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md). Task 3 met half its
-pass: the backend's backlog shrank, but recovery took 12.6s after the lift, not ~6s (see
-*Task 3 results*). What comes next is the architect's call.** Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
+**Status: COMPLETE 2026-11-18.** A built in `6ff19a0`, 5s and 65s for `CreateOrder`, accepted as [0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md#outcome). Task 3 met half its pass: the backend's backlog shrank, but recovery took 12.6s after the lift; that tail is an open question in the root register. Not in [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)'s
 ranking; where it slots is the architect's call.
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *What bounds the
@@ -54,7 +51,7 @@ helps if the queue is ahead of the handler, which Task 1 has to show.
 - [x] Locally, with event-svc's `docker-compose.dev.yml`: a call with a 1s deadline to a
   handler that sleeps 3s. Record whether the handler runs to the end, and whether a call
   queued behind a busy Prisma pool still starts after its deadline. That decides C.
-- [ ] Read the gateway's `tb_grpc_request_duration_seconds` p99 per method from the last
+- [ ] *Not done: the box was unreachable, and the values were chosen without it.* Read the gateway's `tb_grpc_request_duration_seconds` p99 per method from the last
   `k3s-load` run if its Prometheus data is still there, else the next one; a read's
   deadline sits well above its p99 under load.
 - [x] Put the values and A/B/C to the architect; record the call as 0037. → [0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md)
@@ -104,7 +101,7 @@ STALL stall-3 query-done took=8025ms
 - [x] Rerun the gateway plan's Task 3 Step 3, the forced stall, on the new build. Pass:
   event-service's `tb_grpc_in_flight` stays near the gateway's, and the last failure lands
   within about 6s of the lift. A box with steal is named as such in the result.
-- [x] `k3s-gate2` green. Accept 0037 with the run; move the register row to *Decided*.
+- [x] `k3s-gate2` green. Accept 0037 with the run; move the register row to *Decided*. → [0037](../decisions/0037-the-gateway-bounds-every-call-it-makes.md#outcome)
 
 ### Task 3 results
 

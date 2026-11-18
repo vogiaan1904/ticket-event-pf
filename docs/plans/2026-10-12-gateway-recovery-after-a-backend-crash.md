@@ -4,7 +4,7 @@
 re-planned around the idle channel (see *Results*). The 133s did not recur. The fix, a
 bound on the reconnect, is chosen → [0035](../decisions/0035-the-gateway-bounds-a-backend-reconnect.md);
 built; Task 3 RUN 2026-11-16 on `sha-4355dd3`: the bound fires and reconnects, but a
-loaded recovery still takes 16s, from the backlog rather than the channel (see *Results*). DONE 2026-11-16: 0035 accepted; the backlog is planned in [`2026-11-16-gateway-calls-carry-a-deadline.md`](2026-11-16-gateway-calls-carry-a-deadline.md).** Ranked first by
+loaded recovery still takes 16s, from the backlog rather than the channel (see *Results*). DONE 2026-11-16: 0035 accepted; Task 1's unticked steps are the plan as first written, which the re-planned runs replaced (*Results*); the backlog is planned in [`2026-11-16-gateway-calls-carry-a-deadline.md`](2026-11-16-gateway-calls-carry-a-deadline.md).** Ranked first by
 [0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md).
 
 **Question it serves:** the open row in the root `CLAUDE.md` register, *Why did one
