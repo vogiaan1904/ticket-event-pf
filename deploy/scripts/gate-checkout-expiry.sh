@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # An abandoned checkout, run on k3s by `make -C deploy k3s-gate-checkout-expiry`.
 # Ten tickets, three buyers: A orders and never pays, B orders and pays -> A's order
-# expires with its hold (~9m), after A's chair ended with its 5m window (0027);
+# expires with its hold (6m30s), after A's chair ended with its 5m window (0027);
 # B's order is untouched. Then A, and C who cancelled, pay late -> each still gets
 # its ticket, because stock is left (0032).
 # Rule: docs/design/admission-sizing.md#when-a-checkout-is-abandoned.
@@ -158,9 +158,9 @@ await_completed "$TOK_C" "$CODE_C" C
 [ "$(reservation "$CODE_C")" = CONFIRMED ] || fail "C's reservation is $(reservation "$CODE_C"), want CONFIRMED"
 echo "  C: cancelled, paid, COMPLETED with its seat re-acquired"
 
-echo "== 5. wait for A's order to expire (every 15s, up to 12m) =="
+echo "== 5. wait for A's order to expire (every 15s, up to 9m) =="
 EXPIRED_AT=""
-while [ $(( $(date +%s) - T0 )) -le 720 ]; do
+while [ $(( $(date +%s) - T0 )) -le 540 ]; do
   STATUS=$(order_status "$TOK_A" "$CODE_A")
   if [ "$STATUS" = EXPIRED ]; then
     EXPIRED_AT=$(date +%s)
@@ -169,12 +169,12 @@ while [ $(( $(date +%s) - T0 )) -le 720 ]; do
   echo "  $(( $(date +%s) - T0 ))s: A's order reads ${STATUS:-?}"
   sleep 15
 done
-[ -n "$EXPIRED_AT" ] || fail "A's order had not expired 12m after it was placed"
+[ -n "$EXPIRED_AT" ] || fail "A's order had not expired 9m after it was placed"
 AFTER=$(( EXPIRED_AT - T0 ))
 echo "  A's order expired ${AFTER}s after it was placed"
 
 echo "== 6. A's checkout expired everywhere; B's is untouched =="
-[ "$AFTER" -ge 510 ] && [ "$AFTER" -le 660 ] || fail "A's order expired at ${AFTER}s, want 510-660s (the hold is 540s)"
+[ "$AFTER" -ge 360 ] && [ "$AFTER" -le 510 ] || fail "A's order expired at ${AFTER}s, want 360-510s (the hold is 390s)"
 [ -z "$(redis ZSCORE "waitroom:$EVENT_ID:checkouts" "$SESSION_A")" ] || fail "A still holds a chair after its order expired"
 STORED=$(stored_status "$CODE_A")
 [ "$STORED" = TIMEOUT ] || fail "A's order is $STORED in DynamoDB, want TIMEOUT"

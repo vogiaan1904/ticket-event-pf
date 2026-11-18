@@ -4,7 +4,7 @@ The inventory hold an order takes must outlive the payment window, or a buyer
 who pays at the edge of it ends up paid with no seat.
 
 ```
-hold expiry = CheckoutLifetime = PaymentTimeout (6m) + ReservationHoldGrace (3m)
+hold expiry = CheckoutLifetime = PaymentTimeout (6m) + ReservationHoldGrace (30s)
 ```
 
 `internal/workflows/shared.go`. `CheckoutLifetime` is also the delay before
@@ -14,8 +14,11 @@ buyer's chair end together.
 ## Why the grace exists
 
 A payment completing at the very edge of `PaymentTimeout` still has to travel
-`webhook -> outbox -> Kafka -> ConfirmOrder`, and inventory's expiry worker
-sweeps every 60s. Without the slack the worker wins that race.
+`webhook -> outbox -> Kafka -> ConfirmOrder`. 30s is ten times that leg's p99,
+measured on k3s at 2.47s
+([0036](../../../docs/decisions/0036-a-hold-outlives-the-payment-window-by-30s.md)).
+Inventory's expiry worker frees only holds already past their expiry, so it never
+takes a hold inside its grace.
 
 ## What it does not cover
 

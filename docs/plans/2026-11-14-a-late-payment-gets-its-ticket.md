@@ -196,24 +196,24 @@ minutes would have absorbed it.
 One constant, `ReservationHoldGrace` in `services/order-svc/internal/workflows/shared.go`,
 sets the hold, `ExpireOrder`'s delay and so the chair: 9m becomes 6m30s.
 
-- [ ] **Replace the test that forbids it.** `TestReservationHoldGrace_CoversWorkerInterval`
+- [x] **Replace the test that forbids it.** `TestReservationHoldGrace_CoversWorkerInterval`
   requires the grace to exceed inventory's 60s sweep. The sweep frees only holds already
   past `expires_at` (`selectAndExpireBatch`, `expires_at <= now`), so it can never take a
   hold inside its grace; the test guards nothing. Its replacement states 0036's rule: the
   grace is at least 30s, ten times the measured confirm-lag p99, citing the plan's
   *Ticket 5 results*. Set the constant to 29s and see it red.
-- [ ] **Set `ReservationHoldGrace = 30 * time.Second`.** `CheckoutLifetime` and
+- [x] **Set `ReservationHoldGrace = 30 * time.Second`.** `CheckoutLifetime` and
   `reservationExpiry` follow. The comment above it loses the sweep sentence.
-- [ ] **Replay.** `go test ./internal/workflows/...`: the recorded histories still replay.
+- [x] **Replay.** `go test ./internal/workflows/...`: the recorded histories still replay.
   `CreateOrder` passes the expiry as activity input and `ExpireOrder`'s delay is set
   outside the workflow, so neither is a command replay checks; the run confirms it.
-- [ ] **The facts that say 9 minutes**, each in its one home:
+- [x] **The facts that say 9 minutes**, each in its one home:
   `services/order-svc/docs/RESERVATION_HOLD.md` (the formula),
   `services/order-svc/CLAUDE.md` (`CheckoutLifetime`, 9m), `services/inventory-svc/CLAUDE.md`
   (hold for ~9 min), `docs/RUNBOOK.md` (a hold expires 9 minutes after),
   `docs/design/admission-sizing.md` (released at about 9m). Decision records keep their
   9 minutes: they record what was true when made.
-- [ ] **The k3s gate's window.** `deploy/scripts/gate-checkout-expiry.sh` step 6 wants
+- [x] **The k3s gate's window.** `deploy/scripts/gate-checkout-expiry.sh` step 6 wants
   510–660s for a 540s hold; the hold is now 390s, so 360–510s, and the wait in step 5
   shortens to 9m. Its header says ~9m.
 - [ ] **On k3s**, after CI builds the commit: `REF=sha-<full sha> make -C deploy k3s-deploy`,

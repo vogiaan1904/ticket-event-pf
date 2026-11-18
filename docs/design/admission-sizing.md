@@ -220,7 +220,7 @@ who walks away sends nothing:
 
 | What | Today | Because |
 |---|---|---|
-| The inventory hold | released at about 9m | inventory's expiry worker, which tells no one |
+| The inventory hold | released at about 6m30s | inventory's expiry worker, which tells no one |
 | The waitroom chair | freed at 15m | the slot's own TTL; nobody publishes `checkout.expired` |
 | The order | `PENDING` for ever | nothing times an order out |
 | The buyer, with no waiting room | locked out of the event for 30 days | the purchase slot is keyed by buyer and event, and a retry resumes the `PENDING` order and its dead payment link until the slot's TTL |

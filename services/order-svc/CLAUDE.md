@@ -23,7 +23,7 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
   event-svc that predates the field sends.
 - `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` or `CANCELLED` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded. `PAYMENT_FAILED` is always refunded ([0032](../../docs/decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md)).
 - `ExpireOrder` — started by `Create` once the order exists, on the confirm-order
-  queue, delayed by `CheckoutLifetime` (the hold's own length, 9m). It flips `PENDING`
+  queue, delayed by `CheckoutLifetime` (the hold's own length, 6m30s). It flips `PENDING`
   to `TIMEOUT` with a conditional write; if it flipped, it releases the hold, frees the
   purchase slot and publishes `checkout.expired`. An order paid, failed or cancelled
   first is left alone. A failed start is logged, not returned

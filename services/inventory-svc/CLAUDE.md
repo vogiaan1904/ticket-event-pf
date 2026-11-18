@@ -11,7 +11,7 @@ High-throughput, gRPC-only ticket inventory (port **50057**, PostgreSQL via GORM
 ## Three-step reservation flow
 
 ```
-Reserve  → guarded UPDATE per class, hold quantity for ~9 min (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
+Reserve  → guarded UPDATE per class, hold quantity for 6m30s (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
 Confirm  → convert a held reservation into a sale (decrement reserved, increment sold)
 Release  → free a held reservation
 ```
