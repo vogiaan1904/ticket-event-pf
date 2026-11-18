@@ -49,13 +49,43 @@ helps if the queue is ahead of the handler, which Task 1 has to show.
 
 ## Task 1: Measure, then choose
 
-- [ ] Locally, with event-svc's `docker-compose.dev.yml`: a call with a 1s deadline to a
+- [x] Locally, with event-svc's `docker-compose.dev.yml`: a call with a 1s deadline to a
   handler that sleeps 3s. Record whether the handler runs to the end, and whether a call
   queued behind a busy Prisma pool still starts after its deadline. That decides C.
 - [ ] Read the gateway's `tb_grpc_request_duration_seconds` p99 per method from the last
   `k3s-load` run if its Prometheus data is still there, else the next one; a read's
   deadline sits well above its p99 under load.
 - [ ] Put the values and A/B/C to the architect; record the call as 0037.
+
+### Task 1 results
+
+**2026-11-18, locally.** event-svc built at `c440c7d`, its compose Postgres, and a scratch
+patch to `dist/` only: `findById` on an id `stall-*` runs `SELECT pg_sleep(n)` through
+Prisma and logs when the handler starts and when the query ends. The client is grpc-js
+with a 1s deadline.
+
+```
+### A: pool 10, 1 call, 3s handler, 1s deadline
+CLIENT stall-0 DEADLINE_EXCEEDED at +1007ms
+STALL stall-0 handler-start 1794973647667
+STALL stall-0 query-done 1794973650682 took=3015ms
+### B: pool 1, 4 calls, 2s each, 1s deadline
+CLIENT stall-0..3 DEADLINE_EXCEEDED at +1009..1012ms
+STALL stall-0..3 handler-start within 2ms of each other
+STALL stall-0 query-done took=2009ms
+STALL stall-1 query-done took=4011ms
+STALL stall-2 query-done took=6018ms
+STALL stall-3 query-done took=8025ms
+```
+
+- **A TS handler runs to the end after its deadline.** Neither grpc-js nor Nest tells it.
+- **The queue is in Prisma's pool, not ahead of the handler.** All four handlers started
+  at once; their queries ran in turn, the last 7s after its deadline. So C as written,
+  a check when the handler starts, sheds nothing: every handler starts in time.
+- The gateway's per-method p99 under load was not read: the box's API server refused the
+  connection on 2026-11-18. A checkout's p99 stays under 2s at the k3s door (0029), and
+  event-service's p99 was 2–5s under the forced stall
+  ([results](2026-10-12-gateway-recovery-after-a-backend-crash.md#results)).
 
 ## Task 2: Build the interceptor (TDD)
 
