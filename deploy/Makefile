@@ -153,7 +153,7 @@ eks-up: eks-guard  ## terraform apply — STARTS the $0.10/hr meter
 eks-kubeconfig:    ## Point kubectl at the cluster
 	aws eks update-kubeconfig --region $(REGION) --name $(EKS_CLUSTER)
 
-eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC + LB controller)
+eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC, LB controller, metrics-server, kube-prometheus-stack)
 	./scripts/eks-bootstrap.sh
 
 eks-deploy:        ## Deploy the chart from ECR and wait for the ALB to serve
