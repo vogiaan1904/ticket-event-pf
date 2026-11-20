@@ -10,33 +10,9 @@ CHART="$HERE/../helm/ticketbottle"
 NS=ticketbottle
 GEN=/tmp/tb-eks-values.yaml
 
-# Deploy an immutable sha- tag, not :latest. A moving tag leaves the pod template
-# unchanged, so `helm upgrade` rolls nothing and the running build is unknowable;
-# a later HPA scale-out pulls a newer image and serves two versions at once.
-#
-# Resolve to the newest origin/main commit that actually has an image: CI only
-# builds on changes under services/ and deploy/adapters/, so a chart- or
-# script-only commit advances main without producing one.
-REGION=${REGION:-us-east-1}
-git -C "$HERE/.." fetch origin main --quiet 2>/dev/null || true
-
-resolve_tag() {
-  local sha
-  for sha in $(git -C "$HERE/.." rev-list -n 30 origin/main); do
-    if aws ecr describe-images --region "$REGION" --repository-name ticketbottle/gateway \
-         --image-ids imageTag="sha-$sha" >/dev/null 2>&1; then
-      echo "sha-$sha"
-      return 0
-    fi
-  done
-  return 1
-}
-
-if [ -z "${IMAGE_TAG:-}" ] && ! IMAGE_TAG=$(resolve_tag); then
-  echo "no built image for any of the last 30 commits on origin/main"
-  echo "  origin/main is $(git -C "$HERE/.." rev-parse --short origin/main)"
-  echo "  gh run list --branch main --limit 3"
-  exit 1
+# The build ECR's :$REF points at, as k3s-deploy does; IMAGE_TAG overrides it.
+if [ -z "${IMAGE_TAG:-}" ]; then
+  IMAGE_TAG=$("$HERE/image-tag.sh" "${REF:-dev}")
 fi
 
 REGISTRY=$(cd "$EKS_ENV" && terraform output -raw ecr_registry)

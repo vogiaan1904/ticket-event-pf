@@ -75,9 +75,7 @@ REF ?= dev
 HELM_EXTRA ?=
 
 k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel must be open)
-	@tags=$$(aws ecr describe-images --region us-east-1 --repository-name ticketbottle/gateway \
-	    --image-ids imageTag=$(REF) --query 'imageDetails[0].imageTags' --output text | tr '\t' '\n' | grep '^sha-'); \
-	 [ "$$(echo "$$tags" | grep -c .)" = 1 ] || { echo "REFUSING: :$(REF) must name exactly one sha- build, found: $$(echo $${tags:-none})"; exit 1; }; \
+	@tags=$$(./scripts/image-tag.sh $(REF)) || exit 1; \
 	 echo "deploying $$tags (:$(REF))"; \
 	 KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
@@ -156,8 +154,8 @@ eks-kubeconfig:    ## Point kubectl at the cluster
 eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC, LB controller, metrics-server, kube-prometheus-stack)
 	./scripts/eks-bootstrap.sh
 
-eks-deploy:        ## Deploy the chart from ECR and wait for the ALB to serve
-	./scripts/eks-deploy.sh
+eks-deploy:        ## Deploy the build ECR's :$(REF) points at, and wait for the ALB to serve
+	REF=$(REF) ./scripts/eks-deploy.sh
 
 eks-url:           ## Print the ALB hostname
 	@kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
