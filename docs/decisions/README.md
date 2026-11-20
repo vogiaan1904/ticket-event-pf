@@ -214,4 +214,10 @@ the records, never the block.
 |---|---|---|---|---|---|
 | [0035](0035-the-gateway-bounds-a-backend-reconnect.md) | What bounds the gateway's failure after a backend crash, while its trigger is unknown? | Each gRPC client's channel is replaced when it stays `CONNECTING` or `TRANSIENT_FAILURE` for 5s | Shorter kernel SYN retries in the gateway pod; more traced crashes to find the trigger first | Our own wrapper around grpc-js's channel, and a fix shipped before the cause is known | accepted |
 | [0037](0037-the-gateway-bounds-every-call-it-makes.md) | What bounds the gateway's calls to a backend that answers slowly? | A deadline on every call from one gateway interceptor: 5s, and 65s for `CreateOrder` | Also cancelling the call when the HTTP client leaves; TS backends skipping a query once its call's deadline has passed | A read slowed past 5s answers 504 instead of eventually succeeding; a TS backend still drains its own backlog | accepted |
+
+### k3s-access
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0038](0038-the-k3s-box-is-reached-through-ssm-not-an-ip-allowlist.md) | How does the workstation reach the k3s box when its egress IP will not hold still? | SSH carried by an SSM Session Manager session to the instance id; no inbound rule on the box | Widening the SSH allowlist to the carrier's `/19` | A local `session-manager-plugin`, AWS credentials for every tunnel, an extra hop through SSM's regional endpoint, and the agent must register before the first tunnel | accepted |
 <!-- decisions:index:end -->

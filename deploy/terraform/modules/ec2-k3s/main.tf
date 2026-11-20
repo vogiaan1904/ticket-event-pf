@@ -12,26 +12,12 @@ resource "aws_key_pair" "this" {
 }
 
 resource "aws_security_group" "this" {
-  name        = "ticketbottle-k3s"
+  name = "ticketbottle-k3s"
+  # Stale since 0038, kept: a new description replaces this attached group.
   description = "k3s box: SSH from my IP only; all egress"
   vpc_id      = var.vpc_id
-  ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip_cidr]
-  }
-  # EC2 Instance Connect proxies the SSH session from AWS's own IP, not the
-  # browser's -- a fallback path that works even when var.my_ip_cidr can't
-  # reach the box. us-east-1 range: ip-ranges.json, service EC2_INSTANCE_CONNECT.
-  ingress {
-    description = "EC2 Instance Connect"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["18.206.107.24/29"]
-  }
+  # No inbound at all: the box is reached through SSM Session Manager (0038).
+  ingress = []
   egress {
     from_port   = 0
     to_port     = 0
@@ -89,6 +75,12 @@ resource "aws_iam_role_policy" "node" {
   name   = "k3s-node"
   role   = aws_iam_role.node.id
   policy = data.aws_iam_policy_document.node.json
+}
+
+# Lets the SSM agent register, so Session Manager can open SSH to the box (0038).
+resource "aws_iam_role_policy_attachment" "ssm" {
+  role       = aws_iam_role.node.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
 resource "aws_iam_instance_profile" "node" {

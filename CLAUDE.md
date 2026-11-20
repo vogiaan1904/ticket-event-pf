@@ -108,7 +108,8 @@ plus the Terraform under `deploy/terraform/`. Images are built only by CI and pu
 ECR. Operations live in `deploy/Makefile`:
 
 ```bash
-make -C deploy start-ec2-k3s   # start the box; prints the SSH tunnel to open
+make -C deploy start-ec2-k3s   # start the box; waits until SSM can reach it
+make -C deploy tunnel-ec2-k3s  # SSH over SSM; blocks, own terminal (0038)
 make -C deploy k3s-kubeconfig
 make -C deploy k3s-deploy      # helm upgrade from the :dev images in ECR
 make -C deploy k3s-gate2       # full purchase-flow acceptance test
