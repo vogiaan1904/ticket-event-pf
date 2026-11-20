@@ -24,7 +24,7 @@ describing it for a week — because the fact had been copied rather than linked
 
 | Question | Owned by | State |
 |---|---|---|
-| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2) built; (b)–(f) specified, unbuilt |
+| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2) built; (b)–(d) planned before EKS's door is measured ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); (e)–(f) deferred |
 | What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
 | Why does the checkout miss its 2s SLO on the k3s box? | `docs/plans/2026-09-27-checkout-latency-decomposition.md` | Measured 2026-09-27: the box saturates at ten buyers; the opening burst queues in Temporal for up to 8s |
 | In what order are queued buyers admitted? | `services/waitroom-svc/CLAUDE.md` | Draw before sale open, arrival after; nothing admitted before the sale opens; 2026-09-23 |
@@ -60,7 +60,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What does a payment get when it lands after its hold was released by a timeout or a cancel? | `docs/decisions/0032` | Its ticket if one is left, else a refund; `Release` carries a reason; built and verified on k3s 2026-11-14 |
 | What bounds the gateway's failure after a backend crash? | `docs/decisions/0035` | A gRPC channel not `READY` within 5s is replaced, since grpc-js never times out a connect; verified on k3s 2026-11-16: replaced every ~5s under a stalled connect, `READY` 1.5s after it lifted. What stalls the connect is still unknown |
 | What bounds the gateway's calls to a backend that answers slowly? | `docs/decisions/0037` | A deadline on every call from one interceptor: 5s, `CreateOrder` 65s; built and verified on k3s 2026-11-18: event-service's backlog after a stall fell from 2.4 times the gateway's to below it |
-| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16; 1–3 done 2026-11-18, 4 next and unplanned |
+| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16; 1–3 done 2026-11-18; 4 planned 2026-11-20 after RDS, on non-burstable nodes ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)) |
 
 ### Open
 

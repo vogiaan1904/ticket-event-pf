@@ -194,6 +194,7 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0031](0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md) | What is the next work, in order, now that 0030 removed the first throughput wall? | 1 the gateway's ~40s loss after a backend crash; 2 checkout tokens the waitroom revokes but nobody checks; 3 one TS service converged to the layout; 4 EKS's door measured. Capacity past both doors waits | The next wall, about 24 a second in Temporal and its Postgres, and the stateful-tier phases (b)–(f) | The ceiling past 24 a second, and which part of Temporal's path sets it, stay unmeasured until a door is planned above about 20 a second | accepted |
+| [0039](0039-eks-gets-rds-before-its-door-is-measured.md) | What does 0031's item 4, EKS's door measured, measure, and on what? | Stateful-tier phases (b)–(d) first: three RDS instances, `shared` on `db.t4g.small`; then the door, swept on non-burstable spot nodes that become EKS's default | The door on today's in-cluster Postgres and burstable `t3`/`t3a` spot nodes | About $0.45 a cluster-hour instead of $0.31; RDS adds 15–20 minutes to each session's start; phases (e)–(f) stay deferred, so a node holding Redpanda or Redis still cannot be killed | proposed |
 
 ### late-payment
 
