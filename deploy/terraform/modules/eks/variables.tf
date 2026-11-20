@@ -24,7 +24,6 @@ variable "my_ip_cidr" {
 
 variable "node_instance_types" {
   type        = list(string)
-  default     = ["t3.large", "t3a.large"]
   description = "Multiple types widen the spot capacity pool and cut interruption risk."
 }
 

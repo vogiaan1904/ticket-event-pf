@@ -28,7 +28,7 @@ The chart is the same. The app topology is the same. Four things change:
 | Concern | k3s box | EKS | Why it matters |
 |---|---|---|---|
 | **Control plane** | k3s process on the instance you own | AWS-managed, multi-AZ, you never see the masters | managed vs self-hosted trade-off |
-| **Nodes** | the same one instance | managed node group on **spot** (`t3.large`/`t3a.large`), placed by `private_nodes` (§ node placement) | node lifecycle, spot interruption, drain |
+| **Nodes** | the same one instance | managed node group on **spot** (`m6a.large`/`m6i.large`, non-burstable: [0039](../../../../docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)), placed by `private_nodes` (§ node placement) | node lifecycle, spot interruption, drain |
 | **Ingress** | NodePort 30000 + SSH tunnel | **ALB** via the AWS Load Balancer Controller, real public hostname | `Ingress` → cloud LB, target groups, health checks |
 | **AWS credentials** | EC2 **instance profile** (node-wide) | **IRSA** — per-ServiceAccount IAM role via OIDC | per-workload least privilege |
 
@@ -109,8 +109,8 @@ documents. Both are real; they differ in price and in what they prove.
 
 | `private_nodes` | Nodes | Egress | Session cost | What it is |
 |---|---|---|---|---|
-| `false` (default) | public subnets | straight out the IGW | $0.73 | AWS's "using only public subnets" layout |
-| `true` | private subnets | NAT gateway created in `envs/eks` | ~$0.95 | AWS's **recommended** layout |
+| `false` | public subnets | straight out the IGW | $0.73 | AWS's "using only public subnets" layout |
+| `true` (default, 0039) | private subnets | NAT gateway created in `envs/eks` | ~$0.95 | AWS's **recommended** layout |
 
 **Why `false` is defensible and not sloppy.** AWS documents public-subnet nodes as
 one of three valid configurations, with one condition: *"While not recommended, if

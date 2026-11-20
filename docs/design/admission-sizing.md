@@ -76,8 +76,10 @@ nothing for purchases.
 **The t3.large is a testbed choice.** It is cheap because the box is stopped or
 idle most of the month, and at full CPU it costs more than a non-burstable
 instance of the same size. A production target sizes on a non-burstable instance,
-whose capacity does not depend on a credit balance. The EKS nodes are burstable
-too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
+whose capacity does not depend on a credit balance. The EKS nodes are
+non-burstable spot `m6a.large` or `m6i.large` for that reason
+([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); spot picks
+which of the two runs, so a sweep records the type.
 
 ## How a target's door speed is found
 
