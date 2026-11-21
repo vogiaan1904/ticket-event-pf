@@ -3,7 +3,7 @@
 
 resource "aws_security_group" "this" {
   name        = var.identifier
-  description = "Postgres from the cluster's nodes only"
+  description = "Postgres from the cluster nodes only"
   vpc_id      = var.vpc_id
   tags        = merge(var.tags, { Name = var.identifier })
 }
