@@ -46,6 +46,7 @@ message Order {
 message OrderItem {
     string ticket_class_id = 1;
     int32 quantity = 2;
+    // One ticket's price at purchase; the line costs quantity times this.
     int64 price_cents = 3;
 }
 

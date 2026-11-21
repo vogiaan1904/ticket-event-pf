@@ -21,7 +21,7 @@ type implReservationService struct {
 type ReservationService interface {
 	Reserve(ctx context.Context, in ReserveInput) error
 	Confirm(ctx context.Context, oCode string) error
-	Release(ctx context.Context, oCode string) error
+	Release(ctx context.Context, oCode string, reason ReleaseReason) error
 	BatchExpireReservations(ctx context.Context, batchSize int) (int, error)
 }
 
@@ -175,7 +175,7 @@ func (s implReservationService) Confirm(ctx context.Context, oCode string) error
 }
 
 // confirmDelta splits a confirm between the hold this order still owns and
-// free stock it has to re-take because the expiry worker released the hold.
+// free stock it has to re-take because its hold was already released as EXPIRED.
 type confirmDelta struct {
 	fromReserved int
 	fromFree     int
@@ -222,15 +222,15 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 			d.fromReserved += r.Qty
 
 		case models.ReservationStatusExpired:
-			// The worker already handed the stock back. Payment succeeded
-			// anyway, so try to take it again out of what is free.
+			// Swept by the worker, or released when its checkout ended: the stock
+			// is already back. Payment succeeded anyway, so re-take it from free.
 			s.l.Warnf(ctx, "service.reservation.Confirm: reservation %d for order_code=%s was already expired; attempting re-acquire of qty=%d",
 				r.ID, oCode, r.Qty)
 			d.fromFree += r.Qty
 
 		default:
-			// CONFIRMED mixed with unconfirmed, or CANCELLED: an order half
-			// applied or explicitly released. Never guess -- surface it.
+			// CONFIRMED mixed with unconfirmed, or CANCELLED: half applied, or
+			// undone on purpose (compensation, failed payment). Never guess.
 			s.l.Warnf(ctx, "service.reservation.Confirm: conflict for reservation %d (status=%s)", r.ID, r.Status)
 			return ErrStateConflict
 		}
@@ -284,14 +284,14 @@ func (s implReservationService) confirmReservationTx(ctx context.Context, tx *go
 	return nil
 }
 
-func (s implReservationService) Release(ctx context.Context, oCode string) error {
+func (s implReservationService) Release(ctx context.Context, oCode string, reason ReleaseReason) error {
 	err := s.repo.GetDB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		return s.cancelReservationTx(ctx, tx, oCode)
+		return s.cancelReservationTx(ctx, tx, oCode, reason)
 	})
 	return err
 }
 
-func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gorm.DB, oCode string) error {
+func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gorm.DB, oCode string, reason ReleaseReason) error {
 	var rs []models.Reservation
 	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("order_code = ?", oCode).Find(&rs).Error; err != nil {
@@ -345,16 +345,20 @@ func (s implReservationService) cancelReservationTx(ctx context.Context, tx *gor
 		}
 	}
 
+	to := models.ReservationStatusCancelled
+	if reason == ReleaseCheckoutEnded {
+		to = models.ReservationStatusExpired
+	}
 	if len(rIDs) > 0 {
 		if err := tx.Model(&models.Reservation{}).
 			Where("id IN ?", rIDs).
-			Update("status", models.ReservationStatusCancelled).Error; err != nil {
+			Update("status", to).Error; err != nil {
 			s.l.Errorf(ctx, "service.reservation.Release.UpdateReservations: %v", err)
 			return err
 		}
 	}
 
-	s.l.Infof(ctx, "service.reservation.Release: cancelled %d reservations for order_code=%s", len(rIDs), oCode)
+	s.l.Infof(ctx, "service.reservation.Release: released %d reservations as %s for order_code=%s", len(rIDs), to, oCode)
 	return nil
 }
 

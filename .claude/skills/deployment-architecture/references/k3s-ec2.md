@@ -33,8 +33,8 @@ Just `module.ec2_k3s`, fed the VPC id, the **first** public subnet, and the Dyna
 | AMI | Amazon Linux 2023, x86_64, resolved from the **SSM public parameter** | Never a hard-coded AMI id — those are region-specific and go stale. |
 | `aws_instance` | `t3.large`, **50GB gp3** root volume (`root_volume_gb`), `associate_public_ip_address = true` | **Ephemeral** auto-assigned IP, deliberately *not* an Elastic IP — an EIP bills 24/7 even while the instance is stopped (see cost reference). The IP therefore **changes on every start**. |
 | `metadata_options` | `http_tokens = "required"` (IMDSv2), `hop_limit = 2` | IMDSv2 blocks the classic SSRF→credential-theft path. Hop limit 2 lets a *pod* (one extra network hop) still reach IMDS. |
-| Security group | Ingress **TCP 22 from `var.my_ip_cidr` only**; all egress | There is **no** public HTTP ingress. Nothing but your own IP can open a socket to this box. |
-| IAM role `ticketbottle-k3s-node` | DynamoDB CRUD+Query+Scan scoped to *that table and its indexes*; `ecr:GetAuthorizationToken` on `*` (the API requires it); ECR pull scoped to `repository/ticketbottle/*` | Least privilege with the one unavoidable wildcard called out. |
+| Security group | **No ingress**; all egress | Nothing on the internet can open a socket to this box. SSH arrives through SSM Session Manager, which the agent dials out to; IAM decides who connects. Why: `docs/decisions/0038`. |
+| IAM role `ticketbottle-k3s-node` | DynamoDB CRUD+Query+Scan scoped to *that table and its indexes*; `ecr:GetAuthorizationToken` on `*` (the API requires it); ECR pull scoped to `repository/ticketbottle/*` | Least privilege with the one unavoidable wildcard called out. Plus the managed `AmazonSSMManagedInstanceCore`, so the SSM agent registers. |
 | Key pair | `ticketbottle-k3s`, from a local public key path | |
 
 ### user-data — what happens on first boot
@@ -155,18 +155,18 @@ Nothing is ever built on a developer machine or on the box. CI is the only build
 ## Operating it — the k3s section of `deploy/Makefile`
 
 ```bash
-make -C deploy start-ec2-k3s     # start + wait + print the fresh ssh command (IP changed!)
+make -C deploy start-ec2-k3s     # start + wait until the SSM agent is Online
+make -C deploy tunnel-ec2-k3s    # blocks; its own terminal (needs session-manager-plugin)
 make -C deploy k3s-kubeconfig    # scp /etc/rancher/k3s/k3s.yaml -> /tmp/k3s.yaml
-# open the tunnel printed above, then:
 export KUBECONFIG=/tmp/k3s.yaml
 make -C deploy k3s-gate2         # purchase flow against GW=http://localhost:3000/api
 make -C deploy stop-ec2-k3s      # THE COST SWITCH — compute billing halts, EBS survives
 make -C deploy k3s-ip            # current public IP
 ```
 
-**Access is SSH-tunnel-only.** `localhost:3000` on the workstation forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives k3s (through the tunnel) and EKS (through the ALB) unchanged.
+**Access is SSH-tunnel-only, over SSM.** `ssh` targets the instance id through `ProxyCommand aws ssm start-session` (`SSH_OPTS` in the Makefile), so the IP neither changes the command nor needs allowlisting. `localhost:3000` on the workstation forwards to the box's NodePort 30000 (the gateway). There is no ALB, no public HTTP, no ingress hostname. The `gate1-purchase-flow.sh` script was parameterised with `GW=` precisely so the same acceptance test drives k3s (through the tunnel) and EKS (through the ALB) unchanged.
 
-The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` in `k3s-kubeconfig`) — the box's IP is ephemeral and gets recycled by AWS, so pinning it would produce a false MITM warning on every start.
+The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` in `SSH_OPTS`): a replaced box comes back with a new key, and SSM has already tied the session to the instance id through IAM.
 
 ---
 
@@ -177,7 +177,7 @@ The host key is deliberately **not persisted** (`UserKnownHostsFile=/dev/null` i
 
 ## Known rough edges
 
-- **The IP changes on every start.** Every session needs a fresh `terraform refresh` + new tunnel. A Route 53 A-record update hook is the documented nicety, not built.
+- **The SSM agent registers about 1–2 minutes after boot.** `start-ec2-k3s` waits for it; a tunnel opened sooner fails `TargetNotConnected`.
 - **Single node, single replica, no HA.** Intentional here; horizontal scaling and node-failure recovery are properties of the EKS target.
 - **Secrets are plain K8s Secrets/ConfigMaps.** External Secrets Operator with AWS Secrets Manager is the documented next step.
 - **`payment-webhook` is a simulated provider**, not a real PSP callback. A Lambda + API Gateway payment path is optional future work.

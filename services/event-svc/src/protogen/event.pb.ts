@@ -115,7 +115,7 @@ export interface UpdateEventRequest {
   startDate?: string | undefined;
   endDate?: string | undefined;
   thumbnailUrl?: string | undefined;
-  venueName?: string | undefined;
+  venue?: string | undefined;
   street?: string | undefined;
   city?: string | undefined;
   country?: string | undefined;

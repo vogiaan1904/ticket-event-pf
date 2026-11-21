@@ -48,4 +48,8 @@ helm upgrade --install metrics-server metrics-server/metrics-server \
 
 kubectl -n kube-system rollout status deploy/metrics-server --timeout=5m
 
+echo "== 4. kube-prometheus-stack =="
+# values-eks.yaml renders ServiceMonitors and a PrometheusRule; their CRDs come from here.
+"$HERE/obs-install.sh"
+
 echo "bootstrap complete"

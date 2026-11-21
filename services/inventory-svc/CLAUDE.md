@@ -11,7 +11,7 @@ High-throughput, gRPC-only ticket inventory (port **50057**, PostgreSQL via GORM
 ## Three-step reservation flow
 
 ```
-Reserve  → guarded UPDATE per class, hold quantity for ~9 min (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
+Reserve  → guarded UPDATE per class, hold quantity for 6m30s (PaymentTimeout + ReservationHoldGrace, set by order-svc), create Reservation
 Confirm  → convert a held reservation into a sale (decrement reserved, increment sold)
 Release  → free a held reservation
 ```
@@ -68,8 +68,8 @@ All of this is still interim — versioned migrations are the target. Default Po
 `Reserve`/`Confirm`/`Release` key off `order_code`, and idempotency is scoped **by reservation status** — an order code alone is not enough to decide.
 
 - **`Reserve`** — an order with any `ACTIVE` or `CONFIRMED` row is a retry of a call that already succeeded: no-op, success. An order whose rows are **all terminal** (`EXPIRED`/`CANCELLED`) returns `ErrStateConflict`; returning success there would hand the caller an order holding zero inventory.
-- **`Confirm`** — all-`CONFIRMED` is a no-op. An `ACTIVE` row **past its `expires_at` is still confirmed**: it continues to hold its `reserved` quantity until the worker sweeps it, so the reserved→sold move is safe and refusing it stranded paid orders. An `EXPIRED` row (already swept) is **re-acquired** from free stock; only if the stock is genuinely gone does it return `ErrStateConflict`, which the caller must treat as refund-required.
-- **`Release`** — an unknown order code or all-terminal rows are a no-op; a `CONFIRMED` row returns `ErrStateConflict`.
+- **`Confirm`** — all-`CONFIRMED` is a no-op. An `ACTIVE` row **past its `expires_at` is still confirmed**: it continues to hold its `reserved` quantity until the worker sweeps it, so the reserved→sold move is safe and refusing it stranded paid orders. An `EXPIRED` row (swept by the worker, or released with `RELEASE_REASON_CHECKOUT_ENDED`) is **re-acquired** from free stock; only if the stock is genuinely gone does it return `ErrStateConflict`, which the caller must treat as refund-required.
+- **`Release`** — an unknown order code or all-terminal rows are a no-op; a `CONFIRMED` row returns `ErrStateConflict`. Its reason picks the terminal status: `CHECKOUT_ENDED` (timeout, buyer cancel) writes `EXPIRED`, so a late payment can re-acquire; unspecified (compensation, failed payment) writes `CANCELLED`, which `Confirm` refuses.
 
 Order-svc sets the hold to `PaymentTimeout + ReservationHoldGrace` (`internal/workflows/shared.go`) so the hold strictly outlives the payment window — the expiry worker must never win that race.
 

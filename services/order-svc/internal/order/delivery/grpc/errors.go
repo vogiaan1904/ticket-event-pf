@@ -32,6 +32,7 @@ var (
 
 	// Checkout errors
 	ErrGRPCInvalidCheckoutToken = pkgErrors.NewGRPCError(codes.Unauthenticated, "ORD016", "Invalid checkout token")
+	ErrGRPCWaitroomUnavailable  = pkgErrors.NewGRPCError(codes.Unavailable, "ORD021", "Waitroom unavailable")
 
 	ErrGRPCRequestTimeout = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "ORD017", "Order creation timed out")
 
@@ -83,6 +84,8 @@ func (s *grpcService) mapError(err error) error {
 		return ErrGRPCTooManyTicketsInOrder
 	case errors.Is(err, order.ErrInvalidCheckoutToken):
 		return ErrGRPCInvalidCheckoutToken
+	case errors.Is(err, order.ErrWaitroomUnavailable):
+		return ErrGRPCWaitroomUnavailable
 	case errors.Is(err, order.ErrRequestTimeout):
 		return ErrGRPCRequestTimeout
 	case errors.Is(err, order.ErrOrderAlreadyProcessed):

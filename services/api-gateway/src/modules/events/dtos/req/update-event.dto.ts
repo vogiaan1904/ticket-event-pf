@@ -1,6 +1,5 @@
-import { IsYYYYMMDD } from '@/common/decorators/isYYYYMMDD.decorator';
 import { Transform, Type } from 'class-transformer';
-import { IsArray, IsOptional, IsString, IsUrl, IsUUID } from 'class-validator';
+import { IsArray, IsDateString, IsOptional, IsString, IsUrl, IsUUID } from 'class-validator';
 
 export class UpdateEventDto {
   @IsOptional()
@@ -12,11 +11,11 @@ export class UpdateEventDto {
   description?: string;
 
   @IsOptional()
-  @IsYYYYMMDD()
+  @IsDateString()
   startDate?: string;
 
   @IsOptional()
-  @IsYYYYMMDD()
+  @IsDateString()
   endDate?: string;
 
   @IsOptional()

@@ -22,7 +22,7 @@ import {
 export class ZalopayGateWay implements PaymentGatewayInterface {
   private readonly logger = new Logger(ZalopayGateWay.name);
   private readonly ORDER_TIMEOUT_SECONDS = 300; //5 minutes
-  private readonly CREATE_ZALOPAY_PAYMENT_LINK_URL = 'https://sb-openapi.zalopay.vn/v2/create';
+  private readonly createUrl: string;
   private readonly appID: number;
   private readonly key1: string;
   private readonly key2: string;
@@ -36,6 +36,7 @@ export class ZalopayGateWay implements PaymentGatewayInterface {
     this.appID = this.configService.zalopayConfig.appID;
     this.key1 = this.configService.zalopayConfig.key1;
     this.key2 = this.configService.zalopayConfig.key2;
+    this.createUrl = this.configService.zalopayConfig.createUrl;
     this.webhookBaseUrl = this.configService.appConfig.webhookBaseUrl;
   }
 
@@ -113,7 +114,7 @@ export class ZalopayGateWay implements PaymentGatewayInterface {
   async createPaymentLink(input: CreatePaymentLinkInput): Promise<CreatePaymentLinkOutput> {
     const body = this.initZaloPayRequestBody(input);
     const res: AxiosResponse = await this.httpService.axiosRef.post(
-      this.CREATE_ZALOPAY_PAYMENT_LINK_URL,
+      this.createUrl,
       body,
       {
         headers: {

@@ -20,13 +20,12 @@ func TestReservationExpiry_OutlivesPaymentWindow(t *testing.T) {
 	}
 }
 
-// The grace has to be big enough to cover webhook -> outbox -> Kafka ->
-// ConfirmOrder, plus one full sweep of the inventory expiry worker (60s).
-func TestReservationHoldGrace_CoversWorkerInterval(t *testing.T) {
-	const workerInterval = time.Minute
+// Invariant: the grace is at least ten times the measured confirm-lag p99 (2.47s).
+// See docs/plans/2026-11-14-a-late-payment-gets-its-ticket.md#ticket-5-results.
+func TestReservationHoldGrace_CoversTenTimesConfirmLag(t *testing.T) {
+	const minGrace = 30 * time.Second
 
-	if ReservationHoldGrace <= workerInterval {
-		t.Fatalf("ReservationHoldGrace = %v, must exceed the inventory expiry worker interval of %v",
-			ReservationHoldGrace, workerInterval)
+	if ReservationHoldGrace < minGrace {
+		t.Fatalf("ReservationHoldGrace = %v, must be at least %v (0036)", ReservationHoldGrace, minGrace)
 	}
 }

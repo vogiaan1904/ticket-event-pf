@@ -49,6 +49,9 @@ under 2s against an SLO of 99%:
   target. The chart default stays 10 and counts as unmeasured.
 - Room size is each event's tickets available, read each tick: *Room size per event*
   below.
+- A door must stay below the confirm leg's capacity, which its sizing does not
+  measure: about partitions ÷ confirm latency
+  ([0030](../decisions/0030-payment-confirmations-run-across-partitions.md)).
 
 ## What "the machine" is
 
@@ -73,8 +76,10 @@ nothing for purchases.
 **The t3.large is a testbed choice.** It is cheap because the box is stopped or
 idle most of the month, and at full CPU it costs more than a non-burstable
 instance of the same size. A production target sizes on a non-burstable instance,
-whose capacity does not depend on a credit balance. The EKS nodes are burstable
-too (spot `t3.large` and `t3a.large`), and spot picks which of the two runs.
+whose capacity does not depend on a credit balance. The EKS nodes are
+non-burstable spot `m6a.large` or `m6i.large` for that reason
+([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); spot picks
+which of the two runs, so a sweep records the type.
 
 ## How a target's door speed is found
 
@@ -217,7 +222,7 @@ who walks away sends nothing:
 
 | What | Today | Because |
 |---|---|---|
-| The inventory hold | released at about 9m | inventory's expiry worker, which tells no one |
+| The inventory hold | released at about 6m30s | inventory's expiry worker, which tells no one |
 | The waitroom chair | freed at 15m | the slot's own TTL; nobody publishes `checkout.expired` |
 | The order | `PENDING` for ever | nothing times an order out |
 | The buyer, with no waiting room | locked out of the event for 30 days | the purchase slot is keyed by buyer and event, and a retry resumes the `PENDING` order and its dead payment link until the slot's TTL |

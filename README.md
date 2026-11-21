@@ -238,7 +238,7 @@ Infrastructure is Terraform, split into composable modules under `deploy/terrafo
 
 **No workload holds a long-lived AWS credential.** CI authenticates through GitHub OIDC federation, instances through an EC2 instance profile, and pods on EKS through IRSA. The EKS node role is deliberately granted no DynamoDB access, and the node launch template caps the IMDS hop limit at 1 so a pod cannot reach that role to begin with — a working purchase flow is therefore proof that the pod-level identity is what authenticated.
 
-EKS nodes default to public subnets, which AWS documents as a valid layout on the condition that security groups carry the exposure; the cluster admits nothing from `0.0.0.0/0` and the API endpoint is pinned to one address. Setting `private_nodes = true` moves them to private subnets behind a NAT gateway — AWS's recommended layout — for roughly $0.22 on a two-hour session, since the cluster is ephemeral and NAT bills hourly.
+EKS nodes default to private subnets behind a NAT gateway, AWS's recommended layout, for roughly $0.22 on a two-hour session, since the cluster is ephemeral and NAT bills hourly. `private_nodes = false` puts them in public subnets instead, which AWS documents as valid when security groups carry the exposure: the cluster admits nothing from `0.0.0.0/0` and the API endpoint is pinned to one address.
 
 See [`deploy/README.md`](deploy/README.md) for the chart and infrastructure detail.
 

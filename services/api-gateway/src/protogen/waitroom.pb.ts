@@ -58,6 +58,16 @@ export interface QueueStatusResponse {
   paused: boolean;
 }
 
+export interface ValidateCheckoutTokenRequest {
+  token: string;
+  userId: string;
+  eventId: string;
+}
+
+export interface ValidateCheckoutTokenResponse {
+  sessionId: string;
+}
+
 export interface LeaveQueueRequest {
   sessionId: string;
   userId: string;
@@ -94,6 +104,10 @@ export interface WaitroomServiceClient {
   leaveQueue(request: LeaveQueueRequest): Observable<LeaveQueueResponse>;
 
   healthCheck(request: HealthCheckRequest): Observable<HealthCheckResponse>;
+
+  /** Whether a checkout token still admits its holder; order-svc asks before a checkout. */
+
+  validateCheckoutToken(request: ValidateCheckoutTokenRequest): Observable<ValidateCheckoutTokenResponse>;
 }
 
 export interface WaitroomServiceController {
@@ -110,11 +124,17 @@ export interface WaitroomServiceController {
   healthCheck(
     request: HealthCheckRequest,
   ): Promise<HealthCheckResponse> | Observable<HealthCheckResponse> | HealthCheckResponse;
+
+  /** Whether a checkout token still admits its holder; order-svc asks before a checkout. */
+
+  validateCheckoutToken(
+    request: ValidateCheckoutTokenRequest,
+  ): Promise<ValidateCheckoutTokenResponse> | Observable<ValidateCheckoutTokenResponse> | ValidateCheckoutTokenResponse;
 }
 
 export function WaitroomServiceControllerMethods() {
   return function (constructor: Function) {
-    const grpcMethods: string[] = ["joinQueue", "getQueueStatus", "leaveQueue", "healthCheck"];
+    const grpcMethods: string[] = ["joinQueue", "getQueueStatus", "leaveQueue", "healthCheck", "validateCheckoutToken"];
     for (const method of grpcMethods) {
       const descriptor: any = Reflect.getOwnPropertyDescriptor(constructor.prototype, method);
       GrpcMethod("WaitroomService", method)(constructor.prototype[method], method, descriptor);

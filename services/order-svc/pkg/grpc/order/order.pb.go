@@ -232,7 +232,8 @@ type OrderItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TicketClassId string                 `protobuf:"bytes,1,opt,name=ticket_class_id,json=ticketClassId,proto3" json:"ticket_class_id,omitempty"`
 	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	PriceCents    int64                  `protobuf:"varint,3,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
+	// One ticket's price at purchase; the line costs quantity times this.
+	PriceCents    int64 `protobuf:"varint,3,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

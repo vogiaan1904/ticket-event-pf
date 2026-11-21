@@ -6,6 +6,7 @@ import { EVENT_PACKAGE_NAME, EVENT_SERVICE_NAME } from '@/protogen/event.pb';
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
+import { clientChannelOptions } from '@/shared/grpc/client-options';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
             package: EVENT_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'event.proto'),
             loader: GRPC_LOADER_OPTIONS,
+            channelOptions: clientChannelOptions(),
           },
         }),
         inject: [AppConfigService],

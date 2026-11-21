@@ -36,6 +36,10 @@ npm run lint           # eslint --fix
 npm run test           # jest  (npm run test -- <path> for one file)
 npm run proto:all      # regenerate gRPC stubs into src/protogen
 
+# The repository suite needs a real Postgres; it migrates the database itself,
+# skips locally without the variable and fails in CI.
+PAYMENT_TEST_DATABASE_URL=postgresql://root:root@localhost:5433/ticketbottle_payment_test npm test
+
 # Lambdas
 cd lambdas && npm install && npm test
 npm run build:layers   # build Lambda layers + zips

@@ -11,6 +11,18 @@ import { Empty } from "./google/protobuf/empty.pb";
 
 export const protobufPackage = "event";
 
+/** Why the hold is released, which decides whether a later payment may re-take it. */
+export enum ReleaseReason {
+  /** RELEASE_REASON_UNSPECIFIED - Undone on purpose (saga compensation, failed payment); final. */
+  RELEASE_REASON_UNSPECIFIED = 0,
+  /**
+   * RELEASE_REASON_CHECKOUT_ENDED - The checkout ended unpaid (timeout or buyer cancel) while its payment link
+   * may still be paid; a late payment re-acquires the seat if one is left.
+   */
+  RELEASE_REASON_CHECKOUT_ENDED = 1,
+  UNRECOGNIZED = -1,
+}
+
 export interface TicketClass {
   id: string;
   eventId: string;
@@ -90,6 +102,7 @@ export interface ConfirmRequest {
 
 export interface ReleaseRequest {
   orderCode: string;
+  reason: ReleaseReason;
 }
 
 export interface GetAvailabilityRequest {

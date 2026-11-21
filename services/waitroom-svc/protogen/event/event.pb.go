@@ -861,7 +861,7 @@ type UpdateEventRequest struct {
 	StartDate            *string                `protobuf:"bytes,4,opt,name=start_date,json=startDate,proto3,oneof" json:"start_date,omitempty"`
 	EndDate              *string                `protobuf:"bytes,5,opt,name=end_date,json=endDate,proto3,oneof" json:"end_date,omitempty"`
 	ThumbnailUrl         *string                `protobuf:"bytes,6,opt,name=thumbnail_url,json=thumbnailUrl,proto3,oneof" json:"thumbnail_url,omitempty"`
-	VenueName            *string                `protobuf:"bytes,7,opt,name=venue_name,json=venueName,proto3,oneof" json:"venue_name,omitempty"`
+	Venue                *string                `protobuf:"bytes,7,opt,name=venue,proto3,oneof" json:"venue,omitempty"`
 	Street               *string                `protobuf:"bytes,8,opt,name=street,proto3,oneof" json:"street,omitempty"`
 	City                 *string                `protobuf:"bytes,9,opt,name=city,proto3,oneof" json:"city,omitempty"`
 	Country              *string                `protobuf:"bytes,10,opt,name=country,proto3,oneof" json:"country,omitempty"`
@@ -948,9 +948,9 @@ func (x *UpdateEventRequest) GetThumbnailUrl() string {
 	return ""
 }
 
-func (x *UpdateEventRequest) GetVenueName() string {
-	if x != nil && x.VenueName != nil {
-		return *x.VenueName
+func (x *UpdateEventRequest) GetVenue() string {
+	if x != nil && x.Venue != nil {
+		return *x.Venue
 	}
 	return ""
 }
@@ -2573,7 +2573,7 @@ const file_event_proto_rawDesc = "" +
 	"\x05_wardB\v\n" +
 	"\t_district\"9\n" +
 	"\x13CreateEventResponse\x12\"\n" +
-	"\x05event\x18\x01 \x01(\v2\f.event.EventR\x05event\"\xaa\x06\n" +
+	"\x05event\x18\x01 \x01(\v2\f.event.EventR\x05event\"\x9c\x06\n" +
 	"\x12UpdateEventRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
@@ -2581,9 +2581,8 @@ const file_event_proto_rawDesc = "" +
 	"\n" +
 	"start_date\x18\x04 \x01(\tH\x02R\tstartDate\x88\x01\x01\x12\x1e\n" +
 	"\bend_date\x18\x05 \x01(\tH\x03R\aendDate\x88\x01\x01\x12(\n" +
-	"\rthumbnail_url\x18\x06 \x01(\tH\x04R\fthumbnailUrl\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"venue_name\x18\a \x01(\tH\x05R\tvenueName\x88\x01\x01\x12\x1b\n" +
+	"\rthumbnail_url\x18\x06 \x01(\tH\x04R\fthumbnailUrl\x88\x01\x01\x12\x19\n" +
+	"\x05venue\x18\a \x01(\tH\x05R\x05venue\x88\x01\x01\x12\x1b\n" +
 	"\x06street\x18\b \x01(\tH\x06R\x06street\x88\x01\x01\x12\x17\n" +
 	"\x04city\x18\t \x01(\tH\aR\x04city\x88\x01\x01\x12\x1d\n" +
 	"\acountry\x18\n" +
@@ -2600,8 +2599,8 @@ const file_event_proto_rawDesc = "" +
 	"\f_descriptionB\r\n" +
 	"\v_start_dateB\v\n" +
 	"\t_end_dateB\x10\n" +
-	"\x0e_thumbnail_urlB\r\n" +
-	"\v_venue_nameB\t\n" +
+	"\x0e_thumbnail_urlB\b\n" +
+	"\x06_venueB\t\n" +
 	"\a_streetB\a\n" +
 	"\x05_cityB\n" +
 	"\n" +

@@ -55,7 +55,7 @@ does not.
 | A gRPC contract, and who consumes it | `proto/`, then `.claude/skills/proto-change/SKILL.md` |
 | A new RPC, end to end | `.claude/skills/add-grpc-endpoint/SKILL.md` |
 | A new service | `.claude/skills/add-service/SKILL.md` |
-| Where a TS module's files go | `docs/design/ts-layout.md` — the target; no service is converged yet |
+| Where a TS module's files go | `docs/design/ts-layout.md` — the target; event-svc is converged and its worked example |
 | Which gRPC code, which HTTP status | root `CLAUDE.md`, *Error taxonomy*; the table is `services/api-gateway/src/shared/metrics/code.ts`, applied by `services/api-gateway/src/common/filters/global-exception.filter.ts` |
 | A Kafka topic's producer and consumer | the names in `services/order-svc/internal/order/delivery/kafka/constants.go`, `services/waitroom-svc/internal/delivery/kafka/constants.go`, `services/payment-svc/outbox-relay/src/kafka.ts` |
 | Metrics, dashboards, alerts, PromQL | `.claude/skills/observability/SKILL.md`; the contract is `docs/METRICS.md` |
@@ -67,7 +67,7 @@ does not.
 | The stateful tier on EKS | `docs/design/eks-stateful-tier.md` |
 | Recording a decision | `.claude/skills/decision-records/SKILL.md` |
 | The architecture diagram | `docs/diagrams/README.md` |
-| End-to-end acceptance, load, chaos | `deploy/scripts/gate1-purchase-flow.sh`, `deploy/scripts/gate-sold-out.sh`, `deploy/scripts/gate-checkout-expiry.sh`, `deploy/scripts/gate-room.sh`, `deploy/scripts/gate-orders.sh`, `deploy/scripts/gate-sell-out-tail.sh`, `deploy/loadtest/`, `deploy/scripts/gate4b-chaos.sh` |
+| End-to-end acceptance, load, chaos | `deploy/scripts/gate1-purchase-flow.sh`, `deploy/scripts/gate-sold-out.sh`, `deploy/scripts/gate-checkout-expiry.sh`, `deploy/scripts/gate-room.sh`, `deploy/scripts/gate-orders.sh`, `deploy/scripts/gate-sell-out-tail.sh`, `deploy/scripts/gate-read-back.sh`, `deploy/loadtest/`, `deploy/scripts/gate4b-chaos.sh` |
 | What CI runs | `.github/workflows/` |
 | How the agent and the architect split decisions | `docs/decisions/0002-the-agent-is-a-mentor-not-a-gate.md`; `docs/design/decision-protocol.md` is the superseded first version |
 

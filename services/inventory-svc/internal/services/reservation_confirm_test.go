@@ -145,3 +145,59 @@ func TestConfirm_ExpiredByWorker_ConflictsWhenSoldOut(t *testing.T) {
 		t.Fatalf("sold = %d, want 5 (the failed re-acquire must not oversell)", got.Sold)
 	}
 }
+
+// A timed-out order's hold is released by order-svc, not the worker; a payment
+// that lands after it must still re-acquire the seat while stock is free.
+func TestConfirm_AfterCheckoutEndedRelease_Reacquires(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-ended", ExpiresAt: future(), Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 2}},
+	}))
+	must(t, svc.Release(context.Background(), "o-ended", ReleaseCheckoutEnded))
+
+	if err := svc.Confirm(context.Background(), "o-ended"); err != nil {
+		t.Fatalf("Confirm after a checkout-ended release with stock free: %v", err)
+	}
+	got := ticketClassByID(t, repo, tc.ID)
+	if got.Reserved != 0 || got.Sold != 2 {
+		t.Fatalf("reserved=%d sold=%d, want 0/2", got.Reserved, got.Sold)
+	}
+}
+
+func TestConfirm_AfterCheckoutEndedRelease_SoldOut_Conflicts(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 2, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-ended-gone", ExpiresAt: future(), Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 2}},
+	}))
+	must(t, svc.Release(context.Background(), "o-ended-gone", ReleaseCheckoutEnded))
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-ended-winner", ExpiresAt: future(), Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 2}},
+	}))
+	must(t, svc.Confirm(context.Background(), "o-ended-winner"))
+
+	if err := svc.Confirm(context.Background(), "o-ended-gone"); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("Confirm with no stock left = %v, want ErrStateConflict", err)
+	}
+	if got := ticketClassByID(t, repo, tc.ID); got.Sold != 2 {
+		t.Fatalf("sold = %d, want 2 (no oversell)", got.Sold)
+	}
+}
+
+// A hold undone on purpose stays final: Confirm must not re-take it.
+func TestConfirm_AfterUndoneRelease_StillConflicts(t *testing.T) {
+	svc, repo := reserveSvc(t)
+	tc := seedTicketClass(t, repo, 100, 0, 0)
+	must(t, svc.Reserve(context.Background(), ReserveInput{
+		OrderCode: "o-undone", ExpiresAt: future(), Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 2}},
+	}))
+	must(t, svc.Release(context.Background(), "o-undone", ReleaseUndone))
+
+	if err := svc.Confirm(context.Background(), "o-undone"); !errors.Is(err, ErrStateConflict) {
+		t.Fatalf("Confirm after an undone release = %v, want ErrStateConflict", err)
+	}
+	if got := ticketClassByID(t, repo, tc.ID); got.Sold != 0 {
+		t.Fatalf("sold = %d, want 0", got.Sold)
+	}
+}

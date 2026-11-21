@@ -8,18 +8,22 @@ This is the **Order** service for TicketBottle V2 — the saga orchestrator. For
 
 gRPC service (port **50054**) that coordinates the distributed purchase transaction using **Temporal** workflows. It calls Event, Inventory, and Payment over gRPC and reacts to Kafka events. It ships as **two binaries**:
 - `cmd/api` — gRPC server + Temporal client (starts workflows).
-- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`; its worker also runs `ExpireOrder`.
+- `cmd/consumer` — Kafka consumer that triggers `ConfirmOrder` on `payment.completed`; its worker also runs `ExpireOrder`. One `ConfirmOrder` runs at a time per partition; the partition count comes from `redpanda.partitions` in the chart, and a partition without a committed offset is read from its oldest message ([0030](../../docs/decisions/0030-payment-confirmations-run-across-partitions.md)).
 
 ### Temporal workflows (`internal/workflows`, activities in `internal/activities`)
 - `CreateOrder` — reserve inventory → create order → create order items → create payment intent; **auto-compensates** on any failure, newest step first (delete order items → delete order → release tickets). Inventory is taken before anything is written, so a buyer who loses the race leaves nothing behind; availability is decided by `Reserve` under a row lock, never pre-checked.
+- **A waitroom event's checkout token is the waitroom's to judge.** `Create` asks its
+  `ValidateCheckoutToken` before the purchase slot, and holds no signing key: refused is
+  `UNAUTHENTICATED` `ORD016`, an unreachable waitroom `UNAVAILABLE` `ORD021`
+  ([0033](../../docs/decisions/0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md)).
 - **An order takes at most its event's `max_tickets_per_order` tickets**, counted across
   its items and checked in `Create` before the purchase slot or any hold
   ([0021](../../docs/decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md)).
   Over it: `INVALID_ARGUMENT`, `ORD020`. 0 means no limit is set, which is what an
   event-svc that predates the field sends.
-- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded.
+- `ConfirmOrder` — on payment success: confirm inventory, mark order COMPLETED, publish `checkout.completed`. A failure to publish is logged, not returned — the buyer already has the ticket. An order that is paid but cannot be fulfilled moves to `REFUND_REQUIRED` and publishes `order.refund_required`. A `TIMEOUT` or `CANCELLED` order is confirmed like a `PENDING` one: the provider only takes money inside its window, so inventory re-acquires the ticket or the order is refunded. `PAYMENT_FAILED` is always refunded ([0032](../../docs/decisions/0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md)).
 - `ExpireOrder` — started by `Create` once the order exists, on the confirm-order
-  queue, delayed by `CheckoutLifetime` (the hold's own length, 9m). It flips `PENDING`
+  queue, delayed by `CheckoutLifetime` (the hold's own length, 6m30s). It flips `PENDING`
   to `TIMEOUT` with a conditional write; if it flipped, it releases the hold, frees the
   purchase slot and publishes `checkout.expired`. An order paid, failed or cancelled
   first is left alone. A failed start is logged, not returned
@@ -43,6 +47,10 @@ gRPC service (port **50054**) that coordinates the distributed purchase transact
 - **A cancel never overwrites a payment.** It flips `PENDING` to `CANCELLED` with the
   conditional write `ExpireIfPending` uses, and releases the hold only if the flip
   landed; otherwise `FAILED_PRECONDITION`.
+- **Which release a hold gets.** `ExpireOrder` and `Cancel` release as
+  `RELEASE_REASON_CHECKOUT_ENDED`, because the provider's link stays payable and a late
+  payment may re-acquire the seat. Saga compensation and a failed payment send no
+  reason, and inventory writes those holds `CANCELLED`, final (0032).
 
 ## Datastore: DynamoDB only
 This service is **DynamoDB-only** (`dynamodbav` tags, `internal/infra/dynamodb`). There is no MongoDB driver anywhere in the tree.
@@ -80,7 +88,7 @@ go build ./...
 ## Layout
 
 - `internal/order/{delivery,service,repository}` — feature slice; `internal/{workflows,activities}` — Temporal; `internal/infra/{dynamodb,kafka,temporal}` — adapters; `internal/models`, `internal/interceptors`.
-- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `jwt`, `redis`, `response`, `util`.
+- `pkg/` — shared `temporal`, `kafka`, `dynamodb`, `paginator`, `logger`, `errors`, `grpc`, `redis`, `response`, `util`.
 
 ## Design docs
 

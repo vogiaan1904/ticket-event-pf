@@ -14,11 +14,12 @@ var (
 	ErrSessionAlreadyExists = pkgErrors.NewGRPCError(codes.AlreadyExists, "WTR003", "Session already exists")
 	ErrInvalidSessionStatus = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR004", "Invalid session status")
 
-	ErrQueueFull           = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR005", "Queue is full")
-	ErrEventNotFound       = pkgErrors.NewGRPCError(codes.NotFound, "WTR006", "Event not found")
-	ErrEventConfigNotFound = pkgErrors.NewGRPCError(codes.NotFound, "WTR008", "Event config not found")
-	ErrWaitRoomNotAllowed  = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR009", "Wait room is not allowed")
-	ErrSoldOut             = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR012", "Sold out")
+	ErrQueueFull            = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR005", "Queue is full")
+	ErrEventNotFound        = pkgErrors.NewGRPCError(codes.NotFound, "WTR006", "Event not found")
+	ErrEventConfigNotFound  = pkgErrors.NewGRPCError(codes.NotFound, "WTR008", "Event config not found")
+	ErrWaitRoomNotAllowed   = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR009", "Wait room is not allowed")
+	ErrSoldOut              = pkgErrors.NewGRPCError(codes.FailedPrecondition, "WTR012", "Sold out")
+	ErrCheckoutTokenRefused = pkgErrors.NewGRPCError(codes.Unauthenticated, "WTR013", "Checkout token refused")
 
 	ErrEventServiceUnavailable = pkgErrors.NewGRPCError(codes.Unavailable, "WTR010", "Event service unavailable")
 	ErrEventServiceTimeout     = pkgErrors.NewGRPCError(codes.DeadlineExceeded, "WTR011", "Event service timed out")
@@ -29,6 +30,9 @@ var (
 // default is rendered as codes.Internal by ParseGRPCError.
 func (svc *grpcService) mapGRPCError(err error) error {
 	switch {
+	// First: a refusal can wrap ErrSessionNotFound, and must stay a 401.
+	case errors.Is(err, service.ErrCheckoutTokenRefused):
+		return ErrCheckoutTokenRefused
 	case errors.Is(err, service.ErrSessionNotFound):
 		return ErrSessionNotFound
 	case errors.Is(err, service.ErrSessionExpired):

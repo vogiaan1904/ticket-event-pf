@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
+import { clientChannelOptions } from '@/shared/grpc/client-options';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
             package: USER_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'user.proto'),
             loader: GRPC_LOADER_OPTIONS,
+            channelOptions: clientChannelOptions(),
           },
         }),
         inject: [AppConfigService],

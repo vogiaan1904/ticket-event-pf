@@ -90,7 +90,7 @@ func TestDelete_OnlyTerminalReservations_Succeeds(t *testing.T) {
 		OrderCode: "o-del-cancelled", ExpiresAt: future(),
 		Items: []ReserveItem{{TicketClassID: tc.ID, Qty: 2}},
 	}))
-	must(t, rSvc.Release(context.Background(), "o-del-cancelled")) // -> CANCELLED
+	must(t, rSvc.Release(context.Background(), "o-del-cancelled", ReleaseUndone)) // -> CANCELLED
 
 	if err := tcSvc.Delete(context.Background(), tc.ID); err != nil {
 		t.Fatalf("Delete with only terminal reservations: %v", err)

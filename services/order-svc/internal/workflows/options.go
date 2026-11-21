@@ -10,6 +10,12 @@ import (
 // shortStepsChangeID versions the move of short steps to local activities.
 const shortStepsChangeID = "short-steps-local"
 
+// endedCheckoutReleaseChangeID versions ExpireOrder's move to ReleaseEndedCheckout.
+const endedCheckoutReleaseChangeID = "expire-releases-ended-checkout"
+
+// cancelledOrderConfirmChangeID versions confirming a payment on a cancelled order.
+const cancelledOrderConfirmChangeID = "confirm-cancelled-order"
+
 // shortStepAttemptTimeout bounds one attempt of a local step, well inside the
 // 10s workflow task it runs in.
 const shortStepAttemptTimeout = 5 * time.Second

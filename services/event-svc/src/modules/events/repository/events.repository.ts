@@ -4,10 +4,15 @@ import { GetPaginationResponse } from '@/shared/interfaces/pagination-resp.inter
 import { createPaginator } from '@/shared/utils/pagination.util';
 import { Injectable } from '@nestjs/common';
 import { EventRoleType, Prisma } from '@prisma/client';
-import { CreateCategoryDto, CreateEventDto, FilterEventDto, UpdateConfigDto } from '../dtos';
-import { CreateConfigDto } from '../dtos/create-config.dto';
-import { CreateEventRoleDto } from '../dtos/create-role.dto';
-import { UpdateEventDto } from '../dtos/update-event.dto';
+import {
+  CreateCategoryDto,
+  CreateConfigDto,
+  CreateEventDto,
+  CreateEventRoleDto,
+  FilterEventDto,
+  UpdateConfigDto,
+  UpdateEventDto,
+} from '../events.types';
 import { EventCategoryEntity, EventConfigEntity, EventEntity, EventRoleEntity } from '../entities';
 import { mapToEventEntities, mapToEventEntity, PrismaEventWithRelations } from './events.mapper';
 
@@ -34,7 +39,7 @@ export class EventsRepository {
     },
   };
 
-  private buildWhereFilter(dto: FilterEventDto): Prisma.EventWhereInput {
+  private buildWhereFilter(dto: FilterEventDto = { categoryIds: [] }): Prisma.EventWhereInput {
     const where: Prisma.EventWhereInput = {};
     const conditions: Prisma.EventWhereInput[] = [];
     const configFilters: Prisma.EventConfigWhereInput = {
@@ -214,8 +219,8 @@ export class EventsRepository {
             street: dto.street,
             city: dto.city,
             country: dto.country,
-            ward: dto.ward ?? null,
-            district: dto.district ?? null,
+            ward: dto.ward,
+            district: dto.district,
           },
         },
         organizer: {
@@ -225,6 +230,14 @@ export class EventsRepository {
             logoUrl: dto.organizerLogoUrl,
           },
         },
+        // An empty list is what the wire sends when no categories were named, so it
+        // keeps them: proto3 cannot tell "none" from "unchanged" for a repeated field.
+        categories: dto.categoryIds?.length
+          ? {
+              deleteMany: {},
+              createMany: { data: dto.categoryIds.map((categoryId) => ({ categoryId })) },
+            }
+          : undefined,
       },
       include: this.baseInclude,
     });

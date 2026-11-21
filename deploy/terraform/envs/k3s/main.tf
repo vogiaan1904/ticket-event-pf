@@ -28,7 +28,6 @@ module "ec2_k3s" {
   subnet_id           = data.terraform_remote_state.foundation.outputs.public_subnet_ids[0]
   dynamodb_table_arn  = data.terraform_remote_state.foundation.outputs.dynamodb_table_arn
   ssh_public_key_path = var.ssh_public_key_path
-  my_ip_cidr          = var.my_ip_cidr
   instance_type       = var.instance_type
   tags                = { Project = "ticketbottle", ManagedBy = "terraform", Env = "k3s" }
 }

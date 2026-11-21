@@ -24,18 +24,19 @@ temporal-ui:           ## Port-forward the Temporal web UI on :8233
 K3S_ENV := terraform/envs/k3s
 K3S_VALUES := $(CHART)/values-k3s.yaml
 KUBECONFIG_FILE := /tmp/k3s.yaml
-SSH_OPTS := -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR
+# SSH rides an SSM session to the instance id, so no inbound port or IP allowlist (0038).
+# Keepalives also hold off Session Manager's 20-minute idle cut.
+SSH_OPTS = -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+  -o ServerAliveInterval=30 \
+  -o ProxyCommand="aws ssm start-session --region $(REGION) --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p"
 
 # The instance id is stable, so Terraform state is a fine source for it. The
-# public IP is not — EC2 reassigns it on every stop/start — so read it live from
-# the API. `terraform refresh` refreshes resource attributes but leaves the
-# persisted root outputs stale, which is what made `ssh_command` wrong; use the
-# `k3s-refresh` target below when the Terraform outputs themselves need syncing.
+# public IP is not — EC2 reassigns it on every stop/start — so read it live.
 K3S_ID := $$(cd $(K3S_ENV) && terraform output -raw instance_id)
 K3S_IP := $$(aws ec2 describe-instances --instance-ids $(K3S_ID) --query 'Reservations[0].Instances[0].PublicIpAddress' --output text)
-K3S_TUNNEL := ssh $(SSH_OPTS) -L 6443:127.0.0.1:6443 -L 3000:127.0.0.1:30000 ec2-user@
+K3S_TUNNEL = ssh $(SSH_OPTS) -N -L 6443:127.0.0.1:6443 -L 3000:127.0.0.1:30000 ec2-user@
 
-.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2 k3s-gate-sold-out k3s-gate-checkout-expiry k3s-gate-room k3s-gate-orders k3s-gate-sell-out-tail k3s-load
+.PHONY: k3s-ip k3s-instance k3s-refresh stop-ec2-k3s start-ec2-k3s tunnel-ec2-k3s k3s-kubeconfig k3s-deploy k3s-gate2 k3s-gate-sold-out k3s-gate-checkout-expiry k3s-gate-room k3s-gate-orders k3s-gate-token-revoked k3s-gate-sell-out-tail k3s-gate-read-back k3s-load
 
 k3s-ip:            ## Print the current public IP of the k3s box (live from EC2)
 	@echo "$(K3S_IP)"
@@ -50,17 +51,20 @@ stop-ec2-k3s:              ## Stop the k3s EC2 (halts all compute; EBS + data su
 	aws ec2 stop-instances --instance-ids $(K3S_ID)
 	@echo "stopping — billing for compute halts once 'stopped'"
 
-start-ec2-k3s:             ## Start the k3s EC2 and print the new SSH tunnel command
+start-ec2-k3s:             ## Start the k3s EC2 and wait until Session Manager can reach it
 	aws ec2 start-instances --instance-ids $(K3S_ID)
 	aws ec2 wait instance-running --instance-ids $(K3S_ID)
-	@echo "started. Open the tunnel with:"
-	@echo "  $(K3S_TUNNEL)$(K3S_IP)"
+	@id=$(K3S_ID); for i in $$(seq 1 40); do \
+	   s=$$(aws ssm describe-instance-information --region $(REGION) --filters Key=InstanceIds,Values=$$id \
+	        --query 'InstanceInformationList[0].PingStatus' --output text); \
+	   [ "$$s" = Online ] && { echo "SSM agent online. Open the tunnel: make -C deploy tunnel-ec2-k3s"; exit 0; }; \
+	   sleep 5; done; echo "SSM agent not online after 200s — check the instance role"; exit 1
 
 tunnel-ec2-k3s:            ## Open the SSH tunnel to the box (blocks — run in its own terminal)
-	$(K3S_TUNNEL)$(K3S_IP)
+	$(K3S_TUNNEL)$(K3S_ID)
 
 k3s-kubeconfig:    ## Fetch the k3s kubeconfig over SSH into $(KUBECONFIG_FILE)
-	scp $(SSH_OPTS) ec2-user@$(K3S_IP):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
+	scp $(SSH_OPTS) ec2-user@$(K3S_ID):/etc/rancher/k3s/k3s.yaml $(KUBECONFIG_FILE)
 	@echo "export KUBECONFIG=$(KUBECONFIG_FILE)"
 
 # REF is the moving tag CI pushes per branch (slashes as dashes), e.g. REF=my-branch.
@@ -71,9 +75,7 @@ REF ?= dev
 HELM_EXTRA ?=
 
 k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel must be open)
-	@tags=$$(aws ecr describe-images --region us-east-1 --repository-name ticketbottle/gateway \
-	    --image-ids imageTag=$(REF) --query 'imageDetails[0].imageTags' --output text | tr '\t' '\n' | grep '^sha-'); \
-	 [ "$$(echo "$$tags" | grep -c .)" = 1 ] || { echo "REFUSING: :$(REF) must name exactly one sha- build, found: $$(echo $${tags:-none})"; exit 1; }; \
+	@tags=$$(./scripts/image-tag.sh $(REF)) || exit 1; \
 	 echo "deploying $$tags (:$(REF))"; \
 	 KUBECONFIG=$(KUBECONFIG_FILE) helm upgrade --install $(RELEASE) $(CHART) -n $(NS) --create-namespace \
 	  -f $(K3S_VALUES) -f $(SECRETS_FILE) \
@@ -85,10 +87,13 @@ k3s-deploy: secrets-check  ## Deploy the build ECR's :$(REF) points at (tunnel m
 k3s-gate2:         ## Run the purchase flow against k3s (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate1-purchase-flow.sh
 
+k3s-gate-token-revoked: ## A completed or cancelled checkout's token is refused with 401 (tunnel must be open)
+	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-token-revoked.sh
+
 k3s-gate-sold-out: ## The door pauses while the last ticket is held, then refuses with 409 (tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-sold-out.sh
 
-k3s-gate-checkout-expiry: ## An unpaid order times out at its hold's expiry and ends everywhere (~12 min; tunnel must be open)
+k3s-gate-checkout-expiry: ## An unpaid order times out at its hold's expiry and ends everywhere (~9 min; tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-checkout-expiry.sh
 
 k3s-gate-room:     ## A room follows the tickets left: three of five admitted, then all five (tunnel must be open)
@@ -99,6 +104,9 @@ k3s-gate-orders:   ## Orders are read, listed and cancelled by their owner only 
 
 k3s-gate-sell-out-tail: ## Chairs that take no ticket end with the 5-minute window (~6 min; tunnel must be open)
 	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-sell-out-tail.sh
+
+k3s-gate-read-back: ## Every field sent through the gateway reads back as sent (tunnel must be open)
+	KUBECONFIG=$(KUBECONFIG_FILE) GW=http://localhost:3000/api ./scripts/gate-read-back.sh
 
 # Gate 4a's harness in generator mode: DURATION picks k6's sustained scenario,
 # which makes the script exit after the run instead of asserting an HPA k3s
@@ -143,11 +151,11 @@ eks-up: eks-guard  ## terraform apply — STARTS the $0.10/hr meter
 eks-kubeconfig:    ## Point kubectl at the cluster
 	aws eks update-kubeconfig --region $(REGION) --name $(EKS_CLUSTER)
 
-eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC + LB controller)
+eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC, LB controller, metrics-server, kube-prometheus-stack)
 	./scripts/eks-bootstrap.sh
 
-eks-deploy:        ## Deploy the chart from ECR and wait for the ALB to serve
-	./scripts/eks-deploy.sh
+eks-deploy:        ## Deploy the build ECR's :$(REF) points at, and wait for the ALB to serve
+	REF=$(REF) ./scripts/eks-deploy.sh
 
 eks-url:           ## Print the ALB hostname
 	@kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
@@ -181,16 +189,15 @@ eks-gate4b:        ## Gate 4b — terminate a node under load, assert nothing is
 	  ./scripts/gate4b-chaos.sh
 
 # --- Your public IP: the allowlist that follows you around --------------------
-# `my_ip_cidr` in each env's terraform.tfvars gates three things:
-#   1. port 22 on the k3s box       — SG rule, k3s env
-#   2. the EKS public API endpoint  — public_access_cidrs, eks env
-#   3. the ALB's inbound-cidrs      — a helm annotation, read from the eks output
+# `my_ip_cidr` in the eks env's terraform.tfvars gates two things (k3s needs none: 0038):
+#   1. the EKS public API endpoint  — public_access_cidrs
+#   2. the ALB's inbound-cidrs      — a helm annotation, read from the eks output
 #      by eks-deploy.sh, so `terraform apply` alone leaves the ALB on the old IP.
 IP_URL := https://checkip.amazonaws.com
-TFVARS := $(K3S_ENV)/terraform.tfvars $(EKS_ENV)/terraform.tfvars
+TFVARS := $(EKS_ENV)/terraform.tfvars
 READ_IP = sed -n 's/^my_ip_cidr[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p'
 
-.PHONY: my-ip update-my-ip k3s-allow-ip eks-allow-ip
+.PHONY: my-ip update-my-ip eks-allow-ip
 
 my-ip:             ## Compare your current public IP against what each tfvars allows
 	@ip=$$(curl -fsS --max-time 5 $(IP_URL) | tr -d '[:space:]'); \
@@ -211,12 +218,7 @@ update-my-ip:      ## Rewrite my_ip_cidr in every tfvars to your current IP
 	   sed -E 's|^(my_ip_cidr[[:space:]]*=[[:space:]]*).*|\1"'"$$ip"'/32"|' $$f > $$f.new && mv $$f.new $$f; \
 	   echo "edit  $$f  $$old -> $$ip/32"; \
 	 done; \
-	 echo; echo "apply it: make -C deploy k3s-allow-ip   (or eks-allow-ip)"
-
-k3s-allow-ip: update-my-ip   ## ...then apply it to the k3s SSH security group
-	@cd $(K3S_ENV) && terraform state list 2>/dev/null | grep -q aws_instance || \
-	  { echo "REFUSING: no k3s instance in state. 'make k3s-allow-ip' re-opens a firewall, it does not build a box."; exit 1; }
-	cd $(K3S_ENV) && terraform apply
+	 echo; echo "apply it: make -C deploy eks-allow-ip"
 
 eks-allow-ip: update-my-ip   ## ...then apply it to the EKS API endpoint AND the live ALB
 	@aws eks describe-cluster --region $(REGION) --name $(EKS_CLUSTER) >/dev/null 2>&1 || \

@@ -1,7 +1,11 @@
 # EKS stateful tier — design
 
 **Status:** phases (a) and (a2) built and proven; **phases (b)–(f) deferred
-2026-09-19** — see *Relationship to the scope pivot*.
+2026-09-19**, and kept deferred on 2026-10-12 until a door is planned above about 20
+a second ([0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)).
+**(b)–(d) resumed 2026-11-20** ([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)),
+with `shared` at `db.t4g.small`; (e)–(f) stay deferred. Work order:
+`docs/plans/2026-11-20-eks-rds-then-the-door.md`.
 Phase (a)'s work order: `docs/plans/2026-09-19-eks-stateful-tier-phase-a.md`.
 **Target:** the `values-eks.yaml` deploy target only. k3s is unchanged.
 
@@ -64,7 +68,7 @@ survives, because nothing irreplaceable is left in the cluster.
 > workflow history, polls task queues and updates visibility once per in-flight
 > order, so its database load scales with **concurrent checkouts**, not with
 > traffic generally. Concurrent checkouts are bounded by each event's tickets
-> and by about door speed × the 9-minute hold: up to 5400 at EKS's unmeasured door of
+> and by about door speed × the 6m30s checkout lifetime: about 3900 at EKS's unmeasured door of
 > 10 a second ([0025](../decisions/0025-an-event-admits-buyers-only-while-it-has-tickets-for-them.md),
 > [0027](../decisions/0027-an-admitted-buyer-has-five-minutes-to-start-a-checkout.md)).
 > Into the thousands, Temporal becomes the platform's heaviest writer — at which point this grouping, and
@@ -185,9 +189,9 @@ the rest slips.
 |---|---|---|
 | a | Chart toggles + values | **DONE 2026-09-20** — overlays render byte-identical, every DSN served from a Secret, purchase-flow gate green on k3s revision 27 |
 | a2 | Private subnets + `private_nodes` toggle | **DONE 2026-09-19** — Gate 3a green with `private_nodes = true`, nodes on `10.0.11.44` / `10.0.12.233` |
-| b | `modules/rds` ×3 in the private subnets **— DEFERRED** | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
-| c | Secrets Manager + CSI + per-service IRSA **— DEFERRED** | No password in any ConfigMap or values file, on every target |
-| d | Migrations against three endpoints **— DEFERRED** | All six databases exist and migrate; purchase flow completes on EKS |
+| b | `modules/rds` ×3 in the private subnets **— planned, 0039** | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
+| c | Secrets Manager + CSI + per-service IRSA **— planned, 0039** | No password in any ConfigMap or values file, on every target |
+| d | Migrations against three endpoints **— planned, 0039** | All six databases exist and migrate; purchase flow completes on EKS |
 | e | Redpanda RF=3 **— DEFERRED** | Topics report `--replicas 3`; a broker delete loses no event |
 | f | Gate 4b guard **— DEFERRED** | Any node terminable except the Redis host; flow survives |
 

@@ -8,6 +8,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/models"
 	"github.com/vogiaan1904/ticketbottle-order/internal/order"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -138,7 +139,7 @@ func TestConfirmOrder_PaymentOnATerminalOrderIsMarkedForRefund(t *testing.T) {
 
 	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
 		Return(&models.Order{
-			Code: "TB-TEST-0007", Status: models.OrderStatusCancelled,
+			Code: "TB-TEST-0007", Status: models.OrderStatusPaymentFailed,
 			UserID: "u7", EventID: "e7",
 		}, nil).Once()
 	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).
@@ -322,4 +323,57 @@ func TestConfirmOrder_APaymentOnATimedOutOrderWhoseStockIsGoneIsRefunded(t *test
 	if env.GetWorkflowError() == nil {
 		t.Fatal("an unfulfillable paid order must still fail the workflow so it is visible")
 	}
+}
+
+// A buyer who cancelled and then paid on the still-open link gets the seat if one is left.
+func TestConfirmOrder_APaymentOnACancelledOrderStillGetsItsTicket(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{Code: "TB-TEST-0201", Status: models.OrderStatusCancelled, SessionID: "sess-c", UserID: "uc", EventID: "ec"}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, "TB-TEST-0201").Return(nil).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, "TB-TEST-0201", models.OrderStatusCompleted).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("PublishCheckoutCompleted", mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{OrderCode: "TB-TEST-0201", Status: models.OrderStatusCompleted})
+
+	if err := env.GetWorkflowError(); err != nil {
+		t.Fatalf("a payment on a cancelled order with stock left failed: %v", err)
+	}
+}
+
+func TestConfirmOrder_APaymentOnACancelledOrderWhoseStockIsGoneIsRefunded(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{Code: "TB-TEST-0202", Status: models.OrderStatusCancelled, UserID: "uc", EventID: "ec"}, nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).
+		Return(temporal.NewNonRetryableApplicationError("stock is gone", order.ErrTypeInventoryCannotConfirm, errors.New("stock is gone"))).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).Return(nil).Once()
+	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{OrderCode: "TB-TEST-0202", Status: models.OrderStatusCompleted})
+
+	if env.GetWorkflowError() == nil {
+		t.Fatal("an unfulfillable paid order must still fail the workflow so it is visible")
+	}
+}
+
+// A ConfirmOrder already running at deploy keeps refunding a cancelled order.
+func TestConfirmOrder_BeforeTheVersionGateACancelledOrderIsRefunded(t *testing.T) {
+	env := newTestEnv(t)
+	env.OnGetVersion(cancelledOrderConfirmChangeID, workflow.DefaultVersion, 1).Return(workflow.DefaultVersion)
+	env.OnActivity("GetOrder", mock.Anything, mock.Anything).
+		Return(&models.Order{Code: "TB-TEST-0203", Status: models.OrderStatusCancelled, UserID: "uc", EventID: "ec"}, nil).Once()
+	env.OnActivity("UpdateOrderStatus", mock.Anything, mock.Anything, models.OrderStatusRefundRequired).Return(nil).Once()
+	env.OnActivity("PublishRefundRequired", mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ReleasePurchaseSlot", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+	env.OnActivity("ConfirmInventory", mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	env.ExecuteWorkflow(ConfirmOrder, &ConfirmOrderWorkflowInput{OrderCode: "TB-TEST-0203", Status: models.OrderStatusCompleted})
+
+	if env.GetWorkflowError() == nil {
+		t.Fatal("the old branch must still fail the workflow")
+	}
+	requireNotCalled(t, env, "ConfirmInventory", mock.Anything, mock.Anything)
 }

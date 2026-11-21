@@ -131,6 +131,7 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0014](0014-ts-structure-follows-the-june-layout-rule.md) | Which TS layout is the target for new structure? | The 2026-06-16 rule, restored as a design: flat controller, one transport `dto/`, domain shapes in `<feature>.types.ts`, additions by archetype | Making `event-svc`'s current shape the rule | A rule no service follows yet, applied only as each service is converged | accepted |
+| [0034](0034-event-svc-converges-first-on-its-own.md) | Which TS service converges first, and becomes the worked example? | event-svc, in a change that does nothing else | user-svc, the smallest; waiting until a service is changed anyway | A 71-file move with no capability, against the design's own "only when being worked on anyway" | accepted |
 
 ### rollout-drain
 
@@ -174,4 +175,50 @@ the records, never the block.
 | # | Question | Chose | Instead of | Cost | Status |
 |---|---|---|---|---|---|
 | [0026](0026-the-order-contract-tells-the-buyer-what-happened.md) | What does the order contract tell a buyer, and who may read or cancel an order? | Every stored status gets its own wire value; order-svc checks the owner on read and cancel, with `user_id` in the contract; a cancel is a conditional `PENDING` → `CANCELLED` write; the gateway's routes follow the contract | Keeping `TIMEOUT` as `CANCELED` and refunds as `UNSPECIFIED`; an owner check in the gateway only; removing cancel | A contract change across order-svc and the gateway; until both have rolled, an old gateway's reads are refused for want of `user_id` | accepted |
+
+### read-back
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0028](0028-what-a-client-sends-is-read-back.md) | How do we know a field a client sends is stored and read back, and a stub matches its contract? | A k3s gate that sends every field through each gateway create and update and reads it back; CI regenerating every stub and failing on any difference; repository suites against a real database where a mapping layer sits between request and store | Unit tests with mocks alone; a contract-testing framework between gateway and services; a repository suite for every store, pass-through ones included | CI needs Postgres services and protoc pinned to the stubs' versions; the gate runs on k3s, not in CI | accepted |
+
+### checkout-capacity
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0029](0029-the-next-testbed-is-one-bigger-box.md) | Which testbed answers "what fails first as checkouts rise"? | The k3s box resized in place to 2, 16 and 8 vCPUs for one session, with no workload limits and payment on the simulated provider | Ephemeral EKS with Temporal's database split out, or cost per purchase on the 2-vCPU box | One node: a limit found belongs to a topology where every service and database shares one machine and one disk, and what changes across nodes stays unmeasured | accepted |
+| [0030](0030-payment-confirmations-run-across-partitions.md) | How do payment confirmations keep up as purchases rise? | `payment.completed` with 8 partitions, made so before order-consumer starts; a partition the consumer has no offset for is read from its oldest message | Confirming without waiting for each `ConfirmOrder`, or both | Order holds per payment, not across the topic; the count can grow but never shrink, and growing it moves keys; the consumer cannot start while the broker is down | accepted |
+
+### next-work
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0031](0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md) | What is the next work, in order, now that 0030 removed the first throughput wall? | 1 the gateway's ~40s loss after a backend crash; 2 checkout tokens the waitroom revokes but nobody checks; 3 one TS service converged to the layout; 4 EKS's door measured. Capacity past both doors waits | The next wall, about 24 a second in Temporal and its Postgres, and the stateful-tier phases (b)–(f) | The ceiling past 24 a second, and which part of Temporal's path sets it, stay unmeasured until a door is planned above about 20 a second | accepted |
+| [0039](0039-eks-gets-rds-before-its-door-is-measured.md) | What does 0031's item 4, EKS's door measured, measure, and on what? | Stateful-tier phases (b)–(d) first: three RDS instances, `shared` on `db.t4g.small`; then the door, swept on non-burstable spot nodes that become EKS's default | The door on today's in-cluster Postgres and burstable `t3`/`t3a` spot nodes | About $0.45 a cluster-hour instead of $0.31; RDS adds 15–20 minutes to each session's start; phases (e)–(f) stay deferred, so a node holding Redpanda or Redis still cannot be killed | proposed |
+
+### late-payment
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0032](0032-a-payment-after-a-released-hold-gets-its-ticket-if-one-is-left.md) | What does a payment get when it lands after its checkout ended, by timeout or by the buyer's cancel? | Its ticket if one is left, else a refund: `Release` carries a reason, an ended checkout is written `EXPIRED`, which `Confirm` re-acquires, and `ConfirmOrder` treats a `CANCELLED` order like a `TIMEOUT` one | `Confirm` re-acquiring `CANCELLED` holds, guarded only by order-svc; a refund for every payment after a cancel | A proto field regenerated in every consumer; `EXPIRED` now also means "released while its link may still be paid"; a buyer's cancel no longer refuses a later payment | accepted |
+| [0036](0036-a-hold-outlives-the-payment-window-by-30s.md) | How long does a checkout's hold outlive its 6-minute payment window? | 30s, over ten times the measured webhook → `COMPLETED` p99 of 2.47s | 3 minutes, sized before anything was measured | A confirm stalled past 30s, while its ticket is resold, becomes `REFUND_REQUIRED` and pages | accepted |
+
+### token-revocation
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0033](0033-order-svc-asks-the-waitroom-whether-a-checkout-token-holds.md) | Where is a revoked checkout token refused? | A waitroom `ValidateCheckoutToken` RPC, called by order-svc before the purchase slot; fails closed | order-svc keeping the session-keyed slot so a token buys once; the same RPC failing open | A synchronous hop on every waitroom checkout, and no checkout on a waitroom event while the waitroom is down | accepted |
+
+### gateway-recovery
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0035](0035-the-gateway-bounds-a-backend-reconnect.md) | What bounds the gateway's failure after a backend crash, while its trigger is unknown? | Each gRPC client's channel is replaced when it stays `CONNECTING` or `TRANSIENT_FAILURE` for 5s | Shorter kernel SYN retries in the gateway pod; more traced crashes to find the trigger first | Our own wrapper around grpc-js's channel, and a fix shipped before the cause is known | accepted |
+| [0037](0037-the-gateway-bounds-every-call-it-makes.md) | What bounds the gateway's calls to a backend that answers slowly? | A deadline on every call from one gateway interceptor: 5s, and 65s for `CreateOrder` | Also cancelling the call when the HTTP client leaves; TS backends skipping a query once its call's deadline has passed | A read slowed past 5s answers 504 instead of eventually succeeding; a TS backend still drains its own backlog | accepted |
+
+### k3s-access
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0038](0038-the-k3s-box-is-reached-through-ssm-not-an-ip-allowlist.md) | How does the workstation reach the k3s box when its egress IP will not hold still? | SSH carried by an SSM Session Manager session to the instance id; no inbound rule on the box | Widening the SSH allowlist to the carrier's `/19` | A local `session-manager-plugin`, AWS credentials for every tunnel, an extra hop through SSM's regional endpoint, and the agent must register before the first tunnel | accepted |
 <!-- decisions:index:end -->

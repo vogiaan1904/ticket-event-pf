@@ -8,16 +8,15 @@ import (
 )
 
 const (
-	// PaymentTimeout is the duration to wait for payment completion
-	// 5 minutes for payment + 1 minute buffer for callback processing
+	// PaymentTimeout is the provider's payment window: the intent is created
+	// with this expiry, so no payment is accepted after it.
 	PaymentTimeout = 6 * time.Minute
 
 	// ReservationHoldGrace covers webhook -> outbox -> Kafka -> ConfirmOrder for
-	// a payment landing at the edge of PaymentTimeout, against inventory's 60s
-	// expiry sweep. Happy path only; the retry-storm tail is backstopped by
-	// inventory's Confirm re-acquiring a swept hold.
+	// a payment landing at the edge of PaymentTimeout: ten times its measured p99.
+	// A later confirm still re-acquires the hold if its ticket is left (0032).
 	// See docs/RESERVATION_HOLD.md.
-	ReservationHoldGrace = 3 * time.Minute
+	ReservationHoldGrace = 30 * time.Second
 
 	// CheckoutLifetime is how long an unpaid checkout lives: the hold's length, and
 	// the delay before ExpireOrder times the order out.

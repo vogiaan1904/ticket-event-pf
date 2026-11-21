@@ -52,6 +52,9 @@ postgres:
     - ticketbottle_event
     - ticketbottle_payment
     - ticketbottle_inventory
+  # Extra server arguments, e.g. ["postgres", "-c", "max_connections=500"]. The
+  # first replaces the image's CMD, so it must be "postgres".
+  args: []
 
 redis:
   image: redis:7-alpine
@@ -60,6 +63,10 @@ redis:
 redpanda:
   image: redpandadata/redpanda:v24.2.7
   storage: 2Gi
+  # Partitions a topic has before order-consumer starts (decision 0030). A count
+  # can grow but never shrink, and growing it moves keys to other partitions.
+  partitions:
+    payment.completed: 8
 
 paymentEvents:
   enabled: true
@@ -74,6 +81,11 @@ order:
   # static key, so the SDK reaches the instance profile (k3s) or IRSA (EKS).
   dynamodbEndpoint: ""
   awsRegion: us-east-1
+
+payment:
+  # "" -> the ZaloPay sandbox. A capacity session points it at the simulated
+  # provider (deploy/loadtest/capacity-values.yaml, decision 0029).
+  zalopayCreateUrl: ""
 
 waitroom:
   # Door speed: buyers admitted a second. Sized per target from a measurement;

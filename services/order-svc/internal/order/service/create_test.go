@@ -14,7 +14,7 @@ import (
 	"github.com/vogiaan1904/ticketbottle-order/internal/workflows"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/event"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/inventory"
-	pkgJwt "github.com/vogiaan1904/ticketbottle-order/pkg/jwt"
+	"github.com/vogiaan1904/ticketbottle-order/pkg/grpc/waitroom"
 	"github.com/vogiaan1904/ticketbottle-order/pkg/logger"
 	temporalCli "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
@@ -70,16 +70,20 @@ func (c stubInventoryClient) FindManyTicketClass(ctx context.Context, in *invent
 	return &inventory.FindManyTicketClassResponse{TicketClasses: tcs}, nil
 }
 
-type stubJwtManager struct {
+// stubWaitroomClient answers ValidateCheckoutToken and records what it was asked.
+type stubWaitroomClient struct {
+	waitroom.WaitroomServiceClient
 	sessionID string
+	err       error
+	asked     *waitroom.ValidateCheckoutTokenRequest
 }
 
-func (m stubJwtManager) Verify(ctx context.Context, token string) (pkgJwt.Payload, error) {
-	return pkgJwt.Payload{CheckoutTokenClaim: models.CheckoutTokenClaim{
-		SessionID: m.sessionID,
-		UserID:    testUserID,
-		EventID:   testEventID,
-	}}, nil
+func (c *stubWaitroomClient) ValidateCheckoutToken(ctx context.Context, in *waitroom.ValidateCheckoutTokenRequest, opts ...grpc.CallOption) (*waitroom.ValidateCheckoutTokenResponse, error) {
+	c.asked = in
+	if c.err != nil {
+		return nil, c.err
+	}
+	return &waitroom.ValidateCheckoutTokenResponse{SessionId: c.sessionID}, nil
 }
 
 // fakeWorkflowRun stands in for a started CreateOrder execution. Nothing here
@@ -176,7 +180,7 @@ func newCreateService(t *testing.T, tprCli *fakeTemporalClient, allowWaitRoom bo
 	return &implService{
 		l:             l,
 		repo:          r,
-		jwt:           stubJwtManager{sessionID: sessionID},
+		wrSvc:         &stubWaitroomClient{sessionID: sessionID},
 		invSvc:        stubInventoryClient{},
 		evSvc:         stubEventClient{allowWaitRoom: allowWaitRoom},
 		pmtSvc:        stubPaymentClient{url: "https://pay.test/checkout"},

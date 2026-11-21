@@ -30,6 +30,9 @@ spec:
         - name: postgres
           image: {{ .Values.postgres.image }}
           {{- include "tb.resources" (dict "ctx" . "name" "postgres") | nindent 10 }}
+          {{- with .Values.postgres.args }}
+          args: {{- toYaml . | nindent 12 }}
+          {{- end }}
           ports: [{ containerPort: 5432 }]
           env:
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }

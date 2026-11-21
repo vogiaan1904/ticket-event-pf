@@ -13,8 +13,9 @@ the gateway's gRPC clients, and its request metrics.
    an HTTP status.
 3. `services/api-gateway/src/CLAUDE.md` — **current**: how a feature module, its
    errors and its auth are written. It loads by itself whenever you open gateway source.
-4. `docs/design/ts-layout.md` — the target shape for new structure. The gateway is not
-   converged; its `dtos/req` + `dtos/resp` modules stay until it is, whole.
+4. `docs/design/ts-layout.md` — the target shape for new structure; event-svc is its
+   worked example. The gateway is not converged; its `dtos/req` + `dtos/resp` modules
+   stay until it is, whole.
 5. `docs/plans/2026-09-20-api-gateway-test-coverage.md` — what the tests pin, and the
    defects they found. A record of that day.
 
@@ -27,6 +28,7 @@ the gateway's gRPC clients, and its request metrics.
 | Which routes need which role | service `CLAUDE.md` | `services/api-gateway/src/common/guards/access.guard.ts` |
 | Rate limiting, security headers, trusted proxies | `docs/decisions/0013-the-gateway-throttles-sign-in-not-purchase.md` | `services/api-gateway/src/common/guards/auth-rate-limit.guard.ts`, `services/api-gateway/src/common/security.ts` |
 | CORS | service `CLAUDE.md`, *Role* | `services/api-gateway/src/main.ts` |
+| What bounds a call to a backend: a stuck reconnect, a slow answer | `docs/decisions/0035-the-gateway-bounds-a-backend-reconnect.md`, `docs/decisions/0037-the-gateway-bounds-every-call-it-makes.md` | `services/api-gateway/src/shared/grpc/client-options.ts`, `services/api-gateway/src/shared/grpc/bounded-channel.ts` |
 | How a stopping gateway drains its keep-alive clients | `docs/decisions/0016-the-gateway-drains-for-up-to-65s.md` | `services/api-gateway/src/shared/utils/http-drain.util.ts`, wired in `services/api-gateway/src/main.ts`; `shutdown` in `deploy/helm/ticketbottle/values.yaml` |
 | Who may read, list or cancel an order, and which statuses it reads | `docs/decisions/0026-the-order-contract-tells-the-buyer-what-happened.md` | `services/api-gateway/src/modules/orders/orders.service.ts`, `services/api-gateway/src/modules/orders/mappers/order-status.mapper.ts` |
 | Whose waitroom session a request may touch | `docs/decisions/0008-the-waitroom-enforces-session-ownership.md` | `services/api-gateway/src/modules/waitroom/waitroom.service.ts` |
@@ -38,7 +40,7 @@ the gateway's gRPC clients, and its request metrics.
 |---|---|
 | Bootstrap: prefix, validation, CORS, Swagger | `services/api-gateway/src/main.ts` |
 | Every feature module | `services/api-gateway/src/app.module.ts` |
-| A downstream client: address and proto | that feature's module, e.g. `services/api-gateway/src/modules/orders/orders.module.ts` |
+| A downstream client: address, proto and channel options | that feature's module, e.g. `services/api-gateway/src/modules/orders/orders.module.ts` |
 | Response shaping | `services/api-gateway/src/common/interceptors/response.interceptor.ts` |
 
 ## Edges

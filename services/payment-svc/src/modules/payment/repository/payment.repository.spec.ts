@@ -1,61 +1,64 @@
-import { Test } from '@nestjs/testing';
 import { PrismaService } from '@/infra/database/prisma/prisma.service';
+import { Currency, PrismaClient } from '@prisma/client';
+import { execSync } from 'child_process';
+import { randomUUID } from 'crypto';
 import { PaymentProvider } from '../enums/provider.enum';
 import { PaymentRepository } from './payment.repository';
 
-// One row, shaped like Prisma's Payment, reused by every case here.
-const row = {
-  id: 'pay-1',
-  orderCode: 'ORD-1',
-  amountCents: 1000,
-  currency: 'VND',
-  provider: 'zalopay',
-  providerTransactionId: 'tx-1',
-  idempotencyKey: 'idem-1',
-  redirectUrl: 'https://shop/return',
-  paymentUrl: 'https://pay/1',
-  status: 'PENDING',
-  metadata: null,
-  completedAt: null,
-  failedAt: null,
-  cancelledAt: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-async function buildRepo(prisma: any) {
-  const moduleRef = await Test.createTestingModule({
-    providers: [PaymentRepository, { provide: PrismaService, useValue: prisma }],
-  }).compile();
-  return moduleRef.get(PaymentRepository);
+// Against a real Postgres: PAYMENT_TEST_DATABASE_URL, migrated here. Without it the
+// suite skips locally and fails in CI, where a suite that skips itself asserts nothing.
+const url = process.env.PAYMENT_TEST_DATABASE_URL;
+if (!url && process.env.CI) {
+  throw new Error(
+    'PAYMENT_TEST_DATABASE_URL is not set: the repository suite would assert nothing',
+  );
 }
+const suite = url ? describe : describe.skip;
 
-describe('PaymentRepository', () => {
-  it('keeps the payment url a lookup is asked for', async () => {
-    const repo = await buildRepo({ payment: { findUnique: jest.fn().mockResolvedValue(row) } });
+suite('PaymentRepository against Postgres', () => {
+  let prisma: PrismaClient;
+  let repo: PaymentRepository;
 
-    const found = await repo.findByIdempotencyKey('idem-1');
+  beforeAll(async () => {
+    execSync('npx prisma migrate deploy', {
+      env: { ...process.env, DATABASE_URL: url },
+      stdio: 'ignore',
+    });
+    prisma = new PrismaClient({ datasources: { db: { url } } });
+    repo = new PaymentRepository(prisma as PrismaService);
+  }, 60_000);
 
-    // createPaymentIntent returns this field directly on an idempotency hit.
-    expect(found?.paymentUrl).toBe('https://pay/1');
-    expect(found?.redirectUrl).toBe('https://shop/return');
-  });
+  afterAll(async () => prisma?.$disconnect());
 
-  it('returns the created payment, not an empty object', async () => {
-    const repo = await buildRepo({ payment: { create: jest.fn().mockResolvedValue(row) } });
-
-    const created = await repo.create({
-      idempotencyKey: 'idem-1',
-      orderCode: 'ORD-1',
-      amountCents: 1000,
-      currency: 'VND',
+  it('reads back every field a payment intent is created with', async () => {
+    const orderCode = `TB-RB-${randomUUID()}`;
+    await repo.create({
+      amountCents: 24690,
+      currency: Currency.VND,
+      orderCode,
+      idempotencyKey: `key-${orderCode}`,
       provider: PaymentProvider.ZALOPAY,
-      redirectUrl: 'https://shop/return',
-      timeoutSeconds: 60,
-      transactionId: 'tx-1',
-      paymentUrl: 'https://pay/1',
+      transactionId: `trans-${orderCode}`,
+      redirectUrl: 'https://example.com/done',
+      timeoutSeconds: 360,
+      paymentUrl: 'https://pay.example.com/x',
     });
 
-    expect(created.orderCode).toBe('ORD-1');
+    const read = await repo.findByOrderCode(orderCode);
+    expect(read).toMatchObject({
+      orderCode,
+      amountCents: 24690,
+      currency: Currency.VND,
+      idempotencyKey: `key-${orderCode}`,
+      provider: PaymentProvider.ZALOPAY,
+      providerTransactionId: `trans-${orderCode}`,
+      redirectUrl: 'https://example.com/done',
+      paymentUrl: 'https://pay.example.com/x',
+      status: 'PENDING',
+    });
+    expect(await repo.findByIdempotencyKey(`key-${orderCode}`)).toMatchObject({ orderCode });
+    expect(await repo.findByProviderTransactionId(`trans-${orderCode}`)).toMatchObject({
+      orderCode,
+    });
   });
 });

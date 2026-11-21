@@ -160,7 +160,9 @@ func (f *fakeSessions) ActiveSession(c context.Context, id, _ string) (*models.S
 	return f.GetSession(c, id)
 }
 func (f *fakeSessions) InvalidateCheckoutToken(context.Context, string, string) error { return nil }
-func (f *fakeSessions) ValidateCheckoutToken(context.Context, string) error           { return nil }
+func (f *fakeSessions) ValidateCheckoutToken(context.Context, string, string, string) (string, error) {
+	return "", nil
+}
 
 type fakeProducer struct{ published []string }
 

@@ -18,7 +18,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "proto:update": "bash scripts/update-protos.sh",
+    "update:proto": "bash scripts/update-protos.sh",
     "proto:all": "npm run proto:payment",
     "proto:payment": "protoc --plugin=node_modules/.bin/protoc-gen-ts_proto -I=../../proto --ts_proto_out=src/protogen/ ../../proto/payment.proto --ts_proto_opt=nestJs=true --ts_proto_opt=fileSuffix=.pb"
   },

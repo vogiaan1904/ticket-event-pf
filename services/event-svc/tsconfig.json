@@ -23,7 +23,7 @@
       "@common/*": ["src/common/*"],
       "@infra/*": ["src/infra/*"],
       "@shared/*": ["src/shared/*"],
-      "@interfaces/*": ["src/shared/interfaces/*"]
+      "@protogen/*": ["src/protogen/*"]
     }
   }
 }

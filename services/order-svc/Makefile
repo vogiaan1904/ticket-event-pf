@@ -3,6 +3,7 @@ protoc-all:
 	$(MAKE) protoc PROTO=../../proto/event.proto OUT_DIR=pkg/grpc/event
 	$(MAKE) protoc PROTO=../../proto/payment.proto OUT_DIR=pkg/grpc/payment
 	$(MAKE) protoc PROTO=../../proto/order.proto OUT_DIR=pkg/grpc/order
+	$(MAKE) protoc PROTO=../../proto/waitroom.proto OUT_DIR=pkg/grpc/waitroom
 
 protoc:
 	protoc --go_out=$(OUT_DIR) --go_opt=paths=source_relative \

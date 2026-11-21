@@ -130,7 +130,7 @@ message UpdateEventRequest {
     optional string start_date = 4;
     optional string end_date = 5;
     optional string thumbnail_url = 6;
-    optional string venue_name = 7;
+    optional string venue = 7;
     optional string street = 8;
     optional string city = 9;
     optional string country = 10;

@@ -29,6 +29,8 @@ var (
 	// signal to drop the entry; every other failure is transient and stays queued.
 	ErrSessionNotAdmittable = errors.New("session is no longer admittable")
 
+	// ErrCheckoutTokenRefused wraps every reason a checkout token does not buy.
+	ErrCheckoutTokenRefused     = errors.New("checkout token refused")
 	ErrTokenEmpty               = errors.New("token cannot be empty")
 	ErrTokenInvalid             = errors.New("invalid token")
 	ErrTokenInvalidated         = errors.New("token has been invalidated")

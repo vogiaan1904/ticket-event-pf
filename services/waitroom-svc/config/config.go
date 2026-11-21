@@ -109,7 +109,7 @@ func Load() (*Config, error) {
 			EventCacheTTL:      getEnvAsDuration("QUEUE_EVENT_CACHE_TTL", 30*time.Second),
 		},
 		JWT: JWTConfig{
-			Secret: getEnv("JWT_SECRET", "jwt-secret"),
+			Secret: os.Getenv("JWT_SECRET"),
 			Expiry: getEnvAsDuration("JWT_EXPIRY", 15*time.Minute),
 		},
 		Log: LogConfig{
@@ -148,10 +148,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("redis address is required")
 	}
 
-	if c.JWT.Secret == "" || c.JWT.Secret == "your-super-secret-key-change-in-production" {
-		if c.Env == "production" {
-			return fmt.Errorf("JWT secret must be set in production")
-		}
+	if c.JWT.Secret == "" {
+		return fmt.Errorf("JWT_SECRET is required: it signs every checkout token")
 	}
 
 	return nil

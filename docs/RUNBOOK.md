@@ -96,7 +96,7 @@ kubectl -n ticketbottle exec postgres-0 -- psql -U root -d ticketbottle_payment 
   'UPDATE outbox SET "retryCount" = 0 WHERE "publishedAt" IS NULL AND "retryCount" >= 5'
 ```
 
-The relay's next poll, within 5s, publishes them and `ConfirmOrder` runs. A hold expires 9 minutes
+The relay's next poll, within 5s, publishes them and `ConfirmOrder` runs. A hold expires 6m30s
 after its order was created; inventory's `Confirm` re-acquires an expired hold while stock remains.
 Where the stock was resold, the order becomes REFUND_REQUIRED and pages as
 [OrdersNeedingRefund](#ordersneedingrefund) — a refund owed, no longer a silent loss.

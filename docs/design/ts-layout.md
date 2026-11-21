@@ -1,9 +1,9 @@
 # TS service layout — design
 
 **Status:** specified 2026-06-16 and re-adopted 2026-09-24
-([0014](../decisions/0014-ts-structure-follows-the-june-layout-rule.md)). **No service is
-converged yet**; none is the reference until one is. The event-svc convergence plan
-of 2026-06-17 was written and never executed.
+([0014](../decisions/0014-ts-structure-follows-the-june-layout-rule.md)). **event-svc is
+converged** (2026-11-18, [plan](../plans/2026-11-14-event-svc-converges-to-the-layout.md))
+and is the worked example: copy its shape, not another service's.
 **Applies to:** `api-gateway`, `event-svc`, `payment-svc`, `user-svc`.
 
 ## The problem
@@ -64,7 +64,6 @@ src/
 
 | Service | Off the rule |
 |---|---|
-| `event-svc` | `controllers/grpc/` wrapper around a gRPC-only controller; transport DTOs in `controllers/grpc/dtos/`, domain shapes in a second `dtos/` |
 | `payment-svc` | transport DTOs under `controllers/grpc/dto/`; domain shapes in `dto/` |
 | `api-gateway` | `dtos/req` + `dtos/resp`; 15 granular aliases |
 | `user-svc` | `src/user/` outside `modules/`; Prisma under `shared/prisma/`; 13 aliases |

@@ -409,6 +409,110 @@ func (x *QueueStatusResponse) GetPaused() bool {
 	return false
 }
 
+type ValidateCheckoutTokenRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	EventId       string                 `protobuf:"bytes,3,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateCheckoutTokenRequest) Reset() {
+	*x = ValidateCheckoutTokenRequest{}
+	mi := &file_waitroom_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateCheckoutTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateCheckoutTokenRequest) ProtoMessage() {}
+
+func (x *ValidateCheckoutTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_waitroom_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateCheckoutTokenRequest.ProtoReflect.Descriptor instead.
+func (*ValidateCheckoutTokenRequest) Descriptor() ([]byte, []int) {
+	return file_waitroom_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ValidateCheckoutTokenRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ValidateCheckoutTokenRequest) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *ValidateCheckoutTokenRequest) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+type ValidateCheckoutTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ValidateCheckoutTokenResponse) Reset() {
+	*x = ValidateCheckoutTokenResponse{}
+	mi := &file_waitroom_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ValidateCheckoutTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ValidateCheckoutTokenResponse) ProtoMessage() {}
+
+func (x *ValidateCheckoutTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_waitroom_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ValidateCheckoutTokenResponse.ProtoReflect.Descriptor instead.
+func (*ValidateCheckoutTokenResponse) Descriptor() ([]byte, []int) {
+	return file_waitroom_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ValidateCheckoutTokenResponse) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
 type LeaveQueueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SessionId     string                 `protobuf:"bytes,1,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
@@ -419,7 +523,7 @@ type LeaveQueueRequest struct {
 
 func (x *LeaveQueueRequest) Reset() {
 	*x = LeaveQueueRequest{}
-	mi := &file_waitroom_proto_msgTypes[4]
+	mi := &file_waitroom_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -431,7 +535,7 @@ func (x *LeaveQueueRequest) String() string {
 func (*LeaveQueueRequest) ProtoMessage() {}
 
 func (x *LeaveQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[4]
+	mi := &file_waitroom_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -444,7 +548,7 @@ func (x *LeaveQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveQueueRequest.ProtoReflect.Descriptor instead.
 func (*LeaveQueueRequest) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{4}
+	return file_waitroom_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LeaveQueueRequest) GetSessionId() string {
@@ -471,7 +575,7 @@ type LeaveQueueResponse struct {
 
 func (x *LeaveQueueResponse) Reset() {
 	*x = LeaveQueueResponse{}
-	mi := &file_waitroom_proto_msgTypes[5]
+	mi := &file_waitroom_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -483,7 +587,7 @@ func (x *LeaveQueueResponse) String() string {
 func (*LeaveQueueResponse) ProtoMessage() {}
 
 func (x *LeaveQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[5]
+	mi := &file_waitroom_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -496,7 +600,7 @@ func (x *LeaveQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveQueueResponse.ProtoReflect.Descriptor instead.
 func (*LeaveQueueResponse) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{5}
+	return file_waitroom_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *LeaveQueueResponse) GetSessionId() string {
@@ -521,7 +625,7 @@ type HealthCheckRequest struct {
 
 func (x *HealthCheckRequest) Reset() {
 	*x = HealthCheckRequest{}
-	mi := &file_waitroom_proto_msgTypes[6]
+	mi := &file_waitroom_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -533,7 +637,7 @@ func (x *HealthCheckRequest) String() string {
 func (*HealthCheckRequest) ProtoMessage() {}
 
 func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[6]
+	mi := &file_waitroom_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -546,7 +650,7 @@ func (x *HealthCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckRequest.ProtoReflect.Descriptor instead.
 func (*HealthCheckRequest) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{6}
+	return file_waitroom_proto_rawDescGZIP(), []int{8}
 }
 
 type HealthCheckResponse struct {
@@ -562,7 +666,7 @@ type HealthCheckResponse struct {
 
 func (x *HealthCheckResponse) Reset() {
 	*x = HealthCheckResponse{}
-	mi := &file_waitroom_proto_msgTypes[7]
+	mi := &file_waitroom_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -574,7 +678,7 @@ func (x *HealthCheckResponse) String() string {
 func (*HealthCheckResponse) ProtoMessage() {}
 
 func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_waitroom_proto_msgTypes[7]
+	mi := &file_waitroom_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -587,7 +691,7 @@ func (x *HealthCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HealthCheckResponse.ProtoReflect.Descriptor instead.
 func (*HealthCheckResponse) Descriptor() ([]byte, []int) {
-	return file_waitroom_proto_rawDescGZIP(), []int{7}
+	return file_waitroom_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *HealthCheckResponse) GetStatus() string {
@@ -664,7 +768,14 @@ const file_waitroom_proto_rawDesc = "" +
 	"\vadmitted_at\x18\n" +
 	" \x01(\tR\n" +
 	"admittedAt\x12\x16\n" +
-	"\x06paused\x18\v \x01(\bR\x06paused\"K\n" +
+	"\x06paused\x18\v \x01(\bR\x06paused\"h\n" +
+	"\x1cValidateCheckoutTokenRequest\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x19\n" +
+	"\bevent_id\x18\x03 \x01(\tR\aeventId\">\n" +
+	"\x1dValidateCheckoutTokenResponse\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"K\n" +
 	"\x11LeaveQueueRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x17\n" +
@@ -694,13 +805,14 @@ const file_waitroom_proto_rawDesc = "" +
 	"\x18SESSION_STATUS_COMPLETED\x10\x05\x12\x19\n" +
 	"\x15SESSION_STATUS_FAILED\x10\x06\x12\x1a\n" +
 	"\x16SESSION_STATUS_EXPIRED\x10\a\x12\x1c\n" +
-	"\x18SESSION_STATUS_CANCELLED\x10\b2\xd6\x02\n" +
+	"\x18SESSION_STATUS_CANCELLED\x10\b2\xc6\x03\n" +
 	"\x0fWaitroomService\x12J\n" +
 	"\tJoinQueue\x12\x1d.waitroom.v1.JoinQueueRequest\x1a\x1e.waitroom.v1.JoinQueueResponse\x12V\n" +
 	"\x0eGetQueueStatus\x12\".waitroom.v1.GetQueueStatusRequest\x1a .waitroom.v1.QueueStatusResponse\x12M\n" +
 	"\n" +
 	"LeaveQueue\x12\x1e.waitroom.v1.LeaveQueueRequest\x1a\x1f.waitroom.v1.LeaveQueueResponse\x12P\n" +
-	"\vHealthCheck\x12\x1f.waitroom.v1.HealthCheckRequest\x1a .waitroom.v1.HealthCheckResponseB:Z8github.com/vogiaan1904/ticketbottle-proto/proto/waitroomb\x06proto3"
+	"\vHealthCheck\x12\x1f.waitroom.v1.HealthCheckRequest\x1a .waitroom.v1.HealthCheckResponse\x12n\n" +
+	"\x15ValidateCheckoutToken\x12).waitroom.v1.ValidateCheckoutTokenRequest\x1a*.waitroom.v1.ValidateCheckoutTokenResponseB:Z8github.com/vogiaan1904/ticketbottle-proto/proto/waitroomb\x06proto3"
 
 var (
 	file_waitroom_proto_rawDescOnce sync.Once
@@ -715,35 +827,39 @@ func file_waitroom_proto_rawDescGZIP() []byte {
 }
 
 var file_waitroom_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_waitroom_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_waitroom_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_waitroom_proto_goTypes = []any{
-	(SessionStatus)(0),            // 0: waitroom.v1.SessionStatus
-	(*JoinQueueRequest)(nil),      // 1: waitroom.v1.JoinQueueRequest
-	(*JoinQueueResponse)(nil),     // 2: waitroom.v1.JoinQueueResponse
-	(*GetQueueStatusRequest)(nil), // 3: waitroom.v1.GetQueueStatusRequest
-	(*QueueStatusResponse)(nil),   // 4: waitroom.v1.QueueStatusResponse
-	(*LeaveQueueRequest)(nil),     // 5: waitroom.v1.LeaveQueueRequest
-	(*LeaveQueueResponse)(nil),    // 6: waitroom.v1.LeaveQueueResponse
-	(*HealthCheckRequest)(nil),    // 7: waitroom.v1.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 8: waitroom.v1.HealthCheckResponse
-	nil,                           // 9: waitroom.v1.HealthCheckResponse.ComponentsEntry
+	(SessionStatus)(0),                    // 0: waitroom.v1.SessionStatus
+	(*JoinQueueRequest)(nil),              // 1: waitroom.v1.JoinQueueRequest
+	(*JoinQueueResponse)(nil),             // 2: waitroom.v1.JoinQueueResponse
+	(*GetQueueStatusRequest)(nil),         // 3: waitroom.v1.GetQueueStatusRequest
+	(*QueueStatusResponse)(nil),           // 4: waitroom.v1.QueueStatusResponse
+	(*ValidateCheckoutTokenRequest)(nil),  // 5: waitroom.v1.ValidateCheckoutTokenRequest
+	(*ValidateCheckoutTokenResponse)(nil), // 6: waitroom.v1.ValidateCheckoutTokenResponse
+	(*LeaveQueueRequest)(nil),             // 7: waitroom.v1.LeaveQueueRequest
+	(*LeaveQueueResponse)(nil),            // 8: waitroom.v1.LeaveQueueResponse
+	(*HealthCheckRequest)(nil),            // 9: waitroom.v1.HealthCheckRequest
+	(*HealthCheckResponse)(nil),           // 10: waitroom.v1.HealthCheckResponse
+	nil,                                   // 11: waitroom.v1.HealthCheckResponse.ComponentsEntry
 }
 var file_waitroom_proto_depIdxs = []int32{
-	0, // 0: waitroom.v1.QueueStatusResponse.status:type_name -> waitroom.v1.SessionStatus
-	9, // 1: waitroom.v1.HealthCheckResponse.components:type_name -> waitroom.v1.HealthCheckResponse.ComponentsEntry
-	1, // 2: waitroom.v1.WaitroomService.JoinQueue:input_type -> waitroom.v1.JoinQueueRequest
-	3, // 3: waitroom.v1.WaitroomService.GetQueueStatus:input_type -> waitroom.v1.GetQueueStatusRequest
-	5, // 4: waitroom.v1.WaitroomService.LeaveQueue:input_type -> waitroom.v1.LeaveQueueRequest
-	7, // 5: waitroom.v1.WaitroomService.HealthCheck:input_type -> waitroom.v1.HealthCheckRequest
-	2, // 6: waitroom.v1.WaitroomService.JoinQueue:output_type -> waitroom.v1.JoinQueueResponse
-	4, // 7: waitroom.v1.WaitroomService.GetQueueStatus:output_type -> waitroom.v1.QueueStatusResponse
-	6, // 8: waitroom.v1.WaitroomService.LeaveQueue:output_type -> waitroom.v1.LeaveQueueResponse
-	8, // 9: waitroom.v1.WaitroomService.HealthCheck:output_type -> waitroom.v1.HealthCheckResponse
-	6, // [6:10] is the sub-list for method output_type
-	2, // [2:6] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	0,  // 0: waitroom.v1.QueueStatusResponse.status:type_name -> waitroom.v1.SessionStatus
+	11, // 1: waitroom.v1.HealthCheckResponse.components:type_name -> waitroom.v1.HealthCheckResponse.ComponentsEntry
+	1,  // 2: waitroom.v1.WaitroomService.JoinQueue:input_type -> waitroom.v1.JoinQueueRequest
+	3,  // 3: waitroom.v1.WaitroomService.GetQueueStatus:input_type -> waitroom.v1.GetQueueStatusRequest
+	7,  // 4: waitroom.v1.WaitroomService.LeaveQueue:input_type -> waitroom.v1.LeaveQueueRequest
+	9,  // 5: waitroom.v1.WaitroomService.HealthCheck:input_type -> waitroom.v1.HealthCheckRequest
+	5,  // 6: waitroom.v1.WaitroomService.ValidateCheckoutToken:input_type -> waitroom.v1.ValidateCheckoutTokenRequest
+	2,  // 7: waitroom.v1.WaitroomService.JoinQueue:output_type -> waitroom.v1.JoinQueueResponse
+	4,  // 8: waitroom.v1.WaitroomService.GetQueueStatus:output_type -> waitroom.v1.QueueStatusResponse
+	8,  // 9: waitroom.v1.WaitroomService.LeaveQueue:output_type -> waitroom.v1.LeaveQueueResponse
+	10, // 10: waitroom.v1.WaitroomService.HealthCheck:output_type -> waitroom.v1.HealthCheckResponse
+	6,  // 11: waitroom.v1.WaitroomService.ValidateCheckoutToken:output_type -> waitroom.v1.ValidateCheckoutTokenResponse
+	7,  // [7:12] is the sub-list for method output_type
+	2,  // [2:7] is the sub-list for method input_type
+	2,  // [2:2] is the sub-list for extension type_name
+	2,  // [2:2] is the sub-list for extension extendee
+	0,  // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_waitroom_proto_init() }
@@ -757,7 +873,7 @@ func file_waitroom_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_waitroom_proto_rawDesc), len(file_waitroom_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

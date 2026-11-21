@@ -664,7 +664,7 @@ This renders the EKS target against external hosts. The hostnames are placeholde
 - Consumes: `.Values.postgres.enabled` and `.Values.postgres.hosts`.
 - Produces: the EKS overlay that phase (b) fills in with real endpoints.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Append to `tests/assert-render.sh`, before the final `echo`:
 
@@ -679,7 +679,7 @@ echo "$eks" | grep -q "@postgres:5432" \
 echo "OK  values-eks uses an external database"
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 ```bash
 deploy/helm/ticketbottle/tests/assert-render.sh
@@ -687,7 +687,7 @@ deploy/helm/ticketbottle/tests/assert-render.sh
 
 Expected: FAIL with `values-eks still renders an in-cluster postgres`.
 
-- [ ] **Step 3: Opt the overlay out**
+- [x] **Step 3: Opt the overlay out**
 
 Append to `deploy/helm/ticketbottle/values-eks.yaml`:
 
@@ -703,7 +703,7 @@ postgres:
     shared: shared.rds.invalid
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 ```bash
 deploy/helm/ticketbottle/tests/assert-render.sh
@@ -711,7 +711,7 @@ deploy/helm/ticketbottle/tests/assert-render.sh
 
 Expected: `all render assertions passed`, including `values-eks uses an external database`.
 
-- [ ] **Step 5: Confirm the other overlays are still untouched**
+- [x] **Step 5: Confirm the other overlays are still untouched**
 
 ```bash
 git diff --stat deploy/helm/ticketbottle/values-local.yaml deploy/helm/ticketbottle/values-k3s.yaml
@@ -719,7 +719,7 @@ git diff --stat deploy/helm/ticketbottle/values-local.yaml deploy/helm/ticketbot
 
 Expected: no output. Neither file is modified anywhere in this plan.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add deploy/helm/ticketbottle/values-eks.yaml deploy/helm/ticketbottle/tests/assert-render.sh

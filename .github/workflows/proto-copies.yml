@@ -1,19 +1,26 @@
 name: proto-copies
 
 # Each TS service keeps a runtime copy of the contracts in src/protos/, synced from
-# proto/. A contract change that reaches only some copies leaves the rest describing
-# a wire that no longer exists, and nothing else notices.
+# proto/, and every service commits stubs generated from them. A contract change that
+# reaches only some copies or stubs leaves the rest describing a wire that no longer
+# exists, and nothing else notices: the gateway's order stub went stale that way.
 on:
   push:
     branches: [main, dev]
     paths:
       - "proto/**"
       - "services/*/src/protos/**"
+      - "services/*/src/protogen/**"
+      - "services/*/pkg/grpc/**"
+      - "services/waitroom-svc/protogen/**"
       - ".github/workflows/proto-copies.yml"
   pull_request:
     paths:
       - "proto/**"
       - "services/*/src/protos/**"
+      - "services/*/src/protogen/**"
+      - "services/*/pkg/grpc/**"
+      - "services/waitroom-svc/protogen/**"
       - ".github/workflows/proto-copies.yml"
   workflow_dispatch: {}
 
@@ -35,3 +42,47 @@ jobs:
             elif ! cmp -s "$root" "$f"; then echo "$f differs from $root"; status=1; fi
           done
           exit $status
+
+  # Regenerates every stub with the tools named in the stubs' own headers. A pinned
+  # version that drifts from them shows as a diff here too, which is the point.
+  stubs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: protoc 29.3
+        run: |
+          curl -sSLo /tmp/protoc.zip https://github.com/protocolbuffers/protobuf/releases/download/v29.3/protoc-29.3-linux-x86_64.zip
+          sudo unzip -q -o /tmp/protoc.zip -d /usr/local bin/protoc 'include/*'
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/order-svc/go.mod
+          cache: false
+
+      - name: The Go plugins
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.6
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.5.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Regenerate every stub from proto/
+        run: |
+          for s in order-svc inventory-svc waitroom-svc; do make -C "services/$s" protoc-all; done
+          for s in api-gateway event-svc user-svc payment-svc; do
+            (cd "services/$s" && npm ci --ignore-scripts --no-audit --no-fund && npm run proto:all)
+          done
+
+      - name: Every committed stub matches its contract
+        run: |
+          drift=$(git status --porcelain -- services/*/pkg/grpc services/waitroom-svc/protogen services/*/src/protogen)
+          if [ -n "$drift" ]; then
+            echo "Stubs differ from proto/; regenerate and commit them:"; echo "$drift"
+            git diff --stat -- services/*/pkg/grpc services/waitroom-svc/protogen services/*/src/protogen
+            exit 1
+          fi
+

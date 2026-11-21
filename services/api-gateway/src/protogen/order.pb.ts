@@ -44,6 +44,7 @@ export interface Order {
 export interface OrderItem {
   ticketClassId: string;
   quantity: number;
+  /** One ticket's price at purchase; the line costs quantity times this. */
   priceCents: number;
 }
 

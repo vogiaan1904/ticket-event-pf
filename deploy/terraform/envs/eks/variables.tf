@@ -19,9 +19,10 @@ variable "kubernetes_version" {
   description = "null = current EKS default (standard support, $0.10/hr). Never pin an EOL version ($0.60/hr)."
 }
 
+# Non-burstable, so a measured door does not depend on a credit balance (0039).
 variable "node_instance_types" {
   type    = list(string)
-  default = ["t3.large", "t3a.large"]
+  default = ["m6a.large", "m6i.large"]
 }
 
 variable "node_desired_size" {
@@ -52,7 +53,7 @@ variable "lbc_iam_policy_url" {
 
 variable "private_nodes" {
   type        = bool
-  default     = false
+  default     = true
   description = <<-EOT
     false: nodes public, no NAT. AWS documents this layout given SG-only exposure.
     true:  nodes private, ALB public, NAT egress created here. AWS's recommendation.

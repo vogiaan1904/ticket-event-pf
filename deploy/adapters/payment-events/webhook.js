@@ -17,6 +17,22 @@ const webhookEvents = new Counter({
 
 const EVENT_TYPE = 'PAYMENT_COMPLETED';
 
+// Plays ZaloPay's create endpoint, so a load run measures this system and not the
+// sandbox (decision 0029). The delay is the measured fast real call.
+const CREATE_DELAY_MS = Number(process.env.FAKE_CREATE_DELAY_MS ?? 330);
+
+async function createLink(req) {
+  let body = '';
+  for await (const chunk of req) body += chunk;
+  const id = JSON.parse(body).app_trans_id;
+  if (typeof id !== 'string' || !id) {
+    return { code: 400, body: { return_code: -1, return_message: 'app_trans_id required' } };
+  }
+  await new Promise((r) => setTimeout(r, CREATE_DELAY_MS));
+  const url = `http://payment-webhook:8080/pay/${encodeURIComponent(id)}`;
+  return { code: 200, body: { return_code: 1, return_message: 'success', order_url: url } };
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function complete(orderCode) {
@@ -53,6 +69,12 @@ async function complete(orderCode) {
 
 http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/healthz') { res.writeHead(200).end('ok'); return; }
+  if (req.method === 'POST' && req.url === '/v2/create') {
+    const bad = { code: 400, body: { return_code: -1, return_message: 'bad request' } };
+    const r = await createLink(req).catch(() => bad);
+    res.writeHead(r.code, { 'Content-Type': 'application/json' }).end(JSON.stringify(r.body));
+    return;
+  }
   const m = req.url.match(/^\/complete\/(.+)$/);
   if (req.method === 'POST' && m) {
     try {

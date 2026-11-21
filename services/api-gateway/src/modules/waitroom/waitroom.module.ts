@@ -6,6 +6,7 @@ import { WAITROOM_SERVICE_NAME, WAITROOM_V1_PACKAGE_NAME } from '@/protogen/wait
 import { AppConfigService } from '@/shared/services/config.service';
 import { join } from 'path';
 import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
+import { clientChannelOptions } from '@/shared/grpc/client-options';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { GRPC_LOADER_OPTIONS } from '@/shared/constants/grpc.constant';
             package: WAITROOM_V1_PACKAGE_NAME,
             protoPath: join(__dirname, '../../protos', 'waitroom.proto'),
             loader: GRPC_LOADER_OPTIONS,
+            channelOptions: clientChannelOptions(),
           },
         }),
         inject: [AppConfigService],

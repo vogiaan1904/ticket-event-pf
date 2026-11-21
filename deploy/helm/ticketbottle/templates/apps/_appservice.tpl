@@ -60,6 +60,23 @@ spec:
       {{- with .drainSeconds }}
       terminationGracePeriodSeconds: {{ add $.Values.shutdown.preStopSleepSeconds . 5 }}
       {{- end }}
+      {{- if .ensureTopics }}
+      {{- /* A consumer already running would not claim new partitions for up to
+             20 minutes, so it starts after they exist. See docs/decisions/0030. */}}
+      initContainers:
+        - name: ensure-topics
+          image: {{ $.Values.redpanda.image }}
+          command:
+            - sh
+            - -c
+            - {{ $.Files.Get "files/ensure-topics.sh" | quote }}
+            - ensure-topics
+            - redpanda:9093
+            {{- range $topic, $n := $.Values.redpanda.partitions }}
+            - {{ printf "%s=%d" $topic (int $n) | quote }}
+            {{- end }}
+          resources: { requests: { cpu: 10m, memory: 32Mi } }
+      {{- end }}
       containers:
         - name: {{ .name }}
           image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}

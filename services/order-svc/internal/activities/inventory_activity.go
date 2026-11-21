@@ -97,3 +97,18 @@ func (a *InventoryActivities) CheckAvailability(ctx context.Context, items []*in
 
 	return resp.Accept, nil
 }
+
+// ReleaseEndedCheckout releases a hold whose checkout ended unpaid, leaving it
+// re-acquirable by a payment that still lands on the provider's link.
+func (a *InventoryActivities) ReleaseEndedCheckout(ctx context.Context, orderCode string) error {
+	_, err := a.Client.Release(ctx, &inventory.ReleaseRequest{
+		OrderCode: orderCode,
+		Reason:    inventory.ReleaseReason_RELEASE_REASON_CHECKOUT_ENDED,
+	})
+	if err != nil {
+		metrics.RecordActivityFailure("ReleaseEndedCheckout", err)
+		return err
+	}
+
+	return nil
+}
