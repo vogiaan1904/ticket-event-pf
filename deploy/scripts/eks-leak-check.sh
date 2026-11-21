@@ -60,6 +60,26 @@ check "controller-created security groups (k8s-*)" \
   "$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC" \
       --query "SecurityGroups[?starts_with(GroupName,'k8s-')].GroupName" --output text)"
 
+check "RDS instances for the cluster" \
+  "$(aws rds describe-db-instances --region "$REGION" \
+      --query "DBInstances[?starts_with(DBInstanceIdentifier,'$CLUSTER-')].[DBInstanceIdentifier,DBInstanceStatus]" --output text)"
+
+check "RDS retained automated backups" \
+  "$(aws rds describe-db-instance-automated-backups --region "$REGION" \
+      --query "DBInstanceAutomatedBackups[?starts_with(DBInstanceIdentifier,'$CLUSTER-')].[DBInstanceIdentifier,Status]" --output text)"
+
+check "RDS subnet group" \
+  "$(aws rds describe-db-subnet-groups --region "$REGION" \
+      --query "DBSubnetGroups[?DBSubnetGroupName=='$CLUSTER-rds'].DBSubnetGroupName" --output text)"
+
+check "RDS security groups ($CLUSTER-*)" \
+  "$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC" \
+      --query "SecurityGroups[?starts_with(GroupName,'$CLUSTER-')].GroupName" --output text)"
+
+check "RDS-managed master secrets (rds!db-*)" \
+  "$(aws secretsmanager list-secrets --region "$REGION" \
+      --query "SecretList[?starts_with(Name,'rds!db-')].Name" --output text)"
+
 check "CloudWatch log groups for the cluster" \
   "$(aws logs describe-log-groups --region "$REGION" --log-group-name-prefix "/aws/eks/$CLUSTER" \
       --query "logGroups[].logGroupName" --output text)"

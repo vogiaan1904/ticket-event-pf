@@ -126,3 +126,32 @@ module "order_irsa" {
   policy_json       = data.aws_iam_policy_document.order_dynamodb.json
   tags              = local.tags
 }
+# ------------------------------------------------ Postgres: RDS ×3, phase (b) ---
+# Split and sizes: docs/design/eks-stateful-tier.md#why-these-three-instances, 0039.
+locals {
+  rds_instance_classes = {
+    payment   = "db.t4g.micro"
+    inventory = "db.t4g.micro"
+    shared    = "db.t4g.small"
+  }
+  postgres_user = "root" # the chart's postgres.user
+}
+
+# Lives here, not in envs/foundation, so it is created and destroyed with the cluster.
+resource "aws_db_subnet_group" "rds" {
+  name       = "${var.cluster_name}-rds"
+  subnet_ids = local.private_subnet_ids
+  tags       = local.tags
+}
+
+module "rds" {
+  for_each                 = local.rds_instance_classes
+  source                   = "../../modules/rds"
+  identifier               = "${var.cluster_name}-${each.key}"
+  instance_class           = each.value
+  username                 = local.postgres_user
+  vpc_id                   = data.terraform_remote_state.foundation.outputs.vpc_id
+  db_subnet_group_name     = aws_db_subnet_group.rds.name
+  client_security_group_id = module.eks.cluster_security_group_id
+  tags                     = local.tags
+}

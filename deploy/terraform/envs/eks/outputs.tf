@@ -37,3 +37,13 @@ output "node_placement" {
 output "nat_public_ip" {
   value = try(module.nat_egress[0].public_ip, null)
 }
+
+output "postgres_hosts" {
+  description = "postgres.hosts for values-eks.yaml."
+  value       = { for k, m in module.rds : k => m.address }
+}
+
+output "postgres_secret_arns" {
+  description = "RDS-managed master credentials, one secret per instance."
+  value       = { for k, m in module.rds : k => m.master_user_secret_arn }
+}

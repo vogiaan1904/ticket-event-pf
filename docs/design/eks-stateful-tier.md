@@ -122,26 +122,31 @@ outputs.
 
 **`modules/vpc`** — **BUILT 2026-09-18.** Gained `private_subnet_cidrs`
 (`10.0.11.0/24`, `10.0.12.0/24`), a private route table with **no NAT route**, and
-a free S3 gateway endpoint on both route tables. Still to add for this design: an
-`aws_db_subnet_group`. Additive: existing public subnets and their IDs do not
-change. It lives in `envs/foundation`, so the k3s target sees the new subnets but
+a free S3 gateway endpoint on both route tables. Additive: existing public subnets
+and their IDs do not change. It lives in `envs/foundation`, so the k3s target sees the new subnets but
 is not otherwise affected.
 
-**`modules/rds`** (new) — one `aws_db_instance`, instantiated three times from
-`envs/eks`:
+**`modules/rds`** — **BUILT 2026-11-21.** One `aws_db_instance`, instantiated three
+times from `envs/eks`:
 
-- `engine = postgres`, `db.t4g.micro`, `multi_az = true`
+- `engine = postgres` 15, `multi_az = true`; `shared` on `db.t4g.small`,
+  `payment` and `inventory` on `db.t4g.micro` (0039)
 - `publicly_accessible = false`, in the private DB subnet group
-- security group allowing 5432 **from the node-group security group only**
+- security group allowing 5432 **from the cluster security group only**, which the
+  managed nodes carry
 - `skip_final_snapshot = true`, `backup_retention_period = 1` — ephemeral
-- password from `random_password`, written to Secrets Manager
+- `manage_master_user_password = true`: RDS generates the password and owns its
+  Secrets Manager secret, deleted with the instance, so Terraform state never holds it
+  and no 7-day recovery window blocks the next session's create
 
-**`envs/eks`** — three `module "rds"` blocks, three Secrets Manager secrets,
-three IRSA roles, plus the Secrets Store CSI driver addon.
+**`envs/eks`** — the `aws_db_subnet_group` over the private subnets (here, not in
+`envs/foundation`, so it lives and dies with the cluster) and `module "rds"` over the
+three instances (**BUILT 2026-11-21**); still to add for phase (c): three IRSA roles,
+each scoped to its instance's secret ARN, plus the Secrets Store CSI driver addon.
 
 ## Credentials
 
-Terraform generates a password per instance and stores it in Secrets Manager.
+RDS generates a password per instance and stores it in Secrets Manager.
 The Secrets Store CSI driver with the AWS provider mounts it into the pod; the
 pod is authorised by IRSA.
 
