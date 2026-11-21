@@ -129,8 +129,9 @@ is not otherwise affected.
 **`modules/rds`** — **BUILT 2026-11-21.** One `aws_db_instance`, instantiated three
 times from `envs/eks`:
 
-- `engine = postgres` 15, `multi_az = true`; `shared` on `db.t4g.small`,
-  `payment` and `inventory` on `db.t4g.micro` (0039)
+- `engine = postgres` 15, `multi_az = true`; `shared` and `inventory` on
+  `db.t4g.small`, `payment` on `db.t4g.micro` ([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md),
+  [0040](../decisions/0040-inventory-rds-is-sized-for-its-pool.md))
 - `publicly_accessible = false`, in the private DB subnet group
 - security group allowing 5432 **from the cluster security group only**, which the
   managed nodes carry

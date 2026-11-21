@@ -127,11 +127,11 @@ module "order_irsa" {
   tags              = local.tags
 }
 # ------------------------------------------------ Postgres: RDS ×3, phase (b) ---
-# Split and sizes: docs/design/eks-stateful-tier.md#why-these-three-instances, 0039.
+# Split and sizes: docs/design/eks-stateful-tier.md#why-these-three-instances, 0039, 0040.
 locals {
   rds_instance_classes = {
     payment   = "db.t4g.micro"
-    inventory = "db.t4g.micro"
+    inventory = "db.t4g.small" # max_connections must exceed 4 replicas x 25 (0040)
     shared    = "db.t4g.small"
   }
   postgres_user = "root" # the chart's postgres.user

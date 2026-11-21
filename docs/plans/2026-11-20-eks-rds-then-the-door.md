@@ -23,6 +23,8 @@ Built and checked in the code, 2026-11-20:
 
 Changed since the design (2026-09-16):
 - `shared` is `db.t4g.small`, not `db.t4g.micro` (0039).
+- `inventory` is `db.t4g.small` too, after task 2's check
+  ([0040](../decisions/0040-inventory-rds-is-sized-for-its-pool.md)).
 - The design's "9-minute hold" is now 6m30s ([0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md)).
 
 ## Tasks
@@ -47,6 +49,14 @@ and the subnet group.
 **Check before task 3:** `SHOW max_connections` on the `inventory` instance. If
 it is below 100 (25 × 4 replicas, plus headroom for migrations), stop and bring the
 numbers to the architect: a smaller pool or `db.t4g.small`. Do not add RDS Proxy.
+
+**Results, 2026-11-21.** Built in `29f1800`. On EKS, `pg_isready` from a pod
+reached all three endpoints. `SHOW max_connections` on `inventory`'s
+`db.t4g.micro` returned 79 (recalled; the output was not saved), about 75 usable
+after Postgres's 3 superuser slots and RDS's own. Below 100, so the architect chose
+`db.t4g.small` for `inventory` → [0040](../decisions/0040-inventory-rds-is-sized-for-its-pool.md).
+Still to show: `max_connections` on the new class, and a clean `eks-leak-check.sh`
+with the RDS rows.
 
 ### 3. Credentials — phase (c)
 
