@@ -37,7 +37,12 @@ for RATE in "$@"; do
   grep -qE "batch_size: $RATE([^0-9]|$)" <<<"$started" || { echo "$L: waitroom runs '$started', not rate $RATE"; exit 1; }
   temporal_idle
 
+  nodes_before=$(kubectl get nodes -o name | sort | tr '\n' ' ')
   TOTAL=100000 VUS=40 DURATION=5m "$HERE/gate4a-load.sh" > "$OUT/run-$L.txt" 2>&1
+  # A node lost mid-run restarts pods and slows checkouts: not the door's doing.
+  nodes_after=$(kubectl get nodes -o name | sort | tr '\n' ' ')
+  [ "$nodes_before" = "$nodes_after" ] ||
+    { echo "$L rate $RATE/s | INVALID: nodes changed during the run, rerun it ($nodes_before-> $nodes_after)"; continue; }
   kubectl -n $NS logs job/k6-load > "$OUT/k6-$L.log"
   read -r FROM TO <<<"$(kubectl -n $NS get pod -l job-name=k6-load \
     -o jsonpath='{.items[0].status.startTime} {.items[0].status.containerStatuses[0].state.terminated.finishedAt}')"

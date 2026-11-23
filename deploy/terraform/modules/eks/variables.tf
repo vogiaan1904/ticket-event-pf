@@ -22,6 +22,15 @@ variable "node_instance_types" {
   description = "Multiple types widen the spot capacity pool and cut interruption risk."
 }
 
+variable "node_capacity_type" {
+  type        = string
+  description = "SPOT, or ON_DEMAND where a run must not lose a node (0043). Changing it replaces the node group."
+  validation {
+    condition     = contains(["SPOT", "ON_DEMAND"], var.node_capacity_type)
+    error_message = "node_capacity_type is SPOT or ON_DEMAND."
+  }
+}
+
 variable "node_desired_size" {
   type    = number
   default = 2

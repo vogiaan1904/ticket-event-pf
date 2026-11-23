@@ -20,6 +20,12 @@ variable "node_instance_types" {
   default = ["m6a.large", "m6i.large"]
 }
 
+# ON_DEMAND for a door sweep: spot reclaimed a node every few minutes on 2026-11-23 (0043).
+variable "node_capacity_type" {
+  type    = string
+  default = "SPOT"
+}
+
 variable "node_desired_size" {
   type    = number
   default = 2

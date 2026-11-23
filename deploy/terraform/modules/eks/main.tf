@@ -133,10 +133,10 @@ resource "aws_launch_template" "node" {
 
 resource "aws_eks_node_group" "spot" {
   cluster_name    = aws_eks_cluster.this.name
-  node_group_name = "spot"
+  node_group_name = "spot" # named for its default capacity; gate4b-chaos.sh uses it
   node_role_arn   = aws_iam_role.node.arn
   subnet_ids      = coalesce(var.node_subnet_ids, var.subnet_ids)
-  capacity_type   = "SPOT"
+  capacity_type   = var.node_capacity_type
   instance_types  = var.node_instance_types
 
   launch_template {
