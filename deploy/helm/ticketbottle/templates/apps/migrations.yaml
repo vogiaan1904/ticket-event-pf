@@ -1,6 +1,6 @@
+{{- $pg := include "tb.pgSecretsManager" $ }}
 {{- range $svc := list "user" "event" "payment" }}
-{{- $host := $.Values.postgres.hosts.shared }}
-{{- if eq $svc "payment" }}{{- $host = $.Values.postgres.hosts.payment }}{{- end }}
+{{- $host := index $.Values.postgres.hosts (include "tb.pgRole" $svc) }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -19,6 +19,13 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      {{- with include "tb.saName" (dict "ctx" $ "key" $svc) }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      {{- if $pg }}
+      volumes:
+        {{- include "tb.pgVolume" (dict "ctx" $ "svc" $svc) | nindent 8 }}
+      {{- end }}
       containers:
         - name: migrate
           image: {{ include "tb.image" (dict "ctx" $ "repo" (printf "ticketbottle/%s-migrate" $svc)) }}
@@ -27,9 +34,19 @@ spec:
           envFrom:
             - configMapRef: { name: {{ $svc }}-config }
             - secretRef: { name: {{ $svc }}-secrets }
+          {{- if $pg }}
+          env:
+            {{- include "tb.pgEnv" (dict "ctx" $ "svc" $svc) | nindent 12 }}
+          volumeMounts:
+            {{- include "tb.pgMount" $ | nindent 12 }}
+          {{- end }}
       # wait for postgres before running (hook order doesn't guarantee DB readiness)
       initContainers:
+        {{- if $pg }}
+        {{- include "tb.pgEnsureDb" (dict "ctx" $ "svc" $svc) | nindent 8 }}
+        {{- else }}
         - name: wait-postgres
           image: postgres:15-alpine
           command: ["sh","-c","until pg_isready -h {{ $host }} -U {{ $.Values.postgres.user }}; do echo waiting for postgres; sleep 2; done"]
+        {{- end }}
 {{- end }}

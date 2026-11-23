@@ -47,6 +47,30 @@ ext=$(helm template tb "$CHART" -f "$CHART/values-k3s.yaml" -f "$SECRETS" \
 grep -q "pg_isready -h postgres " <<<"$ext" && fail "a migration Job still waits on the in-cluster host"
 echo "OK  migration Jobs wait on their configured host"
 
+# On EKS each host's password comes from Secrets Manager through the CSI driver, so
+# the chart's own password renders nowhere, and every pod that reads a DSN runs
+# under an IRSA ServiceAccount, mounts its host's SecretProviderClass and creates its
+# database first. Temporal creates its own.
+eks=$(helm template tb "$CHART" -f "$CHART/values-eks.yaml" -f "$SECRETS" \
+      --set postgres.hosts.payment=pay.rds --set postgres.hosts.inventory=inv.rds \
+      --set postgres.hosts.shared=shared.rds --set postgres.passwordArns.payment=arn:pay \
+      --set postgres.passwordArns.inventory=arn:inv --set postgres.passwordArns.shared=arn:shared)
+pw=$(sed -n 's/^ *postgresPassword: *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p' "$SECRETS")
+[ -n "$pw" ] || fail "cannot read postgresPassword from the fixture"
+grep -qF -- "$pw" <<<"$eks" && fail "eks: the chart's Postgres password renders, though RDS holds its own"
+grep -q "name: postgres$" <<<"$eks" && fail "eks: an in-cluster postgres object renders"
+bad=$(awk 'BEGIN { RS = "\n---\n" } /kind: (Deployment|Job)/ && /(DATABASE_URL|POSTGRES_URL|POSTGRES_PWD)/ {
+  match($0, /\n  name: [a-z-]+/); n = substr($0, RSTART + 9, RLENGTH - 9)
+  if ($0 !~ /serviceAccountName: [a-z-]+/ || $0 !~ /secretProviderClass: pg-(payment|inventory|shared)/) print n
+  else if (n != "temporal" && $0 !~ /name: ensure-db/) print n }' <<<"$eks" | tr '\n' ' ')
+[ -z "$bad" ] || fail "eks: these read a DSN without IRSA, the CSI mount or ensure-db: $bad"
+for w in user-service event-service payment-service inventory-service payment-webhook outbox-relay \
+         temporal user-migrate event-migrate payment-migrate; do
+  grep -q "^  name: $w$" <<<"$eks" || fail "eks: $w does not render"
+done
+[ "$(grep -c '^kind: SecretProviderClass$' <<<"$eks")" = 3 ] || fail "eks: want one SecretProviderClass per host"
+echo "OK  eks reads each host's password from Secrets Manager, under the pod's own role"
+
 # A DSN now lives in a Secret, so every container that reads a database-backed
 # service's config must mount its Secret too -- envFrom is per-container, and a
 # Job or sidecar that pulls only the ConfigMap starts with no DATABASE_URL.

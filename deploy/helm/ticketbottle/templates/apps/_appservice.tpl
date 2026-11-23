@@ -18,6 +18,7 @@ lifecycle:
 
 {{- define "tb.appService" -}}
 {{- $ := .ctx -}}
+{{- $pg := and .pg (include "tb.pgSecretsManager" $) -}}
 {{- if $.Values.apps.enabled }}
 apiVersion: apps/v1
 kind: Deployment
@@ -60,10 +61,15 @@ spec:
       {{- with .drainSeconds }}
       terminationGracePeriodSeconds: {{ add $.Values.shutdown.preStopSleepSeconds . 5 }}
       {{- end }}
+      {{- if or .ensureTopics $pg }}
+      initContainers:
+      {{- end }}
+      {{- if $pg }}
+        {{- include "tb.pgEnsureDb" (dict "ctx" $ "svc" .pg) | nindent 8 }}
+      {{- end }}
       {{- if .ensureTopics }}
       {{- /* A consumer already running would not claim new partitions for up to
              20 minutes, so it starts after they exist. See docs/decisions/0030. */}}
-      initContainers:
         - name: ensure-topics
           image: {{ $.Values.redpanda.image }}
           command:
@@ -77,6 +83,10 @@ spec:
             {{- end }}
           resources: { requests: { cpu: 10m, memory: 32Mi } }
       {{- end }}
+      {{- if $pg }}
+      volumes:
+        {{- include "tb.pgVolume" (dict "ctx" $ "svc" .pg) | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .name }}
           image: {{ include "tb.image" (dict "ctx" $ "repo" .image) }}
@@ -87,6 +97,12 @@ spec:
             {{- if .secret }}
             - secretRef: { name: {{ .secret }} }
             {{- end }}
+          {{- if $pg }}
+          env:
+            {{- include "tb.pgEnv" (dict "ctx" $ "svc" .pg) | nindent 12 }}
+          volumeMounts:
+            {{- include "tb.pgMount" . | nindent 12 }}
+          {{- end }}
           {{- if gt (int .port) 0 }}
           ports: [{ containerPort: {{ .port }} }]
           {{- end }}

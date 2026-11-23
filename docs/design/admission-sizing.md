@@ -344,7 +344,7 @@ minutes:
 |---|---|---|
 | admitted, never orders | its token ends | nothing else ends an unused admission |
 | its `Reserve` refused | its token ends | order-svc tells the waitroom nothing |
-| ordered, holding tickets | its order settles, up to the 9-minute hold | `available` already leaves its tickets out, so it counts twice |
+| ordered, holding tickets | its order settles, at the latest when its hold expires ([0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md)) | `available` already leaves its tickets out, so it counts twice |
 
 At the end of a sell-out each holds back one buyer: three such chairs on the last three
 tickets stopped the line for up to 15 minutes, with the tickets unsold.

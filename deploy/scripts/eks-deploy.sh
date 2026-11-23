@@ -16,7 +16,12 @@ if [ -z "${IMAGE_TAG:-}" ]; then
 fi
 
 REGISTRY=$(cd "$EKS_ENV" && terraform output -raw ecr_registry)
-ORDER_ROLE=$(cd "$EKS_ENV" && terraform output -raw order_role_arn)
+# JSON is YAML, so the maps go in as flow mappings.
+PG_HOSTS=$(cd "$EKS_ENV" && terraform output -json postgres_hosts)
+PG_ARNS=$(cd "$EKS_ENV" && terraform output -json postgres_password_arns)
+# service_role_arns is keyed by ServiceAccount name; the chart keys by short name.
+SA_ROLES=$(cd "$EKS_ENV" && terraform output -json service_role_arns \
+  | jq -r 'to_entries[] | "  \(.key | sub("-service$"; "")): { roleArn: \"\(.value)\" }"')
 SUBNETS=$(cd "$EKS_ENV" && terraform output -raw alb_subnets)
 MYIP=$(cd "$EKS_ENV" && terraform output -raw my_ip_cidr)
 
@@ -25,8 +30,10 @@ image:
   registry: "${REGISTRY}/"
   tag: "${IMAGE_TAG}"
 serviceAccount:
-  order:
-    roleArn: "${ORDER_ROLE}"
+${SA_ROLES}
+postgres:
+  hosts: ${PG_HOSTS}
+  passwordArns: ${PG_ARNS}
 ingress:
   subnets: "${SUBNETS}"
   inboundCidrs: "${MYIP}"

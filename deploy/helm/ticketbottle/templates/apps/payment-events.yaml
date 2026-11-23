@@ -17,6 +17,16 @@ spec:
         checksum/secret: {{ include (print $.Template.BasePath "/apps/secrets.yaml") $ | sha256sum }}
       labels: { app: payment-webhook }
     spec:
+      {{- $pg := include "tb.pgSecretsManager" . }}
+      {{- with include "tb.saName" (dict "ctx" . "key" "payment") }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      {{- if $pg }}
+      initContainers:
+        {{- include "tb.pgEnsureDb" (dict "ctx" . "svc" "payment") | nindent 8 }}
+      volumes:
+        {{- include "tb.pgVolume" (dict "ctx" . "svc" "payment") | nindent 8 }}
+      {{- end }}
       containers:
         - name: payment-webhook
           image: {{ include "tb.image" (dict "ctx" . "repo" "ticketbottle/payment-events") }}
@@ -26,6 +36,12 @@ spec:
           envFrom:
             - configMapRef: { name: payment-config }
             - secretRef: { name: payment-secrets }
+          {{- if $pg }}
+          env:
+            {{- include "tb.pgEnv" (dict "ctx" . "svc" "payment") | nindent 12 }}
+          volumeMounts:
+            {{- include "tb.pgMount" . | nindent 12 }}
+          {{- end }}
           ports: [{ containerPort: 8080 }]
           {{- include "tb.preStopSleep" . | nindent 10 }}
           readinessProbe:

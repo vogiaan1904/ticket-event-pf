@@ -16,6 +16,14 @@ spec:
         checksum/secret: {{ include (print $.Template.BasePath "/infra/temporal-secrets.yaml") $ | sha256sum }}
       labels: { app: temporal }
     spec:
+      {{- $sm := include "tb.pgSecretsManager" . }}
+      {{- with include "tb.saName" (dict "ctx" . "key" "temporal") }}
+      serviceAccountName: {{ . }}
+      {{- end }}
+      {{- if $sm }}
+      volumes:
+        {{- include "tb.pgVolume" (dict "ctx" . "svc" "temporal") | nindent 8 }}
+      {{- end }}
       containers:
         - name: temporal
           image: {{ .Values.temporal.image }}
@@ -29,7 +37,11 @@ spec:
             - { name: POSTGRES_USER, value: "{{ .Values.postgres.user }}" }
             - name: POSTGRES_PWD
               valueFrom:
+                {{- if $sm }}
+                secretKeyRef: { name: pg-shared, key: password }
+                {{- else }}
                 secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
+                {{- end }}
             - { name: DBNAME, value: temporal }
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
@@ -38,6 +50,10 @@ spec:
             # reach the frontend. auto-setup defaults to 127.0.0.1, which the Service can't route to.
             - { name: BIND_ON_IP, value: "0.0.0.0" }
           ports: [{ containerPort: 7233 }]
+          {{- if $sm }}
+          volumeMounts:
+            {{- include "tb.pgMount" . | nindent 12 }}
+          {{- end }}
           readinessProbe:
             exec:
               # Target localhost, NOT the Service name. The Service has no endpoints until

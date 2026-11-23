@@ -23,6 +23,8 @@ Built and checked in the code, 2026-11-20:
 
 Changed since the design (2026-09-16):
 - `shared` is `db.t4g.small`, not `db.t4g.micro` (0039).
+- `inventory` is `db.t4g.small` too, after task 2's check
+  ([0040](../decisions/0040-inventory-rds-is-sized-for-its-pool.md)).
 - The design's "9-minute hold" is now 6m30s ([0036](../decisions/0036-a-hold-outlives-the-payment-window-by-30s.md)).
 
 ## Tasks
@@ -48,6 +50,14 @@ and the subnet group.
 it is below 100 (25 × 4 replicas, plus headroom for migrations), stop and bring the
 numbers to the architect: a smaller pool or `db.t4g.small`. Do not add RDS Proxy.
 
+**Results, 2026-11-21.** Built in `29f1800`. On EKS, `pg_isready` from a pod
+reached all three endpoints. `SHOW max_connections` on `inventory`'s
+`db.t4g.micro` returned 79 (recalled; the output was not saved), about 75 usable
+after Postgres's 3 superuser slots and RDS's own. Below 100, so the architect chose
+`db.t4g.small` for `inventory` → [0040](../decisions/0040-inventory-rds-is-sized-for-its-pool.md).
+`eks-leak-check.sh` with the RDS rows passed after the session's destroy. Still to
+show: `max_connections` on the new class.
+
 ### 3. Credentials — phase (c)
 
 Secrets Manager + Secrets Store CSI + one IRSA role per service, each scoped to its
@@ -58,6 +68,12 @@ passwords: the chart's single password splits per host on EKS, while k3s keeps o
 EKS no ConfigMap or values file holds a password, and `payment-service`'s role is
 refused `inventory`'s secret.
 
+**Built 2026-11-21, not yet run on EKS.** The first two are render assertions in
+`tests/assert-render.sh` (k3s golden unchanged; the chart's password absent from an
+EKS render), each seen to fail under a mutation. The third needs the cluster.
+Changed from task 2: the password is Terraform's alphanumeric `random_password`, not
+RDS-managed, because it goes inside a DSN (design, *Terraform changes*).
+
 ### 4. Migrations and databases — phase (d)
 
 `shared` needs `ticketbottle_user`, `ticketbottle_event` and Temporal's two
@@ -66,6 +82,11 @@ path is checked rather than assumed.
 
 **Done when** all six databases exist and migrate, and the purchase-flow gate
 passes on EKS with `postgres.enabled: false`.
+
+**Built 2026-11-21, not yet run on EKS.** Each database-backed pod creates its own
+database in an `ensure-db` init container; Temporal creates its two. inventory's
+schema path is unchanged: `AutoMigrate` at boot, into a database that now exists
+before it starts.
 
 ### 5. The door sweep
 

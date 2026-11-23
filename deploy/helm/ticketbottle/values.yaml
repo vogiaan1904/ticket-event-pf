@@ -46,6 +46,10 @@ postgres:
     payment: postgres
     inventory: postgres
     shared: postgres      # user, event, and Temporal's two databases
+  # Each host's password as a Secrets Manager ARN, keyed like `hosts`. Set: pods
+  # read it through the Secrets Store CSI driver and create their own database
+  # (EKS). Empty: secrets.postgresPassword, in each service's Secret. _postgres.tpl.
+  passwordArns: {}
   # app databases created by the init ConfigMap (Temporal DBs are created by Temporal itself)
   databases:
     - ticketbottle_user
@@ -124,13 +128,17 @@ ingress:
   subnets: ""       # comma-separated subnet ids; injected at deploy time
   inboundCidrs: ""  # comma-separated CIDRs allowed to reach the ALB; injected at deploy time
 
+# On EKS each runs under its own ServiceAccount annotated with an IRSA role: order
+# for DynamoDB, the rest for their Postgres host's password. On k3s every workload
+# uses the namespace default SA. roleArn is injected from `terraform output
+# service_role_arns`.
 serviceAccount:
-  order:
-    # On EKS, order-api + order-consumer run under a dedicated ServiceAccount
-    # annotated with an IRSA role. On k3s they use the namespace default SA.
-    create: false
-    name: order-service
-    roleArn: ""     # injected at deploy time from `terraform output order_role_arn`
+  order:     { create: false, name: order-service, roleArn: "" }
+  user:      { create: false, name: user-service, roleArn: "" }
+  event:     { create: false, name: event-service, roleArn: "" }
+  payment:   { create: false, name: payment-service, roleArn: "" }
+  inventory: { create: false, name: inventory-service, roleArn: "" }
+  temporal:  { create: false, name: temporal, roleArn: "" }
 
 # --- Scheduling and scaling ---------------------------------------------------
 # Keyed by WORKLOAD name, not service directory name — note payment-webhook
