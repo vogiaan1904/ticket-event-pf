@@ -43,18 +43,20 @@ for RATE in "$@"; do
     -o jsonpath='{.items[0].status.startTime} {.items[0].status.containerStatuses[0].state.terminated.finishedAt}')"
 
   "$HERE/purchase-cost.sh" "$FROM" "$TO" "$OUT/k6-$L.log" > "$OUT/cost-$L.txt"
-  RDS=-
-  [ "$TARGET" = eks ] && RDS=$("$HERE/rds-load.sh" shared "$FROM" "$TO")
+  # EKS: spot can hand a run any type the node group allows, so each run names its own.
+  EKS=-
+  [ "$TARGET" = eks ] && EKS="rds $("$HERE/rds-load.sh" shared "$FROM" "$TO") | nodes $(kubectl get nodes \
+    -o jsonpath='{range .items[*]}{.metadata.labels.node\.kubernetes\.io/instance-type}{" "}{end}')"
   QMIN=$(at 'min_over_time(sum(tb_waitroom_queue_depth)[4m:15s])' "$TO")
   SMAX=$(at 'max_over_time(sum(tb_waitroom_slots_in_use)[4m:15s])' "$TO")
   "$HERE/saga-histories.sh" "$FROM" "$TO" "$OUT/h-$L.txt" > /dev/null
   OPEN=$(python3 "$HERE/../loadtest/saga_latency.py" "$OUT/h-$L.txt" --burst-first 20 |
     awk '/first workflow task queued/ { print $5 "/" $8; exit }')
 
-  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" "$HERE" "$RDS" <<'PY'
+  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" "$HERE" "$EKS" <<'PY'
 import os, re, sys
 from datetime import datetime
-L, rate, frm, to, out, qmin, smax, opening, here, rds = sys.argv[1:]
+L, rate, frm, to, out, qmin, smax, opening, here, eks = sys.argv[1:]
 sys.path.insert(0, os.path.join(here, "..", "loadtest"))
 import saga_latency
 log = open(f"{out}/k6-{L}.log").read()
@@ -67,6 +69,6 @@ print(f"{L:<7} rate {rate}/s | {len(ok)} purchases, {len(ok) / secs:.2f}/s | che
       f" {100 * sum(x <= 2 for x in ok) / len(ok):.1f}% under 2s | without payment stalls p99 {saga_latency.pct(calm, 99):.2f}s, {stalled} stalled"
       f" | temporal {temporal} core-s | queue min {float(qmin):.0f},"
       f" slots max {float(smax):.0f} | opening first-task wait p50/max {opening}s"
-      + ("" if rds == "-" else f" | rds {rds}"))
+      + ("" if eks == "-" else f" | {eks}"))
 PY
 done
