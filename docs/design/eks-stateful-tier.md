@@ -185,8 +185,10 @@ own database if it is missing (**BUILT 2026-11-21, not yet run on EKS**). Per po
 not a hook, because a Helm `--wait` install waits for the apps before any
 post-install hook, and inventory's `AutoMigrate` needs its database at boot.
 
-inventory's DSN keeps `sslmode=disable`: RDS Postgres 15 leaves `rds.force_ssl`
-off. Version 16 turns it on, so a move to 16 needs that DSN changed.
+Every client speaks TLS to RDS, which refuses one that does not: `rds.force_ssl` is
+`1` in `default.postgres15` (read 2026-11-23). `postgres.tls` turns it on per target,
+encrypted but not verified; each client's setting and the reason it is not verified
+are in [0042](../decisions/0042-eks-postgres-clients-speak-tls-unverified.md).
 
 ## Redpanda RF=3
 

@@ -71,6 +71,18 @@ done
 [ "$(grep -c '^kind: SecretProviderClass$' <<<"$eks")" = 3 ] || fail "eks: want one SecretProviderClass per host"
 echo "OK  eks reads each host's password from Secrets Manager, under the pod's own role"
 
+# RDS refuses a client without TLS, and each client names it in its own dialect (0042).
+svc() { awk -v n="$1" 'BEGIN { RS = "\n---\n" } /kind: Deployment/ && $0 ~ ("\n  name: " n "\n")' <<<"$eks"; }
+svc inventory-service | grep -q 'ticketbottle_inventory?sslmode=require"' || fail "eks: inventory's DSN does not require TLS"
+for w in outbox-relay payment-webhook; do
+  svc $w | grep -q 'ticketbottle_payment?sslmode=no-verify"' || fail "eks: $w's DSN does not ask node-postgres for TLS"
+done
+for e in POSTGRES_TLS_ENABLED SQL_TLS_ENABLED; do
+  svc temporal | grep -q "name: $e, value: \"true\"" || fail "eks: temporal does not set $e"
+done
+grep -q 'sslmode=no-verify' <<<"$(svc payment-service)" && fail "eks: Prisma got node-postgres's sslmode"
+echo "OK  eks speaks TLS to RDS from every client"
+
 # A DSN now lives in a Secret, so every container that reads a database-backed
 # service's config must mount its Secret too -- envFrom is per-container, and a
 # Job or sidecar that pulls only the ConfigMap starts with no DATABASE_URL.

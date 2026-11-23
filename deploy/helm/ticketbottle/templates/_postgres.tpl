@@ -18,7 +18,18 @@ See docs/design/eks-stateful-tier.md#credentials.
 
 {{- /* tb.pgDsn is a service's DSN with the given password. Call with (dict "ctx" $ "svc" "user" "password" "...") */ -}}
 {{- define "tb.pgDsn" -}}
-postgresql://{{ .ctx.Values.postgres.user }}:{{ .password }}@{{ index .ctx.Values.postgres.hosts (include "tb.pgRole" .svc) }}:5432/ticketbottle_{{ .svc }}{{ if eq .svc "inventory" }}?sslmode=disable{{ end }}
+postgresql://{{ .ctx.Values.postgres.user }}:{{ .password }}@{{ index .ctx.Values.postgres.hosts (include "tb.pgRole" .svc) }}:5432/ticketbottle_{{ .svc }}{{ include "tb.pgSsl" . }}
+{{- end -}}
+
+{{- /* tb.pgSsl is the DSN's TLS query, in each client's own dialect (0042):
+       inventory (pgx)     require | disable
+       node-postgres       no-verify, or nothing
+       Prisma              nothing: it tries TLS first */ -}}
+{{- define "tb.pgSsl" -}}
+{{- $tls := .ctx.Values.postgres.tls -}}
+{{- if eq .svc "inventory" }}?sslmode={{ ternary "require" "disable" $tls }}
+{{- else if and $tls (eq (default "" .client) "node-pg") }}?sslmode=no-verify
+{{- end -}}
 {{- end -}}
 
 {{- /* tb.saName is a ServiceAccount's name where the chart creates it, else empty. */ -}}
@@ -46,7 +57,7 @@ postgresql://{{ .ctx.Values.postgres.user }}:{{ .password }}@{{ index .ctx.Value
 {{- define "tb.pgEnv" -}}
 - name: DATABASE_PASSWORD
   valueFrom: { secretKeyRef: { name: pg-{{ include "tb.pgRole" .svc }}, key: password } }
-{{- $dsn := include "tb.pgDsn" (dict "ctx" .ctx "svc" .svc "password" "$(DATABASE_PASSWORD)") }}
+{{- $dsn := include "tb.pgDsn" (dict "ctx" .ctx "svc" .svc "client" (default "" .client) "password" "$(DATABASE_PASSWORD)") }}
 {{- if eq .svc "inventory" }}
 - { name: POSTGRES_URL, value: {{ $dsn | quote }} }
 {{- else }}

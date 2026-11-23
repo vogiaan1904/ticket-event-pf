@@ -50,6 +50,9 @@ postgres:
   # read it through the Secrets Store CSI driver and create their own database
   # (EKS). Empty: secrets.postgresPassword, in each service's Secret. _postgres.tpl.
   passwordArns: {}
+  # Whether clients must speak TLS: RDS enforces it (rds.force_ssl), the in-cluster
+  # Postgres does not offer it. Encrypted, not verified: 0042.
+  tls: false
   # app databases created by the init ConfigMap (Temporal DBs are created by Temporal itself)
   databases:
     - ticketbottle_user

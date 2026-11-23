@@ -53,6 +53,7 @@ outboxRelay:
 # are injected at deploy time from terraform outputs.
 postgres:
   enabled: false
+  tls: true
 redpanda:
   storage: 5Gi
 redis:

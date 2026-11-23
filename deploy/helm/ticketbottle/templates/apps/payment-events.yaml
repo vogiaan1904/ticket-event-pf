@@ -38,7 +38,7 @@ spec:
             - secretRef: { name: payment-secrets }
           {{- if $pg }}
           env:
-            {{- include "tb.pgEnv" (dict "ctx" . "svc" "payment") | nindent 12 }}
+            {{- include "tb.pgEnv" (dict "ctx" . "svc" "payment" "client" "node-pg") | nindent 12 }}
           volumeMounts:
             {{- include "tb.pgMount" . | nindent 12 }}
           {{- end }}

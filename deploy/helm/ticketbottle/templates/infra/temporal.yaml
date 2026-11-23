@@ -42,6 +42,12 @@ spec:
                 {{- else }}
                 secretKeyRef: { name: temporal-secrets, key: POSTGRES_PWD }
                 {{- end }}
+            {{- if .Values.postgres.tls }}
+            # Schema tool, then server: encrypted, host not verified (0042).
+            - { name: POSTGRES_TLS_ENABLED, value: "true" }
+            - { name: POSTGRES_TLS_DISABLE_HOST_VERIFICATION, value: "true" }
+            - { name: SQL_TLS_ENABLED, value: "true" }
+            {{- end }}
             - { name: DBNAME, value: temporal }
             - { name: VISIBILITY_DBNAME, value: temporal_visibility }
             - { name: ENABLE_ES, value: "{{ .Values.temporal.enableElasticsearch }}" }
