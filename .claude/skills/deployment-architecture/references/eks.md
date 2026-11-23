@@ -53,7 +53,7 @@ state, and must be re-run after **every** apply:
 2. the **AWS Load Balancer Controller** (Helm, wearing its IRSA role).
 
 Both are `deploy/scripts/eks-bootstrap.sh` (idempotent). Then `deploy/scripts/eks-deploy.sh`
-generates the account-specific values (ECR registry, order IRSA role ARN, ALB subnets, your `/32`)
+generates the account-specific values (ECR registry, order IRSA role ARN, ALB subnets, the `/32` you deploy from)
 from `terraform output` so they never enter git, installs the chart, and blocks until the ALB serves.
 
 Order for a session: `terraform apply` → `eks-bootstrap.sh` → `eks-deploy.sh` → gate → teardown.
@@ -116,7 +116,7 @@ documents. Both are real; they differ in price and in what they prove.
 one of three valid configurations, with one condition: *"While not recommended, if
 you choose to deploy your worker nodes in public subnets, implement AWS security
 group rules to limit their exposure."* The cluster SG admits nothing from
-`0.0.0.0/0`, and the API endpoint is pinned to one `/32`. The condition is met.
+`0.0.0.0/0`; the API endpoint is open but admits only IAM-authenticated callers (0041). The condition is met.
 
 **Why `true` exists anyway.** The reason to avoid a NAT gateway is its **$32/mo**
 standing cost — a monthly argument. This cluster is ephemeral, and NAT bills
