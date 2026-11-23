@@ -23,10 +23,10 @@ variable "service_account" {
   description = "ServiceAccount name allowed to assume this role."
 }
 
-variable "policy_json" {
-  type        = string
-  default     = ""
-  description = "Inline policy document. Empty to attach only managed policies."
+variable "inline_policies" {
+  type        = map(string)
+  default     = {}
+  description = "Inline policy documents, keyed by a STATIC label used as the policy name. The key must be known at plan time; the document may be computed."
 }
 
 variable "policy_arns" {

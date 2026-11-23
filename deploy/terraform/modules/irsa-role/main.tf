@@ -33,10 +33,10 @@ resource "aws_iam_role" "this" {
 }
 
 resource "aws_iam_role_policy" "inline" {
-  count  = var.policy_json == "" ? 0 : 1
-  name   = "inline"
-  role   = aws_iam_role.this.id
-  policy = var.policy_json
+  for_each = var.inline_policies
+  name     = each.key
+  role     = aws_iam_role.this.id
+  policy   = each.value
 }
 
 resource "aws_iam_role_policy_attachment" "managed" {

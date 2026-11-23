@@ -124,7 +124,7 @@ module "order_irsa" {
   oidc_provider_url = module.eks.cluster_oidc_provider_url
   namespace         = "ticketbottle"
   service_account   = "order-service"
-  policy_json       = data.aws_iam_policy_document.order_dynamodb.json
+  inline_policies   = { dynamodb = data.aws_iam_policy_document.order_dynamodb.json }
   tags              = local.tags
 }
 # ------------------------------------------------ Postgres: RDS ×3, phase (b) ---
@@ -199,6 +199,6 @@ module "postgres_client_irsa" {
   oidc_provider_url = module.eks.cluster_oidc_provider_url
   namespace         = "ticketbottle"
   service_account   = each.key
-  policy_json       = data.aws_iam_policy_document.postgres_password[each.key].json
+  inline_policies   = { postgres_password = data.aws_iam_policy_document.postgres_password[each.key].json }
   tags              = local.tags
 }
