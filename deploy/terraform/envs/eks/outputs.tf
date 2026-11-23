@@ -27,8 +27,12 @@ output "vpc_id" {
   value = data.terraform_remote_state.foundation.outputs.vpc_id
 }
 
-output "order_role_arn" {
-  value = module.order_irsa.role_arn
+output "service_role_arns" {
+  description = "IRSA role per ServiceAccount, for serviceAccount.<name>.roleArn."
+  value = merge(
+    { order-service = module.order_irsa.role_arn },
+    { for sa, m in module.postgres_client_irsa : sa => m.role_arn },
+  )
 }
 output "node_placement" {
   value = var.private_nodes ? "private subnets, NAT egress" : "public subnets, no NAT"
@@ -43,7 +47,7 @@ output "postgres_hosts" {
   value       = { for k, m in module.rds : k => m.address }
 }
 
-output "postgres_secret_arns" {
-  description = "RDS-managed master credentials, one secret per instance."
-  value       = { for k, m in module.rds : k => m.master_user_secret_arn }
+output "postgres_password_arns" {
+  description = "postgres.passwordArns for the chart: one Secrets Manager secret per instance."
+  value       = { for k, m in module.rds : k => m.password_secret_arn }
 }

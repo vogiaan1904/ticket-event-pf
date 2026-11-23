@@ -136,20 +136,35 @@ times from `envs/eks`:
 - security group allowing 5432 **from the cluster security group only**, which the
   managed nodes carry
 - `skip_final_snapshot = true`, `backup_retention_period = 1` — ephemeral
-- `manage_master_user_password = true`: RDS generates the password and owns its
-  Secrets Manager secret, deleted with the instance, so Terraform state never holds it
-  and no 7-day recovery window blocks the next session's create
+- a 40-character alphanumeric `random_password`, written to a Secrets Manager secret
+  with `recovery_window_in_days = 0`, so destroy deletes it and the next session can
+  reuse its name. Alphanumeric because the chart places it inside a DSN, and Prisma
+  reads only a URL; an RDS-managed password can hold `#`, `?` or `%`, which a URL
+  would need encoded. It is in the (encrypted) S3 state.
 
 **`envs/eks`** — the `aws_db_subnet_group` over the private subnets (here, not in
 `envs/foundation`, so it lives and dies with the cluster) and `module "rds"` over the
-three instances (**BUILT 2026-11-21**); still to add for phase (c): three IRSA roles,
-each scoped to its instance's secret ARN, plus the Secrets Store CSI driver addon.
+three instances (**BUILT 2026-11-21**); for phase (c), the
+`aws-secrets-store-csi-driver-provider` EKS add-on with `syncSecret` on, and one IRSA
+role per ServiceAccount (`user-service`, `event-service`, `temporal`,
+`payment-service`, `inventory-service`), each allowed only its host's secret
+(**BUILT 2026-11-21, not yet run on EKS**).
 
 ## Credentials
 
-RDS generates a password per instance and stores it in Secrets Manager.
+Terraform generates a password per instance and stores it in Secrets Manager.
 The Secrets Store CSI driver with the AWS provider mounts it into the pod; the
-pod is authorised by IRSA.
+pod is authorised by IRSA. The chart has one `SecretProviderClass` per host
+(`pg-payment`, `pg-inventory`, `pg-shared`), selected by `postgres.passwordArns`
+(`templates/_postgres.tpl`):
+
+- The driver syncs the mounted password into Secret `pg-<host>`, because the apps
+  read env, not files. Each DSN is composed in the pod spec as
+  `postgresql://root:$(DATABASE_PASSWORD)@…`, from the same helper k3s's Secrets use.
+- k3s renders byte-identical: `passwordArns` is empty there.
+- The synced Secret is readable in-cluster by anything with `get secrets` in the
+  namespace, as k3s's are. IAM separates what each pod can *fetch*, not what the
+  namespace can read.
 
 **Each service's IRSA role is scoped to its own secret ARN.** `payment-service`
 cannot read `inventory`'s credential. The failure-domain split is therefore
@@ -164,8 +179,14 @@ initContainer. It takes the per-service host from config instead.
 RDS creates exactly one database per instance, so the `shared` instance needs
 `ticketbottle_user`, `ticketbottle_event`, `temporal` and `temporal_visibility`
 created explicitly. Temporal's `auto-setup` creates its own two when
-`SKIP_DB_CREATE=false` and it has a superuser; the two app databases need a
-bootstrap step equivalent to today's init ConfigMap.
+`SKIP_DB_CREATE=false` and it has a superuser. Every other pod that reads a DSN,
+the migration Jobs included, runs an `ensure-db` init container that creates its
+own database if it is missing (**BUILT 2026-11-21, not yet run on EKS**). Per pod,
+not a hook, because a Helm `--wait` install waits for the apps before any
+post-install hook, and inventory's `AutoMigrate` needs its database at boot.
+
+inventory's DSN keeps `sslmode=disable`: RDS Postgres 15 leaves `rds.force_ssl`
+off. Version 16 turns it on, so a move to 16 needs that DSN changed.
 
 ## Redpanda RF=3
 
@@ -195,9 +216,9 @@ the rest slips.
 |---|---|---|
 | a | Chart toggles + values | **DONE 2026-09-20** — overlays render byte-identical, every DSN served from a Secret, purchase-flow gate green on k3s revision 27 |
 | a2 | Private subnets + `private_nodes` toggle | **DONE 2026-09-19** — Gate 3a green with `private_nodes = true`, nodes on `10.0.11.44` / `10.0.12.233` |
-| b | `modules/rds` ×3 in the private subnets **— planned, 0039** | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
-| c | Secrets Manager + CSI + per-service IRSA **— planned, 0039** | No password in any ConfigMap or values file, on every target |
-| d | Migrations against three endpoints **— planned, 0039** | All six databases exist and migrate; purchase flow completes on EKS |
+| b | `modules/rds` ×3 in the private subnets **— DONE 2026-11-21** (endpoints reachable from a pod; inventory resized, 0040) | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
+| c | Secrets Manager + CSI + per-service IRSA **— built 2026-11-21, not yet run on EKS** | No password in any ConfigMap or values file, on every target |
+| d | Migrations against three endpoints **— built 2026-11-21, not yet run on EKS** | All six databases exist and migrate; purchase flow completes on EKS |
 | e | Redpanda RF=3 **— DEFERRED** | Topics report `--replicas 3`; a broker delete loses no event |
 | f | Gate 4b guard **— DEFERRED** | Any node terminable except the Redis host; flow survives |
 

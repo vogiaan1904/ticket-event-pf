@@ -13,11 +13,14 @@ image:
 # creates this one (EBS CSI, WaitForFirstConsumer, Delete).
 storageClass: gp3
 
+# roleArn is injected at deploy time for each.
 serviceAccount:
-  order:
-    create: true
-    name: order-service
-    roleArn: ""            # injected at deploy time
+  order:     { create: true }
+  user:      { create: true }
+  event:     { create: true }
+  payment:   { create: true }
+  inventory: { create: true }
+  temporal:  { create: true }
 
 # The gateway is fronted by an ALB, not a NodePort.
 gateway:
@@ -46,8 +49,10 @@ paymentEvents:
 outboxRelay:
   enabled: true
 
+# Three RDS instances (docs/design/eks-stateful-tier.md). hosts and passwordArns
+# are injected at deploy time from terraform outputs.
 postgres:
-  storage: 5Gi
+  enabled: false
 redpanda:
   storage: 5Gi
 redis:
@@ -59,8 +64,8 @@ redis:
 # inventory-service is deliberately not autoscaled. Its reserve path holds the
 # ticket-class row lock from its guarded UPDATE to COMMIT, so throughput on one hot
 # ticket class is bounded by lock hold time rather than replica count, while
-# each extra replica adds POSTGRES_MAX_OPEN_CONNS=25 against a server with the
-# stock max_connections=100. Scaling it costs connections and buys nothing.
+# each extra replica adds POSTGRES_MAX_OPEN_CONNS=25 against its RDS instance's
+# max_connections (0040). Scaling it costs connections and buys nothing.
 autoscaling:
   app-gateway:
     enabled: true

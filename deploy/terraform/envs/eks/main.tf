@@ -1,9 +1,10 @@
 terraform {
   required_version = ">= 1.10.0"
   required_providers {
-    aws  = { source = "hashicorp/aws", version = "~> 5.0" }
-    tls  = { source = "hashicorp/tls", version = "~> 4.0" }
-    http = { source = "hashicorp/http", version = "~> 3.4" }
+    aws    = { source = "hashicorp/aws", version = "~> 5.0" }
+    tls    = { source = "hashicorp/tls", version = "~> 4.0" }
+    http   = { source = "hashicorp/http", version = "~> 3.4" }
+    random = { source = "hashicorp/random", version = "~> 3.6" }
   }
   backend "s3" {}
 }
@@ -154,4 +155,50 @@ module "rds" {
   db_subnet_group_name     = aws_db_subnet_group.rds.name
   client_security_group_id = module.eks.cluster_security_group_id
   tags                     = local.tags
+}
+
+# ----------------------- Postgres credentials: CSI + per-service IRSA, phase (c) ---
+# The driver mounts each host's password under the pod's own IRSA role; syncSecret
+# copies it into a Secret, since the apps read env, not files.
+resource "aws_eks_addon" "secrets_store_csi" {
+  cluster_name                = module.eks.cluster_name
+  addon_name                  = "aws-secrets-store-csi-driver-provider"
+  resolve_conflicts_on_create = "OVERWRITE"
+  resolve_conflicts_on_update = "OVERWRITE"
+  configuration_values = jsonencode({
+    "secrets-store-csi-driver" = { syncSecret = { enabled = true } }
+  })
+  tags       = local.tags
+  depends_on = [module.eks]
+}
+
+# ServiceAccount -> the one host whose password it may read.
+locals {
+  postgres_clients = {
+    user-service      = "shared"
+    event-service     = "shared"
+    temporal          = "shared"
+    payment-service   = "payment"
+    inventory-service = "inventory"
+  }
+}
+
+data "aws_iam_policy_document" "postgres_password" {
+  for_each = local.postgres_clients
+  statement {
+    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    resources = [module.rds[each.value].password_secret_arn]
+  }
+}
+
+module "postgres_client_irsa" {
+  for_each          = local.postgres_clients
+  source            = "../../modules/irsa-role"
+  role_name         = "${var.cluster_name}-${each.key}"
+  oidc_provider_arn = module.eks.cluster_oidc_provider_arn
+  oidc_provider_url = module.eks.cluster_oidc_provider_url
+  namespace         = "ticketbottle"
+  service_account   = each.key
+  policy_json       = data.aws_iam_policy_document.postgres_password[each.key].json
+  tags              = local.tags
 }

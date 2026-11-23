@@ -76,9 +76,9 @@ check "RDS security groups ($CLUSTER-*)" \
   "$(aws ec2 describe-security-groups --region "$REGION" --filters "Name=vpc-id,Values=$VPC" \
       --query "SecurityGroups[?starts_with(GroupName,'$CLUSTER-')].GroupName" --output text)"
 
-check "RDS-managed master secrets (rds!db-*)" \
-  "$(aws secretsmanager list-secrets --region "$REGION" \
-      --query "SecretList[?starts_with(Name,'rds!db-')].Name" --output text)"
+check "RDS password secrets ($CLUSTER-*)" \
+  "$(aws secretsmanager list-secrets --region "$REGION" --include-planned-deletion \
+      --query "SecretList[?starts_with(Name,'$CLUSTER-')].Name" --output text)"
 
 check "CloudWatch log groups for the cluster" \
   "$(aws logs describe-log-groups --region "$REGION" --log-group-name-prefix "/aws/eks/$CLUSTER" \

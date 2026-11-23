@@ -1,5 +1,22 @@
-# One ephemeral Postgres instance for the EKS stateful tier.
+# One ephemeral Postgres instance for the EKS stateful tier, and its password.
 # See docs/design/eks-stateful-tier.md#terraform-changes.
+
+# Alphanumeric: the chart puts it inside a DSN, where # ? % / : would need encoding.
+resource "random_password" "master" {
+  length  = 40
+  special = false
+}
+
+resource "aws_secretsmanager_secret" "password" {
+  name                    = "${var.identifier}-password"
+  recovery_window_in_days = 0 # deleted at destroy, so the next session can reuse the name
+  tags                    = var.tags
+}
+
+resource "aws_secretsmanager_secret_version" "password" {
+  secret_id     = aws_secretsmanager_secret.password.id
+  secret_string = random_password.master.result
+}
 
 resource "aws_security_group" "this" {
   name        = var.identifier
@@ -28,9 +45,7 @@ resource "aws_db_instance" "this" {
   storage_encrypted = true
 
   username = var.username
-  # RDS generates the password and owns its Secrets Manager secret, which is
-  # deleted with the instance; Terraform state never holds it.
-  manage_master_user_password = true
+  password = random_password.master.result
 
   db_subnet_group_name   = var.db_subnet_group_name
   vpc_security_group_ids = [aws_security_group.this.id]
