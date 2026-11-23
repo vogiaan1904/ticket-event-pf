@@ -20,6 +20,8 @@ echo "== 2. AWS Load Balancer Controller (cluster=$CLUSTER vpc=$VPC) =="
 helm repo add eks https://aws.github.io/eks-charts >/dev/null 2>&1 || true
 helm repo update eks >/dev/null
 
+# keepTLSSecret: an upgrade otherwise mints a new webhook CA while running pods
+# serve the old cert, and every Service create fails x509 until they restart.
 helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName="$CLUSTER" \
@@ -30,6 +32,7 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$LBC_ROLE" \
   --set createIngressClassResource=true \
   --set ingressClass=alb \
+  --set keepTLSSecret=true \
   --wait --timeout 5m
 
 kubectl -n kube-system rollout status deploy/aws-load-balancer-controller --timeout=5m
