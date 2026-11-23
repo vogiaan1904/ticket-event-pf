@@ -13,6 +13,7 @@
 # nothing, however green the run looks.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 NS=ticketbottle
 REGION=us-east-1
 GW=${GW:?set GW to the ALB url}
@@ -23,7 +24,7 @@ VUS=${VUS:-20}
 TOTAL=${TOTAL:-2000}
 TCID_FILE=${TCID_FILE:-/tmp/gate4a-ticketclass}
 
-psql() { kubectl -n $NS exec statefulset/postgres -- psql -U root -d "$1" -tAc "$2" | tr -d '[:space:]'; }
+psql() { pg "$1" -tAc "$2" | tr -d '[:space:]'; }
 fail() { echo "GATE 4b FAILED: $1"; exit 1; }
 
 echo "== 0. choose a victim node =="

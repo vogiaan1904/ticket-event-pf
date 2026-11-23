@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# Finds the k3s box's door speed. Each argument is one run: the waitroom's
+# Finds a target's door speed. Each argument is one run: the waitroom's
 # release rate is deployed at that rate, 40 buyers queue for 5 minutes, and one
-# line of checkout latency, throughput, cost and queue is printed. The rule for
-# choosing a rate: docs/design/admission-sizing.md. Needs REF, GW, KUBECONFIG and
-# the Prometheus port-forward on :9090.
+# line of checkout latency, throughput, cost and queue is printed; on EKS, also
+# shared RDS's load. The rule for choosing a rate: docs/design/admission-sizing.md.
+# Needs REF, GW, the target's kube context and the Prometheus port-forward on :9090.
 #   REF=sha-<build> deploy/scripts/door-sweep.sh 1 2 3 4 4 3 2 1
+#   TARGET=eks REF=sha-<build> GW=http://<alb>/api deploy/scripts/door-sweep.sh 10 8 6
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 NS=ticketbottle
 PROM=${PROM:-http://localhost:9090}
 OUT=${OUT:-/tmp/door-sweep}
+TARGET=${TARGET:-k3s}
+case "$TARGET" in k3s | eks) ;; *) echo "TARGET is k3s or eks, not '$TARGET'"; exit 1 ;; esac
 : "${GW:?set GW, e.g. http://localhost:3000/api}"
 export REF=${REF:?set REF to the sha- tag being measured; :dev can move mid-sweep}
 mkdir -p "$OUT"
@@ -26,7 +29,7 @@ temporal_idle() {
 n=0
 for RATE in "$@"; do
   n=$((n + 1)); L="r$RATE-$n"
-  make -C "$HERE/.." k3s-deploy HELM_EXTRA="--set waitroom.releaseRate=$RATE" > "$OUT/deploy-$L.txt" 2>&1 ||
+  make -C "$HERE/.." "$TARGET-deploy" HELM_EXTRA="--set waitroom.releaseRate=$RATE" > "$OUT/deploy-$L.txt" 2>&1 ||
     { echo "$L: deploy failed: $(tail -1 "$OUT/deploy-$L.txt")"; exit 1; }
   kubectl -n $NS rollout status deploy/waitroom-service --timeout=5m > /dev/null
   # The ConfigMap can say one rate while the pod still runs the last: ask the pod.
@@ -40,16 +43,18 @@ for RATE in "$@"; do
     -o jsonpath='{.items[0].status.startTime} {.items[0].status.containerStatuses[0].state.terminated.finishedAt}')"
 
   "$HERE/purchase-cost.sh" "$FROM" "$TO" "$OUT/k6-$L.log" > "$OUT/cost-$L.txt"
+  RDS=-
+  [ "$TARGET" = eks ] && RDS=$("$HERE/rds-load.sh" shared "$FROM" "$TO")
   QMIN=$(at 'min_over_time(sum(tb_waitroom_queue_depth)[4m:15s])' "$TO")
   SMAX=$(at 'max_over_time(sum(tb_waitroom_slots_in_use)[4m:15s])' "$TO")
   "$HERE/saga-histories.sh" "$FROM" "$TO" "$OUT/h-$L.txt" > /dev/null
   OPEN=$(python3 "$HERE/../loadtest/saga_latency.py" "$OUT/h-$L.txt" --burst-first 20 |
     awk '/first workflow task queued/ { print $5 "/" $8; exit }')
 
-  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" "$HERE" <<'PY'
+  python3 - "$L" "$RATE" "$FROM" "$TO" "$OUT" "$QMIN" "$SMAX" "$OPEN" "$HERE" "$RDS" <<'PY'
 import os, re, sys
 from datetime import datetime
-L, rate, frm, to, out, qmin, smax, opening, here = sys.argv[1:]
+L, rate, frm, to, out, qmin, smax, opening, here, rds = sys.argv[1:]
 sys.path.insert(0, os.path.join(here, "..", "loadtest"))
 import saga_latency
 log = open(f"{out}/k6-{L}.log").read()
@@ -61,6 +66,7 @@ calm, stalled = saga_latency.without_stalls(saga_latency.load_histories(f"{out}/
 print(f"{L:<7} rate {rate}/s | {len(ok)} purchases, {len(ok) / secs:.2f}/s | checkout p50 {q(50):.2f}s p99 {q(99):.2f}s,"
       f" {100 * sum(x <= 2 for x in ok) / len(ok):.1f}% under 2s | without payment stalls p99 {saga_latency.pct(calm, 99):.2f}s, {stalled} stalled"
       f" | temporal {temporal} core-s | queue min {float(qmin):.0f},"
-      f" slots max {float(smax):.0f} | opening first-task wait p50/max {opening}s")
+      f" slots max {float(smax):.0f} | opening first-task wait p50/max {opening}s"
+      + ("" if rds == "-" else f" | rds {rds}"))
 PY
 done

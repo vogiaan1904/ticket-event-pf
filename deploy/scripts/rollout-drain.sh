@@ -7,17 +7,18 @@
 # gateway's UNAVAILABLE count over the run. Raw logs go to $OUT.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 NS=ticketbottle
 MODE=${1:?control|rollouts}
 TARGET=${2:?deployment name, e.g. app-gateway}
 N=${3:-5}
 GAP=${GAP:-60}
 OUT=${OUT:-$(mktemp -d)}
-EVENT_ID=${EVENT_ID:-$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event \
+EVENT_ID=${EVENT_ID:-$(pg ticketbottle_event \
   -tAc "select id from events where status='PUBLISHED' limit 1" | tr -d '[:space:]')}
 [ -n "$EVENT_ID" ] || { echo "no PUBLISHED event to probe"; exit 1; }
 # The access guard looks up the token's sub in user-svc on every request.
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_user -c \
+pg ticketbottle_user -c \
   "INSERT INTO users (id, email, \"firstName\", \"lastName\", password, \"updatedAt\")
    VALUES ('rollout-probe', 'rollout-probe@example.com', 'Rollout', 'Probe', 'seeded-no-signin', now())
    ON CONFLICT (id) DO NOTHING;" >/dev/null

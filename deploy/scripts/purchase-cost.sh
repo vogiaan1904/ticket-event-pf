@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# What one purchase costs the k3s box over a load run: CPU core-seconds per
-# completed purchase, whole node and Temporal and Postgres, and history events
-# per saga. Needs the Prometheus port-forward on :9090 and KUBECONFIG.
+# What one purchase costs a target over a load run: CPU core-seconds per
+# completed purchase, all nodes and Temporal and in-cluster Postgres (absent on
+# EKS: rds-load.sh), and history events per saga. Needs the Prometheus
+# port-forward on :9090 and the target's kube context.
 #   deploy/scripts/purchase-cost.sh FROM TO K6_LOG   (RFC 3339, UTC)
 set -euo pipefail
 FROM=${1:?usage: purchase-cost.sh FROM TO K6_LOG}
@@ -32,6 +33,8 @@ import sys
 node, temporal, postgres, n = map(float, sys.argv[1:])
 print(f"purchases {n:.0f}")
 for name, cores in (("node", node), ("temporal", temporal), ("postgres", postgres)):
+    if cores != cores:  # NaN: no such pod on this target
+        continue
     print(f"  {name:<9} {cores:7.1f} core-s  {cores / n:6.3f} per purchase")
 EOF
 echo "  history events per saga: CreateOrder $(events CreateOrder), ConfirmOrder $(events ConfirmOrder)"

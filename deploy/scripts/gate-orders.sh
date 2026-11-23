@@ -8,6 +8,7 @@ set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 RUN=$(date +%s)
 
 # JSON path extractor: `echo "$json" | getval a.b.c` -> value, or empty on any error.
@@ -37,7 +38,7 @@ TOK_A=$(signup A); TOK_S=$(signup S)
 
 echo "== 2. an event with five tickets =="
 CATEGORY_ID=gate1-category
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('$CATEGORY_ID','Gate1',now(),now()) ON CONFLICT (id) DO NOTHING;"
 EVT=$(curl -s -X POST "$GW/events" -H "Authorization: Bearer $TOK_A" -H 'Content-Type: application/json' -d "{
   \"name\":\"Orders Show\",\"description\":\"e2e\",
@@ -55,7 +56,7 @@ CFG=$(curl -s -X POST "$GW/events/$EVENT_ID/config" -H "Authorization: Bearer $T
   "allowWaitRoom":true,"isNewTrending":false
 }')
 [ -n "$(echo "$CFG" | getval data.id)" ] || fail "config create failed: $CFG"
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';"
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" 5 10000)
 [ -n "$TCID" ] || fail "seed-ticketclass returned no id"
@@ -102,7 +103,7 @@ echo "== 6. A cancels it; it is released, and a second cancel is refused =="
 C=$(call DELETE "$TOK_A" "/orders/code/$CODE" /tmp/ord-del.json); [ "$C" = 200 ] || fail "A's cancel answered $C: $(cat /tmp/ord-del.json)"
 call GET "$TOK_A" "/orders/code/$CODE" /tmp/ord-get.json >/dev/null
 [ "$(getval data.status < /tmp/ord-get.json)" = CANCELED ] || fail "A's order reads $(getval data.status < /tmp/ord-get.json), want CANCELED"
-RSV=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
+RSV=$(pg ticketbottle_inventory -tAc \
   "SELECT status FROM reservation WHERE order_code='$CODE'")
 [ -n "$RSV" ] || fail "A has no reservation row"
 ! echo "$RSV" | grep -q ACTIVE || fail "A's reservation is still ACTIVE: $RSV"

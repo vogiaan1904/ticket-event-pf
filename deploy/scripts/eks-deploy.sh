@@ -51,7 +51,7 @@ if [ ! -f "$SECRETS" ]; then
 fi
 
 helm upgrade --install tb "$CHART" -n "$NS" --create-namespace \
-  -f "$CHART/values-eks.yaml" -f "$GEN" -f "$SECRETS" --wait --timeout 15m
+  -f "$CHART/values-eks.yaml" -f "$GEN" -f "$SECRETS" ${HELM_EXTRA:-} --wait --timeout 15m
 
 echo "== waiting for the controller to publish an ALB hostname =="
 HOST=""

@@ -155,7 +155,7 @@ eks-bootstrap:     ## Cluster-side pieces Terraform can't own (gp3 SC, LB contro
 	./scripts/eks-bootstrap.sh
 
 eks-deploy:        ## Deploy the build ECR's :$(REF) points at, and wait for the ALB to serve
-	REF=$(REF) ./scripts/eks-deploy.sh
+	REF=$(REF) HELM_EXTRA='$(HELM_EXTRA)' ./scripts/eks-deploy.sh
 
 eks-url:           ## Print the ALB hostname
 	@kubectl -n $(NS) get ingress app-gateway -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
