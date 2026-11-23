@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy the TicketBottle chart to EKS from ECR, then wait until the ALB serves.
-# Account-specific values (registry, IRSA role ARN, subnets, your IP) are generated
-# from terraform outputs so they never live in git.
+# Account-specific values (registry, IRSA role ARN, subnets) come from terraform
+# outputs so they never live in git; the ALB allows the IP you deploy from (0041).
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 EKS_ENV="$HERE/../terraform/envs/eks"
@@ -23,7 +23,10 @@ PG_ARNS=$(cd "$EKS_ENV" && terraform output -json postgres_password_arns)
 SA_ROLES=$(cd "$EKS_ENV" && terraform output -json service_role_arns \
   | jq -r 'to_entries[] | "  \(.key | sub("-service$"; "")): { roleArn: \"\(.value)\" }"')
 SUBNETS=$(cd "$EKS_ENV" && terraform output -raw alb_subnets)
-MYIP=$(cd "$EKS_ENV" && terraform output -raw my_ip_cidr)
+MYIP=$(curl -fsS --max-time 5 https://checkip.amazonaws.com | tr -d '[:space:]')
+echo "$MYIP" | grep -Eq '^([0-9]{1,3}\.){3}[0-9]{1,3}$' ||
+  { echo "REFUSING: '$MYIP' is not an IPv4; the ALB would allow nobody"; exit 1; }
+MYIP="$MYIP/32"
 
 cat >"$GEN" <<EOF
 image:
@@ -48,7 +51,7 @@ if [ ! -f "$SECRETS" ]; then
 fi
 
 helm upgrade --install tb "$CHART" -n "$NS" --create-namespace \
-  -f "$CHART/values-eks.yaml" -f "$GEN" -f "$SECRETS" --wait --timeout 15m
+  -f "$CHART/values-eks.yaml" -f "$GEN" -f "$SECRETS" ${HELM_EXTRA:-} --wait --timeout 15m
 
 echo "== waiting for the controller to publish an ALB hostname =="
 HOST=""

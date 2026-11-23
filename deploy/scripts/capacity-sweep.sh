@@ -6,6 +6,7 @@
 #   deploy/scripts/capacity-sweep.sh 10 20 40 80
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 NS=ticketbottle
 PROM=${PROM:-http://localhost:9090}
 OUT=${OUT:-/tmp/capacity-sweep}
@@ -35,7 +36,7 @@ url=$(kubectl -n $NS exec deploy/payment-service -- printenv ZALOPAY_CREATE_URL 
 limited=$(kubectl -n $NS get pods --field-selector=status.phase=Running \
   -o jsonpath='{range .items[*]}{range .spec.containers[*]}{.resources.limits.cpu}{"\n"}{end}{end}' | grep -c . || true)
 [ "$limited" = 0 ] || { echo "$limited running containers still have a CPU limit"; exit 1; }
-conns=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d postgres -tAc 'SHOW max_connections')
+conns=$(pg postgres -tAc 'SHOW max_connections')
 [ "$conns" = 500 ] || { echo "Postgres allows $conns connections, not 500"; exit 1; }
 VCPU=$(kubectl get nodes -o jsonpath='{.items[0].status.capacity.cpu}')
 echo "box: $VCPU vCPU; runs of $DURATION; raw files under $OUT"

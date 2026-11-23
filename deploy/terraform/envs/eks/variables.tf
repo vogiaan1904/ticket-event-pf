@@ -3,11 +3,6 @@ variable "state_bucket" {
   description = "S3 bucket holding foundation + eks state, e.g. ticketbottle-tfstate-<account>."
 }
 
-variable "my_ip_cidr" {
-  type        = string
-  description = "Your public IP as a /32. Gates the cluster API endpoint AND the ALB."
-}
-
 variable "cluster_name" {
   type    = string
   default = "ticketbottle-eks"

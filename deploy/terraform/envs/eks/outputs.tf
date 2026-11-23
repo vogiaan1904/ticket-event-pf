@@ -15,10 +15,6 @@ output "alb_subnets" {
   value = join(",", data.terraform_remote_state.foundation.outputs.public_subnet_ids)
 }
 
-output "my_ip_cidr" {
-  value = var.my_ip_cidr
-}
-
 output "lbc_role_arn" {
   value = module.lbc_irsa.role_arn
 }

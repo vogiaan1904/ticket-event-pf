@@ -7,6 +7,7 @@ set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 RUN=$(date +%s)
 BAD=0
 
@@ -93,7 +94,7 @@ echo "== 2. an event: created, then every field updated =="
 # Category ids are UUIDs; fixed ones let every run reuse the same two rows.
 CAT1=00000000-0000-4000-8000-0000000000c1; CAT2=00000000-0000-4000-8000-0000000000c2
 for c in $CAT1 $CAT2; do
-  kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+  pg ticketbottle_event -qc \
     "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('$c','read-back $c',now(),now()) ON CONFLICT (id) DO NOTHING;"
 done
 EV1='{"name":"Read-back Show","description":"first description","startDate":"2027-01-01T10:00:00.000Z","endDate":"2027-01-02T10:00:00.000Z",
@@ -140,7 +141,7 @@ expect "config after update" /tmp/rb-cf-get2.json "data.ticketSaleStartDate@=201
   "data.isPublic==true" "data.requiresApproval==false" "data.allowWaitRoom==true" "data.isNewTrending==true"
 
 echo "== 4. an order: two tickets at 12345 each =="
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';"
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" 10 12345)
 [ -n "$TCID" ] || fail "seed-ticketclass returned no id"

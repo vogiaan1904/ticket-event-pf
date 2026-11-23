@@ -14,6 +14,7 @@
 # harness, not the system — selling out needs a retrying buyer.
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 NS=ticketbottle
 TOTAL=${TOTAL:-200}
 VUS=${VUS:-300}
@@ -30,7 +31,7 @@ DURATION=${DURATION:-}
 # stdout is the human-readable run log.
 TCID_FILE=${TCID_FILE:-/tmp/gate4a-ticketclass}
 
-psql() { kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc "$1" | tr -d '[:space:]'; }
+psql() { pg ticketbottle_inventory -tAc "$1" | tr -d '[:space:]'; }
 fail() { echo "GATE 4a FAILED: $1"; exit 1; }
 
 echo "== 0. preflight =="
@@ -55,7 +56,7 @@ TOK=$(curl -s -X POST "$GW/auth/signup" -H 'Content-Type: application/json' \
 [ -n "$TOK" ] || fail "signup returned no accessToken"
 AUTH="Authorization: Bearer $TOK"
 
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -c \
+pg ticketbottle_event -c \
   "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('gate4-category','Gate4',now(),now()) ON CONFLICT (id) DO NOTHING;" >/dev/null
 
 EVENT_ID=$(curl -s -X POST "$GW/events" -H "$AUTH" -H 'Content-Type: application/json' -d "{
@@ -73,7 +74,7 @@ curl -s -X POST "$GW/events/$EVENT_ID/config" -H "$AUTH" -H 'Content-Type: appli
   "isFree":false,"maxAttendees":100000,"isPublic":true,"requiresApproval":false,
   "allowWaitRoom":true,"isNewTrending":false}' >/dev/null
 
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -c \
+pg ticketbottle_event -c \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';" >/dev/null
 
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" "$TOTAL" 10000)
@@ -86,7 +87,7 @@ echo "  eventId=$EVENT_ID ticketClassId=$TCID total=$TOTAL"
 # measure password hashing rather than the purchase path. The password is a
 # placeholder; purchase.js mints its access token directly.
 echo "== 2. seed $VUS buyers =="
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_user -c \
+pg ticketbottle_user -c \
   "INSERT INTO users (id, email, \"firstName\", \"lastName\", password, \"updatedAt\")
    SELECT '$USER_PREFIX' || n, '$USER_PREFIX' || n || '@example.com', 'Load', 'VU' || n, 'seeded-no-signin', now()
    FROM generate_series(1, $VUS) AS n ON CONFLICT (id) DO NOTHING;" >/dev/null

@@ -9,6 +9,7 @@ set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 RUN=$(date +%s)
 REGION=${AWS_REGION:-us-east-1}
 TABLE=ticketbottle-orders
@@ -91,7 +92,7 @@ stored_status() {
 
 # reservation <code> -> the order's reservation status(es) in inventory
 reservation() {
-  kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
+  pg ticketbottle_inventory -tAc \
     "SELECT status FROM reservation WHERE order_code='$1'"
 }
 
@@ -106,7 +107,7 @@ TOK_A=$(signup A); TOK_B=$(signup B); TOK_C=$(signup C)
 
 echo "== 2. an event with ten tickets =="
 CATEGORY_ID=gate1-category
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('$CATEGORY_ID','Gate1',now(),now()) ON CONFLICT (id) DO NOTHING;"
 EVT=$(curl -s -X POST "$GW/events" -H "Authorization: Bearer $TOK_A" -H 'Content-Type: application/json' -d "{
   \"name\":\"Abandoned Checkout Show\",\"description\":\"e2e\",
@@ -124,7 +125,7 @@ CFG=$(curl -s -X POST "$GW/events/$EVENT_ID/config" -H "Authorization: Bearer $T
   "allowWaitRoom":true,"isNewTrending":false
 }')
 [ -n "$(echo "$CFG" | getval data.id)" ] || fail "config create failed: $CFG"
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';"
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" 10 10000)
 [ -n "$TCID" ] || fail "seed-ticketclass returned no id"
@@ -202,7 +203,7 @@ pay "$CODE_A"
 await_completed "$TOK_A" "$CODE_A" A
 [ "$(stored_status "$CODE_A")" = COMPLETED ] || fail "A's order is $(stored_status "$CODE_A") in DynamoDB, want COMPLETED"
 [ "$(reservation "$CODE_A")" = CONFIRMED ] || fail "A's reservation is $(reservation "$CODE_A"), want CONFIRMED"
-SOLD=$(kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -tAc \
+SOLD=$(pg ticketbottle_inventory -tAc \
   "SELECT reserved || '/' || sold FROM ticket_class WHERE id='$TCID'")
 [ "$SOLD" = "0/3" ] || fail "ticket class reserved/sold is $SOLD, want 0/3 (A, B, C)"
 echo "  A: late payment COMPLETED, seat re-acquired; reserved/sold $SOLD; nobody owed a refund"

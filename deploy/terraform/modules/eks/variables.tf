@@ -17,11 +17,6 @@ variable "subnet_ids" {
   description = "At least two subnets in different AZs (EKS requires it; the ALB needs it)."
 }
 
-variable "my_ip_cidr" {
-  type        = string
-  description = "Your public IP as a /32. The only CIDR allowed to reach the public API endpoint."
-}
-
 variable "node_instance_types" {
   type        = list(string)
   description = "Multiple types widen the spot capacity pool and cut interruption risk."

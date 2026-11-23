@@ -34,11 +34,10 @@ resource "aws_eks_cluster" "this" {
   vpc_config {
     subnet_ids             = var.subnet_ids
     endpoint_public_access = true
-    public_access_cidrs    = [var.my_ip_cidr]
+    # Open to any address; IAM authentication is the gate (0041).
+    public_access_cidrs = ["0.0.0.0/0"]
 
-    # REQUIRED, not optional, on either node placement: a CIDR-restricted PUBLIC
-    # endpoint refuses kubelets from public nodes, and private nodes have no public
-    # path at all. This gives them an in-VPC route and keeps the door on one /32.
+    # Private nodes have no public path to the API: this is their in-VPC route.
     endpoint_private_access = true
   }
 

@@ -56,7 +56,7 @@ A LocalStack target was built and then **removed** in favour of real DynamoDB �
 | EKS teardown + proof it's gone | `deploy/scripts/eks-teardown.sh`, `eks-leak-check.sh`, `eks-sweep-orphans.sh` (recovery) |
 | Image build → ECR | `.github/workflows/build-push-ecr.yml` |
 | Day-to-day operations (stop/start/kubeconfig/gate/teardown) | `deploy/Makefile` — the k3s and EKS sections |
-| IP allowlists after a network change | EKS only: `make -C deploy my-ip`, `update-my-ip`, `eks-allow-ip`. k3s has none: `docs/decisions/0038` |
+| IP allowlists after a network change | Only the EKS ALB: `make -C deploy my-ip`, `eks-allow-ip`. The EKS API is gated by IAM (`docs/decisions/0041`), the k3s box by SSM (`docs/decisions/0038`) |
 | Architecture diagram | `assets/eks-arc.png` — the EKS **target** architecture, drawn as one coherent end state. Source `docs/diagrams/eks-to-be.xml` is local-only (gitignored); hand-edit it and re-export |
 
 ## The three invariants

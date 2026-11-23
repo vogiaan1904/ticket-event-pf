@@ -7,6 +7,7 @@ set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 RUN=$(date +%s)
 
 # JSON path extractor: `echo "$json" | getval a.b.c` -> value, or empty on any error.
@@ -60,7 +61,7 @@ done
 
 echo "== 2. an event with three tickets =="
 CATEGORY_ID=gate1-category
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('$CATEGORY_ID','Gate1',now(),now()) ON CONFLICT (id) DO NOTHING;"
 EVT=$(curl -s -X POST "$GW/events" -H "Authorization: Bearer ${TOKS[0]}" -H 'Content-Type: application/json' -d "{
   \"name\":\"Room Size Show\",\"description\":\"e2e\",
@@ -78,7 +79,7 @@ CFG=$(curl -s -X POST "$GW/events/$EVENT_ID/config" -H "Authorization: Bearer ${
   "allowWaitRoom":true,"isNewTrending":false
 }')
 [ -n "$(echo "$CFG" | getval data.id)" ] || fail "config create failed: $CFG"
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -qc \
+pg ticketbottle_event -qc \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';"
 TCID=$("$HERE/seed-ticketclass.sh" "$EVENT_ID" 3 10000)
 [ -n "$TCID" ] || fail "seed-ticketclass returned no id"
@@ -111,7 +112,7 @@ ST=$(getval data.status < /tmp/room-w.json); PAUSED=$(getval data.paused < /tmp/
 echo "  waiter: QUEUED, not paused, position $(getval data.position < /tmp/room-w.json)"
 
 echo "== 5. the organizer adds two tickets; both waiters are admitted =="
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_inventory -qc \
+pg ticketbottle_inventory -qc \
   "UPDATE ticket_class SET total = total + 2 WHERE id='$TCID';"
 until_room 5 0 15 || fail "inside=$(inside) waiting=$(waiting) 15s after adding two tickets, want 5 and 0"
 echo "  5 inside, 0 waiting"

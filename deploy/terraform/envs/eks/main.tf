@@ -59,7 +59,6 @@ module "eks" {
   kubernetes_version  = var.kubernetes_version
   subnet_ids          = local.cluster_subnet_ids
   node_subnet_ids     = local.node_subnet_ids
-  my_ip_cidr          = var.my_ip_cidr
   node_instance_types = var.node_instance_types
   node_desired_size   = var.node_desired_size
   node_min_size       = var.node_min_size

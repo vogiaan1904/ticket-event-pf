@@ -11,6 +11,7 @@ set -euo pipefail
 GW=${GW:-http://localhost:3000/api}
 NS=ticketbottle
 HERE="$(cd "$(dirname "$0")" && pwd)"
+. "$HERE/pg.sh"
 
 # JSON path extractor: `echo "$json" | getval a.b.c` -> value, or empty on any error.
 getval() { python3 -c "import sys,json
@@ -34,7 +35,7 @@ echo "== 1b. ensure a category exists (event create needs a non-empty categoryId
 # repeated field arrives as unset. The gateway exposes no category-create route, so
 # seed one directly (idempotent); event_categories.categoryId FKs to categories.id.
 CATEGORY_ID=gate1-category
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -c \
+pg ticketbottle_event -c \
   "INSERT INTO categories (id, name, \"createdAt\", \"updatedAt\") VALUES ('$CATEGORY_ID','Gate1',now(),now()) ON CONFLICT (id) DO NOTHING;"
 
 echo "== 2. create event =="
@@ -60,7 +61,7 @@ echo "  config response: $CFG"
 [ "$(echo "$CFG" | getval data.maxTicketsPerOrder)" = 2 ] || fail "config did not keep maxTicketsPerOrder: $CFG"
 
 echo "== 4. publish event (order-svc requires EventStatus=PUBLISHED; no gateway route) =="
-kubectl -n $NS exec statefulset/postgres -- psql -U root -d ticketbottle_event -c \
+pg ticketbottle_event -c \
   "UPDATE events SET status='PUBLISHED' WHERE id='$EVENT_ID';"
 
 echo "== 5. seed ticket class =="
