@@ -225,4 +225,10 @@ the records, never the block.
 |---|---|---|---|---|---|
 | [0038](0038-the-k3s-box-is-reached-through-ssm-not-an-ip-allowlist.md) | How does the workstation reach the k3s box when its egress IP will not hold still? | SSH carried by an SSM Session Manager session to the instance id; no inbound rule on the box | Widening the SSH allowlist to the carrier's `/19` | A local `session-manager-plugin`, AWS credentials for every tunnel, an extra hop through SSM's regional endpoint, and the agent must register before the first tunnel | accepted |
 | [0041](0041-the-eks-api-is-gated-by-iam-not-an-ip-allowlist.md) | How does the workstation reach the EKS API and ALB when its egress IP will not hold still? | The API endpoint open to `0.0.0.0/0`, gated by IAM alone; the ALB keeps a `/32`, taken from the current IP at deploy time and re-pointed by a helm-only `eks-allow-ip` | A private endpoint and internal ALB reached through an SSM-managed bastion | The API is scannable while a cluster lives, and an API server flaw reachable before authentication would be exposed; an IP change still breaks the ALB until `eks-allow-ip` runs | accepted |
+
+### measurement-tooling
+
+| # | Question | Chose | Instead of | Cost | Status |
+|---|---|---|---|---|---|
+| [0044](0044-measurement-scripts-run-the-temporal-cli-in-their-own-pod.md) | The scripts that read saga histories run the Temporal CLI inside the server's container, and on 2026-11-24 that OOM-killed the server; where does the CLI run? | A `temporal-cli` pod from `temporalio/admin-tools`, created on first use, as `pg.sh` makes `pg-client` | Raising the server's 768Mi memory limit | One more pod while measuring, and an image pull the first time; the CLI's version is pinned apart from the server's and has to be moved with it | proposed |
 <!-- decisions:index:end -->
