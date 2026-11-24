@@ -210,6 +210,11 @@ and single-replica, so the guard keeps refusing nodes that host *it* — an
 honest, narrower exclusion than today's blanket rule, and one whose reason can
 be stated in a sentence.
 
+**First, one node must hold the stack.** The VPC CNI gives an `m6a.large` at most 29
+pods, and the stack runs about 37, so a lost node strands pods whatever the guard
+allows. Phase (f) starts with VPC CNI prefix delegation, about 110 pods a node, and
+checks that a surviving node holds every pod ([0045](../decisions/0045-node-loss-capacity-waits-for-the-gate-that-tests-it.md)).
+
 ## Phasing
 
 Each phase leaves the tree deployable. (a) is worth landing on its own even if
@@ -223,7 +228,7 @@ the rest slips.
 | c | Secrets Manager + CSI + per-service IRSA **— DONE 2026-11-24** (`payment-service`'s role refused inventory's secret) | No password in any ConfigMap or values file, on every target |
 | d | Migrations against three endpoints **— DONE 2026-11-23** (six databases; Gate 3 green after clients spoke TLS, [0042](../decisions/0042-eks-postgres-clients-speak-tls-unverified.md)) | All six databases exist and migrate; purchase flow completes on EKS |
 | e | Redpanda RF=3 **— DEFERRED** | Topics report `--replicas 3`; a broker delete loses no event |
-| f | Gate 4b guard **— DEFERRED** | Any node terminable except the Redis host; flow survives |
+| f | Prefix delegation, then the Gate 4b guard **— DEFERRED** ([0045](../decisions/0045-node-loss-capacity-waits-for-the-gate-that-tests-it.md)) | One node holds every pod; any node terminable except the Redis host; flow survives |
 
 ## Relationship to the scope pivot
 

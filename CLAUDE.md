@@ -24,7 +24,7 @@ describing it for a week — because the fact had been copied rather than linked
 
 | Question | Owned by | State |
 |---|---|---|
-| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a)–(d) built and proven on EKS 2026-11-24, before its door was measured ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); inventory on `db.t4g.small` for its pool ([0040](docs/decisions/0040-inventory-rds-is-sized-for-its-pool.md)); clients speak TLS to RDS, unverified ([0042](docs/decisions/0042-eks-postgres-clients-speak-tls-unverified.md)); (e)–(f) deferred |
+| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a)–(d) built and proven on EKS 2026-11-24, before its door was measured ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); inventory on `db.t4g.small` for its pool ([0040](docs/decisions/0040-inventory-rds-is-sized-for-its-pool.md)); clients speak TLS to RDS, unverified ([0042](docs/decisions/0042-eks-postgres-clients-speak-tls-unverified.md)); (e)–(f) deferred, (f) opening with prefix delegation so one node holds every pod ([0045](docs/decisions/0045-node-loss-capacity-waits-for-the-gate-that-tests-it.md)) |
 | What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
 | Why does the checkout miss its 2s SLO on the k3s box? | `docs/plans/2026-09-27-checkout-latency-decomposition.md` | Measured 2026-09-27: the box saturates at ten buyers; the opening burst queues in Temporal for up to 8s |
 | In what order are queued buyers admitted? | `services/waitroom-svc/CLAUDE.md` | Draw before sale open, arrival after; nothing admitted before the sale opens; 2026-09-23 |

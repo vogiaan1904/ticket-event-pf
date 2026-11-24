@@ -271,7 +271,8 @@ only if a replacement node appears **in the same zone**; otherwise they sit `Pen
 `volume node affinity conflict`. `WaitForFirstConsumer` solves initial placement, not relocation.
 A node-group replacement shows it: on 2026-11-23 every pending pod took the first node Ready until
 it held 29, the VPC CNI's limit on an `m6a.large`, and Redpanda's zone was that node's, so Redpanda
-stayed `Pending` until pods were moved off by hand.
+stayed `Pending` until pods were moved off by hand. Prefix delegation lifts the 29; it is phase (f)'s
+first task, not built before it ([0045](../../../../docs/decisions/0045-node-loss-capacity-waits-for-the-gate-that-tests-it.md)).
 
 ---
 
