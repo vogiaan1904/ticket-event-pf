@@ -1,7 +1,7 @@
 # 0041 — The EKS API is gated by IAM, not an IP allowlist
 
 **Date:** 2026-11-23
-**Status:** proposed
+**Status:** accepted
 **Arc:** k3s-access — no plan; settled in session, after 0038's EKS consequence bit a run
 **Where it lives:** `deploy/terraform/modules/eks/main.tf` (`public_access_cidrs`), `deploy/scripts/eks-deploy.sh` (`MYIP`), `deploy/Makefile` (`eks-allow-ip`)
 
@@ -54,3 +54,11 @@ and the last Consequence.
 - `endpoint_private_access` stays: private nodes reach the API only through it.
 - Holds while the cluster is ephemeral and its admin is one IAM principal. A
   long-lived cluster, or one shared, would want option C.
+
+## Outcome
+
+Built in `1fe8d71`. Every EKS bootstrap, deploy and gate from 2026-11-23 to 2026-11-24
+ran from behind WARP with no API allowlist; the only failure on re-running the
+bootstrap was the LB controller's webhook certificate (`10c38fb`), unrelated to the
+endpoint. The door sweep loads the gateway by its Service, so no run depended on the
+ALB's `/32`.

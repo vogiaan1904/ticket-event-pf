@@ -1,7 +1,7 @@
 # 0040 — inventory's RDS instance is sized for its pool, not the pool for the instance
 
 **Date:** 2026-11-21
-**Status:** proposed
+**Status:** accepted
 **Arc:** next-work — [plan](../plans/2026-11-20-eks-rds-then-the-door.md), [design](../design/eks-stateful-tier.md)
 **Where it lives:** `deploy/terraform/envs/eks/main.tf` (`rds_instance_classes`)
 
@@ -46,3 +46,9 @@ Shown the three with A recommended, the architect chose "db.t4g.small (Recommend
 - Holds while inventory's pool × its replica ceiling stays under about 190. Raising
   either past that needs this record revisited, still without RDS Proxy.
 - 0039's cost estimate rises by about $0.03 an hour.
+
+## Outcome
+
+Built in `6b670cb`. On EKS, 2026-11-24, `SHOW max_connections` on inventory's
+`db.t4g.small` returned **181**, against the 100 the pool needs. The door sweep ran
+with the pool of 25 unchanged.

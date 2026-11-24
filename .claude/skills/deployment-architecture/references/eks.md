@@ -1,7 +1,7 @@
 # Ephemeral EKS
 
-The managed-Kubernetes target. `ticketbottle-eks` runs Kubernetes 1.36 with two spot nodes across
-the two foundation subnets and the EBS CSI addon, and is created for a session and destroyed after
+The managed-Kubernetes target. `ticketbottle-eks` runs Kubernetes 1.36 with two non-burstable nodes across
+the two foundation subnets, the EBS CSI addon and three RDS Postgres instances, and is created for a session and destroyed after
 it. It is **never** run simultaneously with the k3s box — `eks-guard` enforces that.
 
 EKS is deliberately not the everyday environment: its ~$73/mo control-plane floor would consume the
@@ -23,12 +23,13 @@ permission at all, so nothing but the `order-service` ServiceAccount could have 
 
 ## What changes relative to the k3s box
 
-The chart is the same. The app topology is the same. Four things change:
+The chart is the same. The app topology is the same. Five things change:
 
 | Concern | k3s box | EKS | Why it matters |
 |---|---|---|---|
 | **Control plane** | k3s process on the instance you own | AWS-managed, multi-AZ, you never see the masters | managed vs self-hosted trade-off |
-| **Nodes** | the same one instance | managed node group on **spot** (`m6a.large`/`m6i.large`, non-burstable: [0039](../../../../docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)), placed by `private_nodes` (§ node placement) | node lifecycle, spot interruption, drain |
+| **Nodes** | the same one instance | managed node group on **spot** (`m6a.large`/`m6i.large`, non-burstable: [0039](../../../../docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)), placed by `private_nodes` (§ node placement); `node_capacity_type=ON_DEMAND` for a door sweep, which a reclaim would end ([0043](../../../../docs/decisions/0043-the-door-sweep-runs-on-on-demand-nodes.md)) | node lifecycle, spot interruption, drain |
+| **Postgres** | StatefulSet on the node's disk | **three RDS Multi-AZ instances** (`payment`, `inventory`, `shared`), each password from Secrets Manager through the CSI driver; clients speak TLS, unverified ([0042](../../../../docs/decisions/0042-eks-postgres-clients-speak-tls-unverified.md)) | a failure domain per split: `docs/design/eks-stateful-tier.md` |
 | **Ingress** | NodePort 30000 + SSH tunnel | **ALB** via the AWS Load Balancer Controller, real public hostname | `Ingress` → cloud LB, target groups, health checks |
 | **AWS credentials** | EC2 **instance profile** (node-wide) | **IRSA** — per-ServiceAccount IAM role via OIDC | per-workload least privilege |
 
@@ -40,6 +41,9 @@ green Gate 3a *is* the proof that IRSA authenticated, not a coincidence.
 
 Three IRSA roles exist: `ebs-csi` (inside `modules/eks`), `alb-controller` and `order-service` (both
 in `envs/eks/main.tf`). Only `order-service` gets DynamoDB, scoped to the table ARN and its indexes.
+Five more, one per Postgres client (`user-service`, `event-service`, `temporal`,
+`payment-service`, `inventory-service`), each read only its own host's password secret:
+on 2026-11-24 `payment-service`'s was refused inventory's with `AccessDeniedException`.
 
 ---
 
@@ -77,14 +81,14 @@ the S3 state bucket, and the entire Helm chart. `envs/eks` **reads** `envs/found
 
 ---
 
-## The chart delta — four switches, zero forked templates
+## The chart delta — a few switches, zero forked templates
 
 Invariant #1 held, and it is worth checking that it stays held:
 
 ```bash
 helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-k3s.yaml > /tmp/k3s.yaml
 helm template tb deploy/helm/ticketbottle -f deploy/helm/ticketbottle/values-eks.yaml > /tmp/eks.yaml
-diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
+diff /tmp/k3s.yaml /tmp/eks.yaml     # every hunk is one of the switches below
 ```
 
 - `storageClass: gp3` — empty on k3s, so the key is omitted entirely and it keeps its default provisioner.
@@ -94,6 +98,9 @@ diff /tmp/k3s.yaml /tmp/eks.yaml     # ~55 lines, all four switches below
   `healthcheck-path: /api` (the gateway serves under `APP_GLOBAL_PREFIX=api`; `/` would 404 every
   target into unhealthy), and `inbound-cidrs` locked to your `/32` because the stack ships dev secrets.
 - `serviceAccount.order.*` — creates the SA and stamps the `eks.amazonaws.com/role-arn` annotation.
+- `postgres.enabled: false`, `postgres.tls: true` — the StatefulSet is gone; each client builds its
+  DSN from its host's Secret, with TLS in its own dialect.
+- `waitroom.releaseRate: 4` — EKS's door, measured 2026-11-24 (`docs/design/admission-sizing.md`).
 
 The DynamoDB config is **identical to k3s** — both take the chart default, an empty
 `order.dynamodbEndpoint`. The difference is *where the credentials come from*, not any app config:
@@ -222,7 +229,7 @@ which is what the cluster exists to make possible:
   traffic (`docs/decisions/0015-app-pods-sleep-before-sigterm.md`, *Consequences*).
 - **Observability** — metrics first (metrics-server is not installed by EKS); distributed tracing is
   a later, larger piece because it means instrumenting seven services in two languages.
-- Optional: ACM + Route 53 TLS on the ALB, External Secrets Operator + Secrets Manager, PITR/backups.
+- Optional: ACM + Route 53 TLS on the ALB, PITR/backups.
   **Karpenter is not worth it here** — a node autoscaler earns its keep at tens of nodes; on two it
   adds a controller and an IAM role in exchange for nothing observable.
 
@@ -237,6 +244,8 @@ no `max_connections` override, i.e. the default **100**. `services/inventory-svc
 defaults `POSTGRES_MAX_OPEN_CONNS` to **25 per replica**. Four `inventory-service` replicas exhaust
 the server on their own, and the failure lands on `user-service` / `event-service` /
 `payment-service` as `FATAL: sorry, too many clients already` — services that were never under load.
+That is k3s. On EKS inventory has its own `db.t4g.small`, 181 connections, sized for its pool
+([0040](../../../../docs/decisions/0040-inventory-rds-is-sized-for-its-pool.md)).
 
 **2 — the lock ceiling.** `services/inventory-svc/internal/services/reservation.go` reserves with a
 guarded conditional `UPDATE` per class in ascending id order — `WHERE … AND reserved + sold + q <=
@@ -251,22 +260,25 @@ not replica count. Measured ~1300 reserves/sec, peaking at four concurrent reser
 throughput on the contended path.
 
 **Ceiling 2 is not reached at the shipped configuration**, so it is not a to-do. The waitroom admits
-at most its door speed — 10 a second on EKS, unmeasured, and 2 on k3s — against a ~1300/sec
+at most its door speed — 4 a second on EKS, 2 on k3s, both measured — against a ~1300/sec
 ceiling. Lifting it is a data-model change worth making
 only if the admission rate is raised toward it.
 
 **3 — every PVC-backed pod is pinned to one availability zone.** The EBS CSI driver writes node
 affinity onto each PersistentVolume, because an EBS volume physically exists in one AZ.
-`postgres`, `redis` and `redpanda` are single-replica StatefulSets, so a node loss relocates them
+`redis` and `redpanda` (and on k3s `postgres`) are single-replica StatefulSets, so a node loss relocates them
 only if a replacement node appears **in the same zone**; otherwise they sit `Pending` with
 `volume node affinity conflict`. `WaitForFirstConsumer` solves initial placement, not relocation.
+A node-group replacement shows it: on 2026-11-23 every pending pod took the first node Ready until
+it held 29, the VPC CNI's limit on an `m6a.large`, and Redpanda's zone was that node's, so Redpanda
+stayed `Pending` until pods were moved off by hand.
 
 ---
 
 ## A property of the end state worth stating plainly
 
 On EKS the **stateful tier does not survive a teardown.** `reclaimPolicy: Delete` is what makes
-Gate 3b passable, so Postgres / Redis / Redpanda / Temporal data is destroyed with every
+Gate 3b passable, and RDS skips its final snapshot, so Postgres / Redis / Redpanda / Temporal data is destroyed with every
 `terraform destroy` and re-seeded next session. The k3s box's "stop/start preserves data" property has no
 EKS equivalent.
 

@@ -73,6 +73,11 @@ autoscaling:
 
 # Only app-gateway gets a PDB, because only app-gateway can have >1 replica
 # (see `autoscaling` above). A PDB on any other workload would block drains.
+waitroom:
+  # Measured 2026-11-24 on two m6a.large with RDS at sha-ad9681c.
+  # Re-measure when either changes: docs/design/admission-sizing.md.
+  releaseRate: 4
+
 pdb:
   app-gateway:
     enabled: true

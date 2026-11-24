@@ -24,14 +24,14 @@ describing it for a week — because the fact had been copied rather than linked
 
 | Question | Owned by | State |
 |---|---|---|
-| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a), (a2), (b) built; (c)–(d) built, not yet run on EKS, before its door is measured ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); inventory on `db.t4g.small` for its pool ([0040](docs/decisions/0040-inventory-rds-is-sized-for-its-pool.md)); (e)–(f) deferred |
+| How is the stateful tier split, and onto what? | `docs/design/eks-stateful-tier.md` | (a)–(d) built and proven on EKS 2026-11-24, before its door was measured ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); inventory on `db.t4g.small` for its pool ([0040](docs/decisions/0040-inventory-rds-is-sized-for-its-pool.md)); clients speak TLS to RDS, unverified ([0042](docs/decisions/0042-eks-postgres-clients-speak-tls-unverified.md)); (e)–(f) deferred |
 | What bounds `Reserve` throughput on one hot ticket class? | `services/inventory-svc/CLAUDE.md` | Measured 2026-09-22 |
 | Why does the checkout miss its 2s SLO on the k3s box? | `docs/plans/2026-09-27-checkout-latency-decomposition.md` | Measured 2026-09-27: the box saturates at ten buyers; the opening burst queues in Temporal for up to 8s |
 | In what order are queued buyers admitted? | `services/waitroom-svc/CLAUDE.md` | Draw before sale open, arrival after; nothing admitted before the sale opens; 2026-09-23 |
 | Do the waitroom's stampede changes survive an end-to-end run? | `docs/plans/2026-09-23-waitroom-admission-correctness.md` | Yes, on k3s 2026-09-23, after five defects were fixed |
 | How does a waiting client learn its position and token? | `services/waitroom-svc/CLAUDE.md` | Polling; the push stream was removed 2026-09-23 |
 | Who decides what, and what is the agent's role? | `docs/decisions/0002` | Accepted 2026-09-22 |
-| What runs where, and how does it authenticate? | `.claude/skills/deployment-architecture` | Built through the k3s and ephemeral-EKS targets |
+| What runs where, and how does it authenticate? | `.claude/skills/deployment-architecture` | Built through the k3s and ephemeral-EKS targets; the EKS API is gated by IAM, not an IP allowlist ([0041](docs/decisions/0041-the-eks-api-is-gated-by-iam-not-an-ip-allowlist.md)) |
 | How does a failure become a gRPC code, then an HTTP status? | This file, *Error taxonomy* | Binding |
 | What does every workload publish, and how is it queried? | `docs/METRICS.md` | Binding |
 | Which failures page, and which never do? | This file, *Alerting policy* | Binding |
@@ -44,7 +44,7 @@ describing it for a week — because the fact had been copied rather than linked
 | How does an app pod stop without refusing or cutting requests? | `docs/decisions/0015`, `docs/decisions/0016` | A 5s `preStop` sleep on apps with a Service; the gateway drains for up to 65s in a 75s grace period; built; measured on k3s 2026-09-27 |
 | How does a payment event that can never publish become visible on the cluster? | `docs/decisions/0017` | A gauge of rows past the retry cap and a page on any; recovery by hand; built; verified on k3s 2026-09-27 |
 | Should the short saga steps run as local activities? | `docs/decisions/0018` | Yes: six steps local behind a workflow version; Temporal's CPU per purchase halved; measured on k3s 2026-09-29 |
-| How fast may the waitroom admit buyers, and what sets the rate? | `docs/design/admission-sizing.md` | Per deployment target, from a sweep at the checkout SLO; k3s admits 2 a second, measured 2026-09-29; EKS runs the unmeasured default of 10 |
+| How fast may the waitroom admit buyers, and what sets the rate? | `docs/design/admission-sizing.md` | Per deployment target, from a sweep at the checkout SLO; k3s admits 2 a second, measured 2026-09-29; EKS 4, measured 2026-11-24 on on-demand `m6a.large` and RDS ([0043](docs/decisions/0043-the-door-sweep-runs-on-on-demand-nodes.md)) |
 | How does a changed ConfigMap reach the pods that read it? | `docs/decisions/0020` | A digest of each app's own ConfigMap in its pod template; built and verified on k3s 2026-09-29 |
 | How many tickets may one order take? | `docs/decisions/0021` | A limit per event, default 4; refused before anything is held; built and verified on k3s 2026-09-29 |
 | When does a schema migration run, relative to the code that reads it? | `docs/decisions/0022` | Before an upgrade's rollout; after a first install; so a migration must work with the running code; built and verified on k3s 2026-09-30 |
@@ -60,7 +60,7 @@ describing it for a week — because the fact had been copied rather than linked
 | What does a payment get when it lands after its hold was released by a timeout or a cancel? | `docs/decisions/0032` | Its ticket if one is left, else a refund; `Release` carries a reason; built and verified on k3s 2026-11-14 |
 | What bounds the gateway's failure after a backend crash? | `docs/decisions/0035` | A gRPC channel not `READY` within 5s is replaced, since grpc-js never times out a connect; verified on k3s 2026-11-16: replaced every ~5s under a stalled connect, `READY` 1.5s after it lifted. What stalls the connect is still unknown |
 | What bounds the gateway's calls to a backend that answers slowly? | `docs/decisions/0037` | A deadline on every call from one interceptor: 5s, `CreateOrder` 65s; built and verified on k3s 2026-11-18: event-service's backlog after a stall fell from 2.4 times the gateway's to below it |
-| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16; 1–3 done 2026-11-18; 4 planned 2026-11-20 after RDS, on non-burstable nodes ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)) |
+| What is the next work, in order? | `docs/decisions/0031` | 1 the gateway's recovery from a backend crash; 2 checkout-token revocation in the waitroom; 3 one TS service on the layout; 4 EKS's door measured; capacity past both doors, phases (b)–(f) included, waits until a door is planned above about 20 a second; 2026-10-12, accepted 2026-11-16; 1–3 done 2026-11-18; 4 done 2026-11-24 after RDS: a door of 4 ([0039](docs/decisions/0039-eks-gets-rds-before-its-door-is-measured.md)) |
 
 ### Open
 

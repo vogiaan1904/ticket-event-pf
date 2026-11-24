@@ -1,6 +1,6 @@
 # Admission sizing — design
 
-**Status:** built 2026-09-29; k3s measured, EKS not. Decisions:
+**Status:** built 2026-09-29; k3s measured 2026-09-29, EKS 2026-11-24. Decisions:
 [0019](../decisions/0019-the-waitroom-door-speed-is-sized-per-target.md),
 [0020](../decisions/0020-a-config-change-rolls-the-app-that-reads-it.md),
 [0021](../decisions/0021-an-order-takes-at-most-its-events-ticket-limit.md),
@@ -58,12 +58,12 @@ under 2s against an SLO of 99%:
 A door speed measured on a target holds only while three things stay as they
 were when it was measured:
 
-| | k3s, 2026-09-29 |
-|---|---|
-| Instance | t3.large, two vCPUs |
-| CPU credits | unlimited: a t3.large sustains 30% of each vCPU, 0.6 vCPUs, on its own credits and bills the surplus above that |
-| Cost per purchase | build `sha-8312562` (service code as `sha-b6d2971`): node 0.6, Temporal 0.12 core-seconds |
-| What it serves | 3.15 purchases a second saturated; 2 within the checkout SLO |
+| | k3s, 2026-09-29 | EKS, 2026-11-24 |
+|---|---|---|
+| Instance | t3.large, two vCPUs | two on-demand m6a.large, two vCPUs each; Postgres on three RDS instances, `shared` on `db.t4g.small` |
+| CPU credits | unlimited: a t3.large sustains 30% of each vCPU, 0.6 vCPUs, on its own credits and bills the surplus above that | none: non-burstable |
+| Cost per purchase | build `sha-8312562` (service code as `sha-b6d2971`): node 0.6, Temporal 0.12 core-seconds | build `sha-ad9681c`: nodes 0.37, Temporal 0.09 core-seconds; RDS outside both |
+| What it serves | 3.15 purchases a second saturated; 2 within the checkout SLO | about 6.4 saturated; 4 within the checkout SLO |
 
 Change any of the three and measure again. 0018 alone moved capacity from 1.7 to
 3.0 purchases a second.
@@ -77,9 +77,10 @@ nothing for purchases.
 idle most of the month, and at full CPU it costs more than a non-burstable
 instance of the same size. A production target sizes on a non-burstable instance,
 whose capacity does not depend on a credit balance. The EKS nodes are
-non-burstable spot `m6a.large` or `m6i.large` for that reason
-([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)); spot picks
-which of the two runs, so a sweep records the type.
+non-burstable `m6a.large` or `m6i.large` for that reason
+([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)), and a sweep
+runs on on-demand `m6a.large` alone, so a reclaim cannot end a run and every run is on
+one type ([0043](../decisions/0043-the-door-sweep-runs-on-on-demand-nodes.md)).
 
 ## How a target's door speed is found
 
@@ -110,7 +111,7 @@ which of the two runs, so a sweep records the type.
 | Target | Door speed | Source |
 |---|---|---|
 | k3s | 2 a second | 2026-09-29, `sha-8312562`: `docs/plans/2026-09-29-admission-sizing.md#results` |
-| EKS | 10, the chart default | unmeasured |
+| EKS | 4 a second | 2026-11-24, `sha-ad9681c`: `docs/plans/2026-11-20-eks-rds-then-the-door.md#5-the-door-sweep` |
 
 ## Tickets per order
 
@@ -309,7 +310,7 @@ reads as this rule, so that refinement can follow without a coordinated rollout.
 
 **No cap on chairs.** Each tick admits at most the door's batch, and a chair lives at
 most the window to start a checkout, 5 minutes (*The end of a sell-out* below). So
-chairs never exceed door speed × 300s: 600 on k3s, 3000 on EKS. A cap below that can
+chairs never exceed door speed × 300s: 600 on k3s, 1200 on EKS. A cap below that can
 only hold admission under the measured door.
 
 **What a waiter sees.** `paused` keeps meaning "no ticket available". A waiter held
@@ -318,8 +319,8 @@ stop moving, without `paused`.
 
 **What changes for EKS.** The 100 also held real buyers under EKS's unmeasured door of
 10 a second. Without it, that door is EKS's only limit. EKS has no real buyers and its
-load tests never filled the room, so nothing measured changes. Its door is still
-unmeasured (*Current values* above).
+load tests never filled the room, so nothing measured changes. Its door was since
+measured at 4 (*Current values* above).
 
 **Any rollout order is safe.** Only the waitroom changes, and its ConfigMap digest
 rolls it when the key leaves the chart

@@ -4,7 +4,8 @@
 2026-09-19**, and kept deferred on 2026-10-12 until a door is planned above about 20
 a second ([0031](../decisions/0031-the-next-work-is-ranked-by-what-a-buyer-can-hit.md)).
 **(b)–(d) resumed 2026-11-20** ([0039](../decisions/0039-eks-gets-rds-before-its-door-is-measured.md)),
-with `shared` at `db.t4g.small`; (e)–(f) stay deferred. Work order:
+with `shared` at `db.t4g.small`, and **proven on EKS 2026-11-24**, where the door was
+then measured at 4 a second; (e)–(f) stay deferred. Work order:
 `docs/plans/2026-11-20-eks-rds-then-the-door.md`.
 Phase (a)'s work order: `docs/plans/2026-09-19-eks-stateful-tier-phase-a.md`.
 **Target:** the `values-eks.yaml` deploy target only. k3s is unchanged.
@@ -219,8 +220,8 @@ the rest slips.
 | a | Chart toggles + values | **DONE 2026-09-20** — overlays render byte-identical, every DSN served from a Secret, purchase-flow gate green on k3s revision 27 |
 | a2 | Private subnets + `private_nodes` toggle | **DONE 2026-09-19** — Gate 3a green with `private_nodes = true`, nodes on `10.0.11.44` / `10.0.12.233` |
 | b | `modules/rds` ×3 in the private subnets **— DONE 2026-11-21** (endpoints reachable from a pod; inventory resized, 0040) | `terraform apply` in `envs/eks`; three endpoints reachable from a node |
-| c | Secrets Manager + CSI + per-service IRSA **— built 2026-11-21, not yet run on EKS** | No password in any ConfigMap or values file, on every target |
-| d | Migrations against three endpoints **— built 2026-11-21, not yet run on EKS** | All six databases exist and migrate; purchase flow completes on EKS |
+| c | Secrets Manager + CSI + per-service IRSA **— DONE 2026-11-24** (`payment-service`'s role refused inventory's secret) | No password in any ConfigMap or values file, on every target |
+| d | Migrations against three endpoints **— DONE 2026-11-23** (six databases; Gate 3 green after clients spoke TLS, [0042](../decisions/0042-eks-postgres-clients-speak-tls-unverified.md)) | All six databases exist and migrate; purchase flow completes on EKS |
 | e | Redpanda RF=3 **— DEFERRED** | Topics report `--replicas 3`; a broker delete loses no event |
 | f | Gate 4b guard **— DEFERRED** | Any node terminable except the Redis host; flow survives |
 

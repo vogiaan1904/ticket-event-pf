@@ -1,7 +1,7 @@
 # 0042 — EKS's Postgres clients speak TLS to RDS, encrypted but not verified
 
 **Date:** 2026-11-23
-**Status:** proposed
+**Status:** accepted
 **Arc:** next-work — [plan](../plans/2026-11-20-eks-rds-then-the-door.md), [design](../design/eks-stateful-tier.md)
 **Where it lives:** `deploy/helm/ticketbottle/templates/_postgres.tpl` (`tb.pgSsl`), `templates/infra/temporal.yaml`, `values-eks.yaml` (`postgres.tls`)
 
@@ -59,3 +59,10 @@ continue". B' was named in the costs of B and not asked for.
   `verify-full`, and `SQL_CA` with host verification on.
 - `assert-render.sh` fails if any of the four EKS clients loses its setting; each check
   was seen to fail under a mutation.
+
+## Outcome
+
+Built in `c289d55`. `assert-render.sh` checks each of the four clients' settings,
+each seen to fail under a mutation. On EKS, 2026-11-23, every client that had
+crash-looped came up and Gate 3 passed; the door sweep ran over TLS on every
+connection to RDS.

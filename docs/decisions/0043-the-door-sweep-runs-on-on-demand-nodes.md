@@ -1,7 +1,7 @@
 # 0043 — The door sweep runs on on-demand nodes, one type
 
 **Date:** 2026-11-23
-**Status:** proposed
+**Status:** accepted
 **Arc:** next-work — [plan](../plans/2026-11-20-eks-rds-then-the-door.md), amends [0039](0039-eks-gets-rds-before-its-door-is-measured.md)
 **Where it lives:** `deploy/terraform/modules/eks/main.tf` (`capacity_type`), `envs/eks/variables.tf` (`node_capacity_type`), `deploy/scripts/door-sweep.sh` (the node check)
 
@@ -48,3 +48,14 @@ With A–C and their costs on the table, the architect answered, 2026-11-23: "ok
   so a lost node can no longer pass as a slow door; it holds on either capacity type.
 - The door is measured on on-demand `m6a.large`; spot `m6a.large` is the same machine,
   so the number carries to the spot default.
+
+## Outcome
+
+Built in `3640b3f`. The node group was replaced with on-demand `m6a.large`
+on 2026-11-23. On 2026-11-24 all six sweep runs completed with no node lost and none
+printed INVALID.
+
+The replacement itself cost a stall: every pending pod went to the first node Ready
+until it held its 29, and Redpanda's volume is in that node's zone, so Redpanda stayed
+Pending until pods were moved by hand. A replacement that destroys before it creates
+does this whenever a stateful pod's zone fills first.

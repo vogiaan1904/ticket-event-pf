@@ -1,7 +1,7 @@
 # 0039 — EKS gets RDS before its door is measured, on non-burstable nodes
 
 **Date:** 2026-11-20
-**Status:** proposed
+**Status:** accepted
 **Arc:** next-work — [plan](../plans/2026-11-20-eks-rds-then-the-door.md), [design](../design/eks-stateful-tier.md)
 **Where it lives:** `deploy/terraform/envs/eks/`, `deploy/helm/ticketbottle/values-eks.yaml`
 
@@ -65,3 +65,22 @@ on one node type describes only that type.
   `admission-sizing.md`, and the RDS sizes are then revisited against it.
 - `private_nodes` defaults to `true`, as `terraform.tfvars.example` already sets it.
 - Holds while nodes stay non-burstable. Moving EKS to burstable or Graviton nodes needs the door measured again.
+
+## Outcome
+
+Built in `73c2d8c` (nodes), `29f1800` and `6b670cb` (RDS ×3), `d488675` and
+`a984ba5` (Secrets Manager, CSI, per-service IRSA), and the sweep tooling in `4cd241a`.
+On EKS, 2026-11-23 to 2026-11-24:
+
+- Gate 3 passed against three RDS instances, after the clients spoke TLS ([0042](0042-eks-postgres-clients-speak-tls-unverified.md)).
+- `payment-service`'s role read its own secret and was refused inventory's.
+- The door was measured at **4 a second** on two `m6a.large`, and set in
+  `values-eks.yaml`. 6 and 5 each failed a run. `shared` stayed under 40% average CPU
+  at every speed, with at most 58 connections; the cluster saturates at about 6.4
+  purchases a second. Runs:
+  `docs/plans/2026-11-20-eks-rds-then-the-door.md#5-the-door-sweep`.
+- Spot reclaims ended two runs; the sweep moved to on-demand ([0043](0043-the-door-sweep-runs-on-on-demand-nodes.md)).
+  The non-burstable type stays the default; the capacity type does not.
+
+`shared` at `db.t4g.small` is oversized for this door, not undersized. Not resized: the
+door is far below the thousands of concurrent checkouts the design worried about.
