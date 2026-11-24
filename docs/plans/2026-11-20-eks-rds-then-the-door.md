@@ -153,7 +153,9 @@ Accept 0039 with an Outcome. Update the design's phasing table, the root
 `deployment-architecture` skill.
 
 **Done 2026-11-24**, with 0040–0043 accepted beside 0039 and the door set in
-`values-eks.yaml`.
+`values-eks.yaml`. The session ended with `make -C deploy eks-down` and Gate 3b
+passed: no cluster, node, load balancer, volume, NAT, RDS instance, backup, subnet
+group, security group, password secret or log group left.
 
 ## Cost
 
