@@ -8,8 +8,9 @@ FROM=${1:?usage: confirm-overlap.sh FROM TO  (RFC 3339, UTC)}
 TO=${2:?usage: confirm-overlap.sh FROM TO}
 LIST=$(mktemp)
 trap 'rm -f "$LIST"' EXIT
+. "$HERE/temporal-cli.sh"
 
-kubectl -n ticketbottle exec deploy/temporal -- temporal workflow list \
+tcli temporal workflow list \
   --query "WorkflowType=\"ConfirmOrder\" AND StartTime >= \"$FROM\" AND StartTime < \"$TO\"" \
   --limit 100000 -o jsonl > "$LIST"
 python3 "$HERE/../loadtest/confirm_overlap.py" "$LIST"

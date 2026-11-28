@@ -1,6 +1,6 @@
 # The Temporal CLI runs outside the server
 
-**Status:** planned 2026-11-24. Decided by
+**Status:** built 2026-11-26, not yet verified on k3s. Decided by
 [0044](../decisions/0044-measurement-scripts-run-the-temporal-cli-in-their-own-pod.md).
 
 **Question it serves:** a finding of the EKS door sweep, not a register row. The
@@ -26,13 +26,13 @@ Checked in the code, 2026-11-24:
 
 ### 1. `deploy/scripts/temporal-cli.sh`
 
-A sourced function, `tcli [args…]`. It runs `temporal` in a `temporal-cli` pod,
-creating the pod first if it is absent:
+A sourced function, `tcli CMD [args…]`. It runs CMD (`temporal`, `sh`, `gzip`) in a
+`temporal-cli` pod, creating the pod first if it is absent:
 - image: the admin-tools tag above;
 - `TEMPORAL_ADDRESS=temporal:7233`;
 - `sleep infinity`.
 
-`tcli sh -c '…'` must also work, so `saga-histories.sh` keeps its single exec.
+`tcli sh -c '…'` keeps `saga-histories.sh` to a single exec.
 
 **Check first:** `temporal --version` in both the server's container and the CLI pod.
 If the CLI versions differ, compare the `-o jsonl` fields the scripts read

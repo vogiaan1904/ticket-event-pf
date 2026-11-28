@@ -9,6 +9,7 @@ FROM=${1:?usage: purchase-cost.sh FROM TO K6_LOG}
 TO=${2:?usage: purchase-cost.sh FROM TO K6_LOG}
 K6_LOG=${3:?usage: purchase-cost.sh FROM TO K6_LOG}
 PROM=${PROM:-http://localhost:9090}
+. "$(cd "$(dirname "$0")" && pwd)/temporal-cli.sh"
 
 at() {
   curl -fsS "$PROM/api/v1/query" --data-urlencode "query=$1" --data-urlencode "time=$2" |
@@ -23,7 +24,7 @@ POSTGRES=$(delta 'sum(container_cpu_usage_seconds_total{namespace="ticketbottle"
 PURCHASES=$(python3 -c "import re; s = open('$K6_LOG').read(); print(re.search(r'\"tb_orders_completed\":\s*\{[^}]*\"count\":\s*(\d+)', s).group(1))")
 
 events() {
-  kubectl -n ticketbottle exec deploy/temporal -- temporal workflow list --limit 100000 -o jsonl \
+  tcli temporal workflow list --limit 100000 -o jsonl \
     --query "WorkflowType=\"$1\" AND StartTime >= \"$FROM\" AND StartTime < \"$TO\"" |
     python3 -c 'import sys, json; h = [int(json.loads(l)["historyLength"]) for l in sys.stdin if l.strip()]; print(f"{sum(h) / len(h):.1f} over {len(h)}" if h else "none")'
 }

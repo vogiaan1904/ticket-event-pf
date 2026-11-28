@@ -6,14 +6,14 @@ set -euo pipefail
 FROM=${1:?usage: saga-histories.sh FROM TO OUT  (RFC 3339, UTC)}
 TO=${2:?usage: saga-histories.sh FROM TO OUT}
 OUT=${3:?usage: saga-histories.sh FROM TO OUT}
-NS=ticketbottle
 QUERY="WorkflowType=\"CreateOrder\" AND StartTime >= \"$FROM\" AND StartTime < \"$TO\""
+. "$(cd "$(dirname "$0")" && pwd)/temporal-cli.sh"
 
 # One exec for the whole loop: a kubectl round trip per saga costs seconds on the tunnel.
-kubectl -n $NS exec deploy/temporal -- sh -c "
+tcli sh -c "
   temporal workflow list --query '$QUERY' --limit 100000 -o jsonl \
     | sed -n 's/.*\"workflowId\":\"\([^\"]*\)\".*/\1/p' > /tmp/saga-ids
   for id in \$(cat /tmp/saga-ids); do echo \"=== \$id\"; temporal workflow show -w \"\$id\" -o jsonl; done > /tmp/saga-histories"
 # Gzipped: a run's ~12MB often cuts off mid-stream; a cut gzip fails gunzip, not silently.
-kubectl -n $NS exec deploy/temporal -- gzip -c /tmp/saga-histories | gunzip > "$OUT"
+tcli gzip -c /tmp/saga-histories | gunzip > "$OUT"
 echo "$(grep -c '^=== ' "$OUT") sagas -> $OUT"
